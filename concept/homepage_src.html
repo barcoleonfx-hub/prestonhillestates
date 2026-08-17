@@ -1,0 +1,815 @@
+<title>Preston Hill Estates</title>
+<style>
+  @font-face {
+    font-family: 'Fraunces';
+    font-style: normal;
+    font-weight: 300 700;
+    font-display: swap;
+    src: url(data:font/woff2;base64,__ROMAN_B64__) format('woff2');
+  }
+  @font-face {
+    font-family: 'Fraunces';
+    font-style: italic;
+    font-weight: 300 700;
+    font-display: swap;
+    src: url(data:font/woff2;base64,__ITALIC_B64__) format('woff2');
+  }
+
+  :root {
+    --bg: #FBFAF6;
+    --surface: #FFFFFF;
+    --ink: #23211A;
+    --ink-soft: #59554A;
+    --faint: #98937F;
+    --gold: #C4972F;
+    --gold-deep: #A47B1D;
+    --gold-tint: #F7F0DE;
+    --gold-wash: #FDF9EE;
+    --line: #EAE6DA;
+    --line-soft: #F1EEE4;
+    --charcoal: #211F19;
+    --shadow-sm: 0 1px 2px rgba(35,33,26,0.05), 0 4px 14px -6px rgba(35,33,26,0.08);
+    --shadow-lg: 0 2px 4px rgba(35,33,26,0.05), 0 24px 48px -20px rgba(35,33,26,0.16);
+    --focus: #2F6FED;
+  }
+
+  * { box-sizing: border-box; margin: 0; }
+  html { scroll-behavior: smooth; }
+  section, footer.site { scroll-margin-top: 84px; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Helvetica Neue", Helvetica, Arial, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  ::selection { background: var(--gold-tint); color: var(--ink); }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+  a { color: inherit; }
+  img, svg { display: block; }
+
+  .serif { font-family: 'Fraunces', Georgia, serif; }
+  .wide { max-width: 1240px; margin: 0 auto; padding: 0 clamp(20px, 4vw, 52px); }
+
+  .label {
+    font-size: 0.68rem; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--faint); font-weight: 600;
+  }
+  .label b { color: var(--gold-deep); font-weight: 600; }
+
+  /* ---------- reveal motion ---------- */
+  .rv { opacity: 0; transform: translateY(26px); transition: opacity 0.85s cubic-bezier(.2,.65,.2,1), transform 0.85s cubic-bezier(.2,.65,.2,1); }
+  .rv.in { opacity: 1; transform: none; }
+  .rv.d1 { transition-delay: 0.08s; } .rv.d2 { transition-delay: 0.16s; } .rv.d3 { transition-delay: 0.24s; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .rv { opacity: 1; transform: none; transition: none; }
+    * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+
+  /* ---------- nav ---------- */
+  header.site {
+    position: fixed; inset: 0 0 auto 0; z-index: 60;
+    background: rgba(251,250,246,0.86); backdrop-filter: blur(12px) saturate(150%);
+    border-bottom: 1px solid transparent;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  }
+  header.site.scrolled { border-color: var(--line); box-shadow: 0 4px 24px -18px rgba(35,33,26,0.25); }
+  .navrow { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 14px clamp(20px,4vw,52px); }
+  .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; }
+  .brand .mark { width: 42px; height: 42px; flex: none; }
+  .brand .word { line-height: 1.1; }
+  .brand .word .n1 { font-weight: 700; font-size: 0.98rem; letter-spacing: 0.09em; color: var(--ink); }
+  .brand .word .n2 { font-weight: 300; font-size: 0.92rem; letter-spacing: 0.28em; color: var(--ink-soft); }
+  .brand .word .n2 small { font-size: 0.52rem; letter-spacing: 0.14em; color: var(--gold-deep); vertical-align: 2px; margin-left: 6px; }
+  nav.primary { display: flex; gap: clamp(16px, 2.6vw, 34px); align-items: center; }
+  nav.primary a {
+    font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 500;
+    text-decoration: none; color: var(--ink-soft); position: relative; padding-bottom: 3px;
+  }
+  nav.primary a::after { content: ""; position: absolute; left: 0; bottom: 0; height: 1.5px; width: 0; background: var(--gold); transition: width 0.28s ease; }
+  nav.primary a:hover { color: var(--ink); }
+  nav.primary a:hover::after { width: 100%; }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+    font-size: 0.78rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+    text-decoration: none; cursor: pointer; border: none; border-radius: 999px;
+    padding: 13px 26px; transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+  }
+  .btn.gold { background: var(--gold); color: #FFFDF6; box-shadow: 0 10px 24px -12px rgba(196,151,47,0.65); }
+  .btn.gold:hover { background: var(--gold-deep); transform: translateY(-1px); }
+  .btn.dark { background: var(--charcoal); color: #F6F4EC; }
+  .btn.dark:hover { background: #383527; transform: translateY(-1px); }
+  .btn.ghost { background: transparent; color: var(--ink); border: 1.5px solid var(--line); }
+  .btn.ghost:hover { border-color: var(--gold); color: var(--gold-deep); }
+  @media (max-width: 800px) { nav.primary a { display: none; } }
+
+  /* ---------- hero ---------- */
+  .hero { position: relative; padding: clamp(130px, 18vh, 190px) 0 clamp(40px, 6vh, 70px); }
+  .hero-grid { display: grid; grid-template-columns: 1.25fr 0.75fr; gap: clamp(28px, 5vw, 70px); align-items: center; }
+  @media (max-width: 900px) { .hero-grid { grid-template-columns: 1fr; } .hero-side { display: none; } }
+  h1.display {
+    font-family: 'Fraunces', Georgia, serif; font-weight: 400;
+    font-size: clamp(2.7rem, 6.4vw, 5.4rem); line-height: 1.02; letter-spacing: -0.018em;
+    text-wrap: balance; color: var(--ink);
+  }
+  h1.display em { font-style: italic; font-weight: 340; color: var(--gold-deep); }
+  .hero .sub { margin-top: 26px; max-width: 50ch; color: var(--ink-soft); font-size: 1.05rem; }
+  .hero .cta-row { display: flex; gap: 14px; margin-top: 36px; flex-wrap: wrap; }
+
+  /* staged hero entrance */
+  .h-stage { opacity: 0; transform: translateY(26px); animation: rise 1s cubic-bezier(.2,.65,.2,1) forwards; }
+  .h-stage.s1 { animation-delay: 0.05s; } .h-stage.s2 { animation-delay: 0.18s; }
+  .h-stage.s3 { animation-delay: 0.32s; } .h-stage.s4 { animation-delay: 0.46s; } .h-stage.s5 { animation-delay: 0.6s; }
+  @keyframes rise { to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .h-stage { animation: none; opacity: 1; transform: none; } }
+
+  /* rotating heritage seal around the logo */
+  .seal { position: relative; width: min(320px, 26vw); aspect-ratio: 1; margin-left: auto; }
+  .seal .ring { position: absolute; inset: 0; animation: spin 26s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .seal .ring text { font-size: 9.6px; letter-spacing: 0.04em; text-transform: uppercase; fill: var(--faint); font-family: "Helvetica Neue", Arial, sans-serif; font-weight: 600; }
+  .seal .core {
+    position: absolute; inset: 18%; background: var(--surface); border: 1px solid var(--line);
+    border-radius: 50%; box-shadow: var(--shadow-lg);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .seal .core svg { width: 54%; height: 54%; }
+
+  /* ---------- search bar ---------- */
+  .searchbar-wrap { margin-top: clamp(44px, 7vh, 64px); }
+  .searchbar {
+    display: grid; grid-template-columns: auto 1.5fr 1fr 1fr auto; align-items: stretch;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
+    box-shadow: var(--shadow-lg); padding: 8px; gap: 0;
+  }
+  @media (max-width: 860px) {
+    .searchbar { grid-template-columns: 1fr 1fr; border-radius: 24px; gap: 6px; padding: 12px; }
+    .searchbar .cell { border: none !important; }
+    .searchbar .toggle { grid-column: 1 / -1; justify-content: center; }
+    .searchbar .go { grid-column: 1 / -1; }
+  }
+  .searchbar .toggle { display: flex; align-items: center; gap: 4px; padding: 4px 8px 4px 6px; }
+  .searchbar .toggle button {
+    border: none; background: transparent; font-family: inherit; font-size: 0.78rem; font-weight: 600;
+    letter-spacing: 0.05em; color: var(--ink-soft); padding: 10px 18px; border-radius: 999px; cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease;
+  }
+  .searchbar .toggle button.active { background: var(--gold-tint); color: var(--gold-deep); }
+  .searchbar .cell { display: flex; flex-direction: column; justify-content: center; padding: 6px 22px; border-left: 1px solid var(--line-soft); }
+  .searchbar .cell label { font-size: 0.62rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--faint); font-weight: 700; }
+  .searchbar .cell input, .searchbar .cell select {
+    border: none; background: transparent; font-family: inherit; font-size: 0.95rem; color: var(--ink);
+    padding: 2px 0 0; appearance: none; -webkit-appearance: none; cursor: pointer;
+  }
+  .searchbar .cell input { cursor: text; }
+  .searchbar .cell input:focus, .searchbar .cell select:focus { outline: none; }
+  .searchbar .cell input::placeholder { color: var(--faint); }
+  .searchbar .go {
+    align-self: center; margin-left: 8px;
+    background: var(--gold); color: #FFFDF6; border: none; border-radius: 999px; cursor: pointer;
+    font-size: 0.8rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+    padding: 16px 30px; transition: background 0.2s ease, transform 0.2s ease;
+    box-shadow: 0 10px 24px -12px rgba(196,151,47,0.65);
+  }
+  .searchbar .go:hover { background: var(--gold-deep); transform: translateY(-1px); }
+
+  /* accreditation band */
+  .accredband { margin-top: clamp(56px, 9vh, 84px); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--surface); }
+  .accredband .row { display: flex; align-items: center; justify-content: center; gap: 14px 30px; flex-wrap: wrap; padding-top: 20px; padding-bottom: 20px; }
+  .accredband .lead { font-size: 0.64rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold-deep); font-weight: 700; }
+  .accredband .t { font-size: 0.74rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); font-weight: 600; }
+  .accredband .lead + .t::before { content: none; }
+  .accredband .t + .lead { margin-left: 26px; }
+
+  /* ---------- heritage band ---------- */
+  .heritage { padding: clamp(90px, 13vh, 150px) 0; }
+  .heritage .head { text-align: center; max-width: 720px; margin: 0 auto; }
+  h2.sect {
+    font-family: 'Fraunces', Georgia, serif; font-weight: 400;
+    font-size: clamp(2rem, 4.4vw, 3.4rem); line-height: 1.08; letter-spacing: -0.014em; color: var(--ink);
+    text-wrap: balance;
+  }
+  h2.sect em { font-style: italic; font-weight: 340; color: var(--gold-deep); }
+  .heritage .head p { margin-top: 18px; color: var(--ink-soft); }
+
+  .year-counter {
+    margin: clamp(40px, 6vh, 60px) auto 0; text-align: center;
+    font-family: 'Fraunces', Georgia, serif; font-weight: 350;
+    font-size: clamp(4.4rem, 13vw, 10rem); line-height: 1; letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums; color: var(--ink);
+  }
+  .year-counter .arrow { color: var(--gold); font-size: 0.42em; vertical-align: 0.32em; margin: 0 0.25em; }
+  .year-counter #yearNow { color: var(--gold-deep); }
+
+  /* timeline */
+  .timeline { margin-top: clamp(50px, 8vh, 80px); position: relative; }
+  .timeline .rail { position: absolute; left: 0; right: 0; top: 7px; height: 2px; background: var(--line); border-radius: 2px; overflow: hidden; }
+  .timeline .rail .fill { width: 0%; height: 100%; background: var(--gold); transition: width 2.4s cubic-bezier(.25,.6,.2,1); }
+  .timeline.in .rail .fill { width: 100%; }
+  .timeline .stops { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
+  .tstop { padding-top: 0; opacity: 0; transform: translateY(18px); transition: opacity 0.7s ease, transform 0.7s ease; }
+  .timeline.in .tstop { opacity: 1; transform: none; }
+  .timeline.in .tstop:nth-child(1) { transition-delay: 0.2s; }
+  .timeline.in .tstop:nth-child(2) { transition-delay: 0.75s; }
+  .timeline.in .tstop:nth-child(3) { transition-delay: 1.3s; }
+  .timeline.in .tstop:nth-child(4) { transition-delay: 1.85s; }
+  .tstop .dot { width: 15px; height: 15px; border-radius: 50%; background: var(--surface); border: 3px solid var(--gold); margin-bottom: 20px; }
+  .tstop .yr { font-family: 'Fraunces', Georgia, serif; font-size: 1.5rem; font-weight: 480; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .tstop p { margin-top: 8px; font-size: 0.88rem; color: var(--ink-soft); max-width: 26ch; }
+  @media (max-width: 760px) {
+    .timeline .rail { left: 7px; right: auto; top: 0; bottom: 0; width: 2px; height: auto; }
+    .timeline .rail .fill { width: 100%; height: 0%; transition: height 2.4s cubic-bezier(.25,.6,.2,1); }
+    .timeline.in .rail .fill { height: 100%; }
+    .timeline .stops { grid-template-columns: 1fr; gap: 34px; padding-left: 36px; }
+    .tstop .dot { position: absolute; margin-left: -36px; }
+  }
+
+  /* ---------- founder ---------- */
+  .founder { padding: clamp(80px, 12vh, 150px) 0; background: var(--gold-wash); border-top: 1px solid var(--line); }
+  .founder-grid { display: grid; grid-template-columns: 0.85fr 1.15fr; gap: clamp(36px, 6vw, 90px); align-items: center; }
+  @media (max-width: 880px) { .founder-grid { grid-template-columns: 1fr; max-width: 560px; } }
+  .portrait { position: relative; margin: 0; }
+  .portrait .frame {
+    position: relative; aspect-ratio: 4 / 5; border-radius: 18px; overflow: hidden;
+    background: linear-gradient(165deg, var(--gold-tint), #EFE5C9);
+    box-shadow: var(--shadow-lg);
+  }
+  .portrait .frame::before {
+    content: ""; position: absolute; inset: 14px; border: 1px solid rgba(196,151,47,0.45);
+    border-radius: 10px; pointer-events: none; z-index: 2;
+  }
+  .portrait .frame img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .portrait .frame .monogram {
+    display: none; position: absolute; inset: 0; align-items: center; justify-content: center;
+    font-family: 'Fraunces', Georgia, serif; font-style: italic; font-weight: 340;
+    font-size: clamp(4rem, 9vw, 7rem); color: var(--gold-deep); opacity: 0.55;
+  }
+  .portrait .frame.noimg img { display: none; }
+  .portrait .frame.noimg .monogram { display: flex; }
+  .portrait figcaption { display: flex; align-items: baseline; gap: 12px; margin-top: 16px; }
+  .portrait figcaption .nm { font-family: 'Fraunces', Georgia, serif; font-size: 1.15rem; font-weight: 480; color: var(--ink); }
+  .portrait figcaption .rl { font-size: 0.66rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold-deep); font-weight: 700; }
+  .years-badge {
+    position: absolute; top: -20px; right: -16px; z-index: 3;
+    background: var(--charcoal); color: #F6F4EC; border-radius: 999px;
+    width: 108px; height: 108px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    box-shadow: var(--shadow-lg); transform: rotate(6deg);
+  }
+  @media (max-width: 880px) { .years-badge { right: 6px; } }
+  .years-badge .n { font-family: 'Fraunces', Georgia, serif; font-weight: 420; font-size: 2rem; line-height: 1; }
+  .years-badge .n i { font-style: italic; color: var(--gold); }
+  .years-badge .l { font-size: 0.5rem; letter-spacing: 0.14em; text-transform: uppercase; color: #A5A18D; margin-top: 4px; text-align: center; max-width: 80px; }
+  .founder-copy p { color: var(--ink-soft); max-width: 54ch; }
+  .founder-copy p + p { margin-top: 14px; }
+  .founder-copy .sect + p, .founder-copy h2 + p { margin-top: 22px; }
+  .ethos { margin: 30px 0 0; padding: 24px 28px; background: var(--surface); border-left: 3px solid var(--gold); border-radius: 0 14px 14px 0; box-shadow: var(--shadow-sm); }
+  .ethos p { font-family: 'Fraunces', Georgia, serif; font-style: italic; font-weight: 360; font-size: 1.2rem; line-height: 1.45; color: var(--ink); max-width: none; }
+  .ethos cite { display: block; margin-top: 12px; font-style: normal; font-size: 0.72rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); font-weight: 600; }
+
+  /* ---------- listings ---------- */
+  .listings-sect { padding: clamp(70px, 10vh, 120px) 0; background: var(--surface); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .sect-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; flex-wrap: wrap; margin-bottom: clamp(36px, 6vh, 56px); }
+  .sect-head .side { text-align: right; }
+  .cardgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 26px; }
+  @media (max-width: 980px) { .cardgrid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 640px) { .cardgrid { grid-template-columns: 1fr; } }
+  .prop {
+    background: var(--bg); border: 1px solid var(--line); border-radius: 18px; overflow: hidden;
+    text-decoration: none; transition: transform 0.25s ease, box-shadow 0.25s ease;
+  }
+  .prop:hover { transform: translateY(-5px); box-shadow: var(--shadow-lg); }
+  .prop .visual { position: relative; aspect-ratio: 4/3; background: linear-gradient(160deg, var(--gold-wash), var(--gold-tint)); display: flex; align-items: flex-end; justify-content: center; overflow: hidden; }
+  .prop .visual svg { width: 78%; height: auto; color: var(--gold-deep); opacity: 0.9; transition: transform 0.5s cubic-bezier(.2,.6,.2,1); }
+  .prop:hover .visual svg { transform: translateY(-6px); }
+  .prop .pill {
+    position: absolute; top: 14px; left: 14px; font-size: 0.62rem; font-weight: 700;
+    letter-spacing: 0.14em; text-transform: uppercase; padding: 7px 13px; border-radius: 999px;
+    background: rgba(255,255,255,0.92); color: var(--gold-deep); box-shadow: var(--shadow-sm);
+  }
+  .prop .pill.let { color: #7A5A16; background: rgba(247,240,222,0.95); }
+  .prop .body { padding: 20px 22px 24px; }
+  .prop .price { font-family: 'Fraunces', Georgia, serif; font-weight: 480; font-size: 1.5rem; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .prop .price small { font-size: 0.6em; color: var(--faint); font-weight: 350; }
+  .prop .addr { margin-top: 4px; font-size: 0.9rem; color: var(--ink-soft); }
+  .prop .meta { display: flex; gap: 16px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line-soft); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); font-weight: 600; }
+  .sample-note { margin-top: 26px; font-size: 0.74rem; color: var(--faint); }
+
+  /* ---------- services ---------- */
+  .services { padding: clamp(80px, 12vh, 140px) 0; }
+  .svc-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 26px; margin-top: clamp(36px, 6vh, 56px); }
+  @media (max-width: 900px) { .svc-grid { grid-template-columns: 1fr; } }
+  .svc {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 18px;
+    padding: 34px 32px 36px; position: relative; overflow: hidden;
+    transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+  }
+  .svc:hover { transform: translateY(-5px); box-shadow: var(--shadow-lg); border-color: var(--gold-tint); }
+  .svc .num { font-family: 'Fraunces', Georgia, serif; font-style: italic; font-weight: 320; font-size: 1rem; color: var(--gold-deep); }
+  .svc h3 { font-family: 'Fraunces', Georgia, serif; font-weight: 460; font-size: 1.45rem; margin-top: 12px; color: var(--ink); }
+  .svc p { margin-top: 12px; color: var(--ink-soft); font-size: 0.92rem; }
+  .svc .link { display: inline-flex; align-items: center; gap: 8px; margin-top: 20px; font-size: 0.74rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold-deep); text-decoration: none; }
+  .svc .link .ar { transition: transform 0.25s ease; }
+  .svc:hover .link .ar { transform: translateX(5px); }
+  .svc .ghost-glyph { position: absolute; right: -18px; bottom: -22px; width: 130px; height: auto; opacity: 0.07; }
+
+  /* ---------- valuation ---------- */
+  .valuation { background: var(--charcoal); color: #F6F4EC; padding: clamp(80px, 12vh, 150px) 0; position: relative; overflow: hidden; }
+  .valuation::before {
+    content: ""; position: absolute; right: -8%; top: 50%; transform: translateY(-50%);
+    width: 520px; height: 520px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(196,151,47,0.16), rgba(196,151,47,0) 70%);
+  }
+  .valuation .wide { position: relative; display: grid; grid-template-columns: 1.1fr 0.9fr; gap: clamp(30px, 6vw, 80px); align-items: center; }
+  @media (max-width: 880px) { .valuation .wide { grid-template-columns: 1fr; } }
+  .valuation .label { color: #8F8A76; } .valuation .label b { color: var(--gold); }
+  .valuation h2 { font-family: 'Fraunces', Georgia, serif; font-weight: 380; font-size: clamp(2.2rem, 4.8vw, 3.8rem); line-height: 1.05; letter-spacing: -0.015em; margin-top: 20px; color: #FBFAF3; }
+  .valuation h2 em { font-style: italic; font-weight: 330; color: var(--gold); }
+  .valuation p.sub { margin-top: 20px; color: #B8B4A2; max-width: 46ch; }
+  .val-card { background: rgba(255,255,255,0.045); border: 1px solid rgba(246,244,236,0.14); border-radius: 20px; padding: 34px; backdrop-filter: blur(4px); }
+  .val-card label { display: block; font-size: 0.64rem; letter-spacing: 0.2em; text-transform: uppercase; color: #8F8A76; font-weight: 700; margin-bottom: 10px; }
+  .val-card input {
+    width: 100%; background: transparent; border: none; border-bottom: 1px solid rgba(246,244,236,0.25);
+    font-family: 'Fraunces', Georgia, serif; font-style: italic; font-size: 1.4rem; color: #FBFAF3;
+    padding: 4px 0 12px; border-radius: 0;
+  }
+  .val-card input::placeholder { color: #6E6A59; }
+  .val-card input:focus { outline: none; border-bottom-color: var(--gold); }
+  .val-card .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 26px; }
+  .val-card button { width: 100%; margin-top: 30px; }
+  .val-card .fine { margin-top: 16px; font-size: 0.72rem; color: #8F8A76; text-align: center; }
+
+  /* ---------- areas ---------- */
+  .areasect { padding: clamp(80px, 12vh, 140px) 0; }
+  .area-chips { display: flex; flex-wrap: wrap; gap: 12px; margin-top: clamp(30px, 5vh, 44px); }
+  .area-chip {
+    display: inline-flex; align-items: baseline; gap: 10px; text-decoration: none;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
+    padding: 13px 24px; transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+  }
+  .area-chip:hover { border-color: var(--gold); box-shadow: var(--shadow-sm); transform: translateY(-2px); }
+  .area-chip .nm { font-family: 'Fraunces', Georgia, serif; font-size: 1.05rem; font-weight: 440; color: var(--ink); }
+  .area-chip .pc { font-size: 0.66rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); font-weight: 700; }
+
+  /* ---------- quote ---------- */
+  .quote { padding: clamp(70px, 10vh, 120px) 0; background: var(--gold-wash); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .quote blockquote {
+    font-family: 'Fraunces', Georgia, serif; font-style: italic; font-weight: 340;
+    font-size: clamp(1.4rem, 3vw, 2.2rem); line-height: 1.4; letter-spacing: -0.006em;
+    max-width: 36ch; margin: 0 auto; text-align: center; color: var(--ink);
+  }
+  .quote blockquote .mk { color: var(--gold); }
+  .quote .attr { text-align: center; margin-top: 26px; }
+
+  /* ---------- footer ---------- */
+  footer.site { background: var(--charcoal); color: #C9C5B4; padding: clamp(60px, 9vh, 90px) 0 0; }
+  .foot-grid { display: grid; grid-template-columns: 1.5fr 1fr 1fr 1.2fr; gap: clamp(28px, 4vw, 60px); padding-bottom: clamp(46px, 7vh, 70px); }
+  @media (max-width: 880px) { .foot-grid { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 560px) { .foot-grid { grid-template-columns: 1fr; } }
+  footer.site h4 { font-size: 0.64rem; letter-spacing: 0.22em; text-transform: uppercase; color: #7B7663; margin-bottom: 18px; font-weight: 600; }
+  footer.site address, footer.site li { font-style: normal; font-size: 0.9rem; line-height: 1.9; }
+  footer.site ul { list-style: none; padding: 0; }
+  footer.site a { text-decoration: none; color: #C9C5B4; }
+  footer.site a:hover { color: var(--gold); }
+  .foot-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
+  .foot-brand svg { width: 46px; height: auto; }
+  .foot-brand .w { font-weight: 700; letter-spacing: 0.08em; font-size: 0.95rem; color: #F6F4EC; }
+  .foot-brand .w span { display: block; font-weight: 300; letter-spacing: 0.26em; font-size: 0.88rem; color: #A5A18D; }
+  .accred { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 0.74rem; letter-spacing: 0.06em; color: #8F8A76; }
+  .foot-legal { border-top: 1px solid rgba(201,197,180,0.14); display: flex; justify-content: space-between; gap: 14px; flex-wrap: wrap; padding: 20px clamp(20px,4vw,52px); font-size: 0.7rem; color: #7B7663; }
+</style>
+
+<!-- ————— shared symbols ————— -->
+<svg style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true">
+  <!-- Preston Hill mark, redrawn: a gold house cradled by a smooth open hand -->
+  <symbol id="ph-logo" viewBox="0 0 100 100">
+    <!-- chimney (drawn first so the roof overlaps its base) -->
+    <rect x="59" y="15" width="7" height="14" rx="1.5" fill="#C4972F"/>
+    <!-- roof with eaves overhang -->
+    <path d="M50 13 L83 42 L74.5 42 L50 20.5 L25.5 42 L17 42 Z" fill="#C4972F"/>
+    <!-- house body with door and window knocked out -->
+    <path d="M28 44 H72 V67 H28 Z
+             M45 51 h9 v16 h-9 Z
+             M59.5 51 h8 v8 h-8 Z" fill="#C4972F" fill-rule="evenodd"/>
+    <!-- cupped palm -->
+    <g fill="none" stroke="#C4972F" stroke-linecap="round">
+      <path d="M18 74 C 30 89.5, 70 89.5, 82 74" stroke-width="7.5"/>
+      <!-- thumb -->
+      <path d="M17.5 73 C 12.5 67.5, 13 60, 19 55.5" stroke-width="6.5"/>
+      <!-- fingertip accents -->
+      <path d="M86.5 68 l7.5 -3.5" stroke-width="3.6"/>
+      <path d="M88 74.5 l8 -0.5" stroke-width="3.6"/>
+    </g>
+  </symbol>
+  <!-- delicate facade art for listing cards -->
+  <symbol id="fc-semi" viewBox="0 0 400 240">
+    <g fill="none" stroke="currentColor" stroke-width="1.6">
+      <path d="M40 112 L120 60 L200 112 M200 112 L280 60 L360 112"/>
+      <rect x="52" y="112" width="296" height="128"/>
+      <line x1="200" y1="112" x2="200" y2="240"/>
+      <path d="M80 240 v-66 a24 24 0 0 1 48 0 v66 M272 240 v-66 a24 24 0 0 1 48 0 v66"/>
+      <rect x="90" y="130" width="30" height="24"/><rect x="280" y="130" width="30" height="24"/>
+      <rect x="154" y="178" width="28" height="62"/><rect x="218" y="178" width="28" height="62"/>
+      <line x1="120" y1="60" x2="120" y2="42"/><rect x="112" y="30" width="16" height="14"/>
+      <line x1="280" y1="60" x2="280" y2="42"/><rect x="272" y="30" width="16" height="14"/>
+    </g>
+  </symbol>
+  <symbol id="fc-terrace" viewBox="0 0 400 240">
+    <g fill="none" stroke="currentColor" stroke-width="1.6">
+      <rect x="60" y="72" width="280" height="168"/>
+      <path d="M48 72 L200 30 L352 72"/>
+      <line x1="60" y1="100" x2="340" y2="100"/>
+      <rect x="88" y="120" width="52" height="42"/><rect x="174" y="120" width="52" height="42"/><rect x="260" y="120" width="52" height="42"/>
+      <rect x="176" y="188" width="48" height="52"/>
+      <rect x="92" y="188" width="56" height="52"/><line x1="92" y1="214" x2="148" y2="214"/>
+      <rect x="252" y="188" width="56" height="52"/><line x1="252" y1="214" x2="308" y2="214"/>
+    </g>
+  </symbol>
+  <symbol id="fc-block" viewBox="0 0 400 240">
+    <g fill="none" stroke="currentColor" stroke-width="1.6">
+      <rect x="92" y="42" width="216" height="198"/>
+      <path d="M92 42 Q200 18 308 42"/>
+      <line x1="132" y1="42" x2="132" y2="240"/><line x1="268" y1="42" x2="268" y2="240"/>
+      <rect x="152" y="86" width="96" height="28"/><rect x="152" y="136" width="96" height="28"/><rect x="152" y="186" width="96" height="28"/>
+      <line x1="100" y1="86" x2="124" y2="86"/><line x1="100" y1="136" x2="124" y2="136"/><line x1="100" y1="186" x2="124" y2="186"/>
+      <line x1="276" y1="86" x2="300" y2="86"/><line x1="276" y1="136" x2="300" y2="136"/><line x1="276" y1="186" x2="300" y2="186"/>
+    </g>
+  </symbol>
+</svg>
+
+<header class="site" id="siteHeader">
+  <div class="navrow">
+    <a class="brand" href="#top" aria-label="Preston Hill Estates home">
+      <svg class="mark" viewBox="0 0 100 100" aria-hidden="true"><use href="#ph-logo"/></svg>
+      <span class="word">
+        <span class="n1">PRESTON HILL</span><br/>
+        <span class="n2">ESTATES<small>EST. 2004</small></span>
+      </span>
+    </a>
+    <nav class="primary" aria-label="Primary">
+      <a href="#listings">Sales</a>
+      <a href="#listings">Lettings</a>
+      <a href="#services">Services</a>
+      <a href="#areas">Areas</a>
+      <a href="#contact">Contact</a>
+      <a class="btn gold" href="https://claude.ai/code/artifact/76c93993-6277-4580-b173-93622a7443ae" style="padding:12px 22px;">Free valuation</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- ————— hero ————— -->
+  <section class="hero">
+    <div class="wide hero-grid">
+      <div>
+        <div class="label h-stage s1"><b>Independent estate agents</b> · Harrow &amp; North West London</div>
+        <h1 class="display h-stage s2" style="margin-top:22px;">A trusted part of the community <em>since 2004.</em></h1>
+        <p class="sub h-stage s3">For over two decades, families across Harrow, Kenton and Wembley have bought, sold and let their homes through the same independent branch at 271 Preston Road. Twenty-two years of neighbours coming back is not something you can advertise. It has to be earned.</p>
+        <div class="cta-row h-stage s4">
+          <a class="btn gold" href="https://claude.ai/code/artifact/76c93993-6277-4580-b173-93622a7443ae">Value my property</a>
+          <a class="btn ghost" href="#listings">Browse homes</a>
+        </div>
+      </div>
+      <div class="hero-side h-stage s3">
+        <div class="seal" aria-hidden="true">
+          <svg class="ring" viewBox="0 0 200 200">
+            <defs><path id="circlePath" d="M100,100 m-84,0 a84,84 0 1,1 168,0 a84,84 0 1,1 -168,0"/></defs>
+            <text><textPath href="#circlePath" textLength="527" lengthAdjust="spacing">PRESTON HILL ESTATES · EST. 2004 · SALES · LETTINGS · MANAGEMENT ·&#160;</textPath></text>
+          </svg>
+          <div class="core">
+            <svg viewBox="0 0 100 100"><use href="#ph-logo"/></svg>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="wide searchbar-wrap h-stage s5">
+      <form class="searchbar" aria-label="Property search" onsubmit="return false;">
+        <div class="toggle" role="tablist" aria-label="Buy or rent">
+          <button type="button" class="active" role="tab" aria-selected="true">Buy</button>
+          <button type="button" role="tab" aria-selected="false">Rent</button>
+        </div>
+        <div class="cell">
+          <label for="q-loc">Location</label>
+          <input id="q-loc" type="text" placeholder="Postcode, street or area…" />
+        </div>
+        <div class="cell">
+          <label for="q-type">Type</label>
+          <select id="q-type"><option>Any type</option><option>House</option><option>Flat</option><option>Maisonette</option><option>Bungalow</option></select>
+        </div>
+        <div class="cell">
+          <label for="q-price">Max price</label>
+          <select id="q-price"><option>No max</option><option>£400,000</option><option>£600,000</option><option>£800,000</option><option>£1,000,000+</option></select>
+        </div>
+        <button class="go" type="submit">Search</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- ————— accreditation band ————— -->
+  <div class="accredband" aria-label="Accreditations">
+    <div class="wide row">
+      <span class="lead">Regulated &amp; accredited</span>
+      <span class="t">The Property Ombudsman</span>
+      <span class="t">safeagent</span>
+      <span class="t">PRS</span>
+      <span class="t">myDeposits</span>
+      <span class="lead">Listed on</span>
+      <span class="t">Rightmove</span>
+      <span class="t">Zoopla</span>
+      <span class="t">OnTheMarket</span>
+    </div>
+  </div>
+
+  <!-- ————— heritage ————— -->
+  <section class="heritage wide" id="heritage">
+    <div class="head">
+      <div class="label rv"><b>Our story</b></div>
+      <h2 class="sect rv d1" style="margin-top:16px;">Twenty-two years, <em>one address.</em></h2>
+      <p class="rv d2">Agencies have opened, rebranded and disappeared along Preston Road. We've simply kept doing the work: sale by sale, let by let, family by family.</p>
+    </div>
+
+    <div class="year-counter rv" aria-label="From 2004 to today">
+      <span>2004</span><span class="arrow">⟶</span><span id="yearNow">2004</span>
+    </div>
+
+    <div class="timeline" id="timeline">
+      <div class="rail"><div class="fill"></div></div>
+      <div class="stops">
+        <div class="tstop"><div class="dot"></div><div class="yr">2004</div><p>The doors open at 271 Preston Road, an independent branch founded locally.</p></div>
+        <div class="tstop"><div class="dot"></div><div class="yr">2010s</div><p>Sales, lettings and full property management brought together under one roof.</p></div>
+        <div class="tstop"><div class="dot"></div><div class="yr">2024</div><p>Twenty successful years in business, celebrated with the families we've moved.</p></div>
+        <div class="tstop"><div class="dot"></div><div class="yr">Today</div><p>Still the same branch, still independent, now with a new digital front door.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ————— founder ————— -->
+  <section class="founder" id="founder">
+    <div class="wide founder-grid">
+      <figure class="portrait rv">
+        <div class="frame">
+          <img src="data:image/jpeg;base64,__FOUNDER_B64__" alt="Jamil Ahmed, founder of Preston Hill Estates" style="object-position: 50% 18%;"/>
+          <div class="monogram serif" aria-hidden="true">JA</div>
+        </div>
+        <figcaption>
+          <span class="nm">Jamil Ahmed</span>
+          <span class="rl">Founder</span>
+        </figcaption>
+        <div class="years-badge"><span class="n serif">35<i>+</i></span><span class="l">years in property</span></div>
+      </figure>
+      <div class="founder-copy">
+        <div class="label rv"><b>The founder</b></div>
+        <h2 class="sect rv d1" style="margin-top:16px;">The man behind <em>the Hill</em></h2>
+        <p class="rv d2">Every firm has someone who sets its tone. Here, that person is Jamil Ahmed. He opened Preston Hill Estates in 2004, already a seasoned hand after years in London property, and he has been at the branch nearly every working day since.</p>
+        <p class="rv d2">That constancy is why the firm still feels like it belongs to the neighbourhood. Markets have risen and fallen around it, but the way of doing business has not moved an inch. Jamil takes on the difficult sales, the awkward lets and the problems other agents hand back, and he stays with them until they are settled. Everyone who works here is held to the standard he set on the first morning: the client in front of you comes before anything else on your desk.</p>
+        <blockquote class="ethos rv d3">
+          <p>“Never back away from a challenge. Whatever it takes, every client leaves this office with a smile.”</p>
+          <cite>Jamil Ahmed, Founder</cite>
+        </blockquote>
+      </div>
+    </div>
+  </section>
+
+  <!-- ————— listings ————— -->
+  <section class="listings-sect" id="listings">
+    <div class="wide">
+      <div class="sect-head">
+        <div class="rv">
+          <div class="label"><b>On the market</b></div>
+          <h2 class="sect" style="margin-top:14px;">Featured this <em>week</em></h2>
+        </div>
+        <div class="side rv d1">
+          <a class="btn dark" href="#">View all properties</a>
+        </div>
+      </div>
+
+      <div class="cardgrid">
+        <a class="prop rv" href="https://claude.ai/code/artifact/89a49c4c-3333-4122-b14e-4257ecce6616">
+          <div class="visual"><span class="pill">For sale</span><svg viewBox="0 0 400 240"><use href="#fc-semi"/></svg></div>
+          <div class="body">
+            <div class="price">£810,000</div>
+            <div class="addr">Carlton Avenue East, Wembley HA9</div>
+            <div class="meta"><span>4 bed</span><span>2 rec</span><span>Semi-detached</span></div>
+          </div>
+        </a>
+        <a class="prop rv d1" href="#">
+          <div class="visual"><span class="pill">For sale</span><svg viewBox="0 0 400 240"><use href="#fc-terrace"/></svg></div>
+          <div class="body">
+            <div class="price">£565,000</div>
+            <div class="addr">Mountfield Road, Ealing W5</div>
+            <div class="meta"><span>2 bed</span><span>1 rec</span><span>Terraced</span></div>
+          </div>
+        </a>
+        <a class="prop rv d2" href="#">
+          <div class="visual"><span class="pill let">To let</span><svg viewBox="0 0 400 240"><use href="#fc-block"/></svg></div>
+          <div class="body">
+            <div class="price">£1,850 <small>pcm</small></div>
+            <div class="addr">Preston Hill, Harrow HA3</div>
+            <div class="meta"><span>2 bed</span><span>1 bath</span><span>Flat</span></div>
+          </div>
+        </a>
+      </div>
+      <p class="sample-note">Concept preview: the first two properties come from the current site's listings; the third is placeholder data. On the real build these cards use each property's photography, fed live from the branch.</p>
+    </div>
+  </section>
+
+  <!-- ————— services ————— -->
+  <section class="services wide" id="services">
+    <div class="rv">
+      <div class="label"><b>What we do</b></div>
+      <h2 class="sect" style="margin-top:14px;">Everything under <em>one roof</em></h2>
+    </div>
+    <div class="svc-grid">
+      <div class="svc rv">
+        <svg class="ghost-glyph" viewBox="0 0 100 100" aria-hidden="true"><use href="#ph-logo"/></svg>
+        <div class="num">No. 1</div>
+        <h3>Sales</h3>
+        <p>Honest appraisals, full portal coverage and a negotiator who actually knows the street you're selling on.</p>
+        <a class="link" href="#">Selling with us <span class="ar">⟶</span></a>
+      </div>
+      <div class="svc rv d1">
+        <svg class="ghost-glyph" viewBox="0 0 100 100" aria-hidden="true"><use href="#ph-logo"/></svg>
+        <div class="num">No. 2</div>
+        <h3>Lettings</h3>
+        <p>Vetted tenants, protected deposits and rent-guarantee options. Demand in our catchment far outstrips supply, and we hold the waiting list.</p>
+        <a class="link" href="#">Letting with us <span class="ar">⟶</span></a>
+      </div>
+      <div class="svc rv d2">
+        <svg class="ghost-glyph" viewBox="0 0 100 100" aria-hidden="true"><use href="#ph-logo"/></svg>
+        <div class="num">No. 3</div>
+        <h3>Management</h3>
+        <p>Rent collection, inspections, repairs and refurbishment projects, all handled by the branch rather than a call centre.</p>
+        <a class="link" href="#">Management service <span class="ar">⟶</span></a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ————— valuation ————— -->
+  <section class="valuation" id="valuation">
+    <div class="wide">
+      <div>
+        <div class="label rv"><b>Free valuation</b></div>
+        <h2 class="rv d1">What is your home <em>worth today?</em></h2>
+        <p class="sub rv d2">Get a considered figure from people who have valued homes on your street for two decades, with a full market appraisal at your door within 24 hours.</p>
+      </div>
+      <form class="val-card rv d2" onsubmit="return false;">
+        <div>
+          <label for="v-addr">Property address</label>
+          <input id="v-addr" type="text" placeholder="e.g. 14 Woodcock Hill, HA3" autocomplete="street-address"/>
+        </div>
+        <div class="row2">
+          <div>
+            <label for="v-name">Your name</label>
+            <input id="v-name" type="text" placeholder="Full name" autocomplete="name"/>
+          </div>
+          <div>
+            <label for="v-phone">Phone</label>
+            <input id="v-phone" type="tel" placeholder="Mobile number" autocomplete="tel"/>
+          </div>
+        </div>
+        <a class="btn gold" href="https://claude.ai/code/artifact/76c93993-6277-4580-b173-93622a7443ae" style="width:100%;">Request my valuation</a>
+        <p class="fine">Free and without obligation · a reply within one working day</p>
+      </form>
+    </div>
+  </section>
+
+  <!-- ————— areas ————— -->
+  <section class="areasect wide" id="areas">
+    <div class="rv">
+      <div class="label"><b>Where we work</b></div>
+      <h2 class="sect" style="margin-top:14px;">The neighbourhoods <em>we call home</em></h2>
+    </div>
+    <div class="area-chips rv d1">
+      <a class="area-chip" href="#"><span class="nm">Harrow</span><span class="pc">HA1 · HA2 · HA3</span></a>
+      <a class="area-chip" href="#"><span class="nm">Kenton</span><span class="pc">HA3</span></a>
+      <a class="area-chip" href="#"><span class="nm">Wembley</span><span class="pc">HA9 · HA0</span></a>
+      <a class="area-chip" href="#"><span class="nm">Pinner</span><span class="pc">HA5</span></a>
+      <a class="area-chip" href="#"><span class="nm">Stanmore</span><span class="pc">HA7</span></a>
+      <a class="area-chip" href="#"><span class="nm">Edgware</span><span class="pc">HA8</span></a>
+      <a class="area-chip" href="#"><span class="nm">Wealdstone</span><span class="pc">HA3</span></a>
+      <a class="area-chip" href="#"><span class="nm">Kingsbury</span><span class="pc">NW9</span></a>
+    </div>
+  </section>
+
+  <!-- ————— quote ————— -->
+  <section class="quote">
+    <div class="wide">
+      <blockquote class="rv"><span class="mk">“</span>I've worked with several agents in the past, but none as knowledgeable and helpful as the team at Preston Hill Estates. Buying, selling or renting, they are the best in the business.<span class="mk">”</span></blockquote>
+      <div class="attr label rv d1">Client review · from the current site</div>
+    </div>
+  </section>
+</main>
+
+<footer class="site" id="contact">
+  <div class="wide foot-grid">
+    <div>
+      <div class="foot-brand">
+        <svg viewBox="0 0 100 100" aria-hidden="true"><use href="#ph-logo"/></svg>
+        <div class="w">PRESTON HILL<span>ESTATES</span></div>
+      </div>
+      <address>
+        271 Preston Road, Harrow HA3 0PS<br/>
+        Monday to Friday 9.00 to 17.30 · Saturday 10.00 to 13.00<br/>
+        +44 20 8127 7001<br/>
+        info@prestonhillestates.com
+      </address>
+    </div>
+    <div>
+      <h4>Explore</h4>
+      <ul>
+        <li><a href="#listings">Properties for sale</a></li>
+        <li><a href="#listings">Properties to let</a></li>
+        <li><a href="#valuation">Free valuation</a></li>
+        <li><a href="#areas">Area guides</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4>Company</h4>
+      <ul>
+        <li><a href="#heritage">Our story</a></li>
+        <li><a href="#founder">The founder</a></li>
+        <li><a href="#services">Services</a></li>
+        <li><a href="#contact">Contact</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4>Accredited</h4>
+      <div class="accred">
+        <span>The Property Ombudsman</span><span>PRS</span><span>safeagent</span><span>myDeposits</span>
+        <span>Rightmove</span><span>Zoopla</span><span>OnTheMarket</span>
+      </div>
+    </div>
+  </div>
+  <div class="foot-legal">
+    <span id="copyright">© Preston Hill Estates · Company No. 05058532</span>
+    <span>Design concept · sample data, not the live site</span>
+  </div>
+</footer>
+
+<script>
+(function () {
+  /* nav shadow on scroll */
+  var header = document.getElementById('siteHeader');
+  var onScroll = function () { header.classList.toggle('scrolled', window.scrollY > 30); };
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+
+  /* scroll reveals */
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) {
+      if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+    });
+  }, { threshold: 0.14, rootMargin: '0px 0px -5% 0px' });
+  document.querySelectorAll('.rv').forEach(function (el) { io.observe(el); });
+
+  /* buy / rent toggle */
+  document.querySelectorAll('.searchbar .toggle button').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      document.querySelectorAll('.searchbar .toggle button').forEach(function (b) {
+        b.classList.remove('active'); b.setAttribute('aria-selected', 'false');
+      });
+      btn.classList.add('active'); btn.setAttribute('aria-selected', 'true');
+    });
+  });
+
+  /* year counter: 2004 → current year, eased count-up when scrolled into view */
+  var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var yearEl = document.getElementById('yearNow');
+  var endYear = new Date().getFullYear();
+  if (reduced) {
+    yearEl.textContent = endYear;
+  } else {
+    var counted = false;
+    var cio = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting && !counted) {
+          counted = true;
+          var t0 = performance.now(), dur = 2200;
+          (function tick(now) {
+            var p = Math.min((now - t0) / dur, 1);
+            var eased = 1 - Math.pow(1 - p, 3);
+            yearEl.textContent = Math.round(2004 + (endYear - 2004) * eased);
+            if (p < 1) requestAnimationFrame(tick);
+          })(t0);
+          cio.disconnect();
+        }
+      });
+    }, { threshold: 0.5 });
+    cio.observe(yearEl);
+  }
+
+  /* timeline draw-on */
+  var tl = document.getElementById('timeline');
+  var tio = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) { if (e.isIntersecting) { tl.classList.add('in'); tio.disconnect(); } });
+  }, { threshold: 0.25 });
+  tio.observe(tl);
+
+  /* footer year */
+  document.getElementById('copyright').textContent =
+    '© ' + new Date().getFullYear() + ' Preston Hill Estates · Company No. 05058532';
+})();
+</script>
