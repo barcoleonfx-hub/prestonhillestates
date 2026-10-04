@@ -99,6 +99,28 @@ bool   inTgtLon  = input.bool(false, "Target: completed London session high/low"
 string inLonSess = input.session("0800-1600", "London session (explicit)", group = GRP_SET)
 string inLonTz   = input.string("Europe/London", "London timezone (IANA)", group = GRP_SET)
 bool   inGuides  = input.bool(false, "Show entry / stop / target guides on qualified iFVGs", group = GRP_SET)
+const string GRP_WIN = "Entry windows (configured clock windows - NOT an exchange holiday / early-close calendar)"
+bool   inWinAsia = input.bool(true, "Window A: Asia open -> London open", group = GRP_WIN, tooltip = "Configured reference times, not a universal definition of the Asian session. Each endpoint uses its own IANA timezone (DST handled automatically). Start inclusive, end exclusive, judged at the inversion candle's CLOSE time.")
+int    inAsH  = input.int(9, "Asia open hour", minval = 0, maxval = 23, group = GRP_WIN)
+int    inAsM  = input.int(0, "Asia open minute", minval = 0, maxval = 59, group = GRP_WIN)
+string inAsTz = input.string("Asia/Tokyo", "Asia open timezone (IANA)", group = GRP_WIN)
+int    inLoH  = input.int(8, "London open hour (window end)", minval = 0, maxval = 23, group = GRP_WIN)
+int    inLoM  = input.int(0, "London open minute (window end)", minval = 0, maxval = 59, group = GRP_WIN)
+string inLoTz = input.string("Europe/London", "London open timezone (IANA)", group = GRP_WIN, tooltip = "The window ends at the first London opening strictly after the Asia start.")
+bool   inWinAm = input.bool(true, "Window B: New York morning", group = GRP_WIN)
+int    inAmSH = input.int(9, "NY morning start hour", minval = 0, maxval = 23, group = GRP_WIN)
+int    inAmSM = input.int(45, "NY morning start minute", minval = 0, maxval = 59, group = GRP_WIN)
+int    inAmEH = input.int(11, "NY morning end hour", minval = 0, maxval = 23, group = GRP_WIN)
+int    inAmEM = input.int(30, "NY morning end minute", minval = 0, maxval = 59, group = GRP_WIN)
+string inAmTz = input.string("America/New_York", "NY morning timezone (IANA)", group = GRP_WIN)
+bool   inWinPm = input.bool(true, "Window C: New York afternoon", group = GRP_WIN)
+int    inPmSH = input.int(14, "NY afternoon start hour", minval = 0, maxval = 23, group = GRP_WIN)
+int    inPmSM = input.int(30, "NY afternoon start minute", minval = 0, maxval = 59, group = GRP_WIN)
+int    inPmEH = input.int(15, "NY afternoon end hour", minval = 0, maxval = 23, group = GRP_WIN)
+int    inPmEM = input.int(30, "NY afternoon end minute", minval = 0, maxval = 59, group = GRP_WIN)
+string inPmTz = input.string("America/New_York", "NY afternoon timezone (IANA)", group = GRP_WIN, tooltip = "An end earlier than the start is treated as overnight (ends the next local date). Identical start/end in one timezone is rejected, not read as 24 hours.")
+string inWkd  = input.string("Mon-Fri", "Eligible start days (weekday of the START in its timezone)", options = ["Mon-Fri", "Every day"], group = GRP_WIN)
+bool   inStatus = input.bool(false, "Show small entry-window status label", group = GRP_WIN)
 
 bool   inShowFvg  = input.bool(true, "Show current-chart FVGs", group = GRP_CH)
 bool   inShowIfvg = input.bool(true, "Show current-chart iFVGs", group = GRP_CH)
@@ -195,6 +217,10 @@ type Zone
     string qSrcs = ""
     string qReasons = ""
     string qNote = ""
+    string qWin = ""         // assigned entry-window name (frozen)
+    string qWinId = ""       // window-instance ID: name + start timestamp
+    int    qWinStart
+    int    qWinEnd
     box    bx                // persistent drawing handles (mutated only on confirmed bars)
     line   mid
     label  mk
@@ -425,6 +451,13 @@ int prevCloseT = time_close[1]
 float h2c = high[2]
 float l2c = low[2]
 float chartAtr1 = chartAtr[1]     // ATR(14) of the candle BEFORE the evaluated one (common volatility baseline)
+bool okWinAs = not (inAsTz == inLoTz and inAsH == inLoH and inAsM == inLoM)
+bool okWinAm = not (inAmSH == inAmEH and inAmSM == inAmEM)
+bool okWinPm = not (inPmSH == inPmEH and inPmSM == inPmEM)
+// Display clock: wall clock only on a genuinely current realtime bar; bar timestamps for history / Bar Replay.
+bool liveNow = barstate.isrealtime and timenow - time <= 2 * chartMs + 60000
+int  dispClock = liveNow ? timenow : time_close
+varip array<string> expIds = array.new_string(0)   // rollback-immune: display-expired setup IDs
 var array<bool>   srcTrunc = array.new_bool(4, false)
 var array<Level>  levels = array.new<Level>()
 var array<Zone>   pend = array.new<Zone>()
@@ -645,6 +678,10 @@ f_tapStore(array<Zone> a) =>
 // Persistent handles. Called only on confirmed bars (never on provisional ticks), so nothing here can be
 // rolled back, duplicated or shown in a provisional colour. Creates when wanted and missing, otherwise
 // updates through setters; deletes when hidden (state is untouched, tracking continues).
+// Display-only expiry of a qualified setup (its frozen originating window has ended). Never touches lifecycle state.
+f_expired(Zone z) =>
+    z.qual and (expIds.includes(z.id) or (not na(dispClock) and not na(z.qWinEnd) and dispClock >= z.qWinEnd))
+
 f_syncDraw(Zone z, bool htf, bool want) =>
     if not want
         f_destroy(z)
@@ -655,7 +692,7 @@ f_syncDraw(Zone z, bool htf, bool want) =>
         color base = bull ? inBull : inBear
         int fillT = htf ? (tap ? inHtfTapT : inHtfT) : inChT
         string txt = ""
-        bool qualZ = ifvg and z.qual and not htf
+        bool qualZ = ifvg and z.qual and not htf and not f_expired(z)
         int bw = qualZ ? 2 : 1
         if inLabels
             if htf
@@ -754,7 +791,7 @@ f_classify(array<Zone> a, bool htf) =>
                     z.cat := f_tk(z.bottom) > f_tk(refPrice) ? 2 : (f_tk(z.top) < f_tk(refPrice) ? 3 : 4)
             else
                 bool isI = z.state == ST_BULL_IFVG or z.state == ST_BEAR_IFVG
-                if isI and z.qual
+                if isI and z.qual and not f_expired(z)
                     z.cat := 5                      // qualified and still active: always eligible for display
                 else
                     bool sizeOk = isI ? f_sizeOk(z.width, z.fatr, inIfvgMinT, inIfvgAtr) : f_sizeOk(z.width, z.fatr, inFvgMinT, inFvgAtr)
@@ -1045,6 +1082,64 @@ f_contactOk(bool bull) =>
     found
 
 // ───────────── qualification: ONCE per zone, at its confirmed inversion; result is frozen ─────────────
+// ───────────── entry windows (calendar-aware; named IANA timezones; never the chart display timezone) ─────────────
+// Local timestamp for the calendar date `dayShift` days from ref's local date in tz. Stepping is anchored at local
+// NOON so a DST day (23h/25h) can never skip or repeat a date; hh:mm is then built with timestamp(tz, ...).
+f_localTs(int ref, string tz, int dayShift, int hh, int mm) =>
+    int noon = timestamp(tz, year(ref, tz), month(ref, tz), dayofmonth(ref, tz), 12, 0, 0)
+    int shifted = noon + dayShift * 86400000
+    timestamp(tz, year(shifted, tz), month(shifted, tz), dayofmonth(shifted, tz), hh, mm, 0)
+
+// One window candidate containing T (start inclusive, end exclusive). Instances starting on T's local start-date
+// and the previous start-date are checked, so overnight windows are found. Returns [start, end] or [na, na].
+f_winCand(int T, bool en, bool valid, int sh, int sm, string stz, int eh, int em, string etz) =>
+    int bs = na
+    int be = na
+    if en and valid
+        for s = 0 to 1
+            int st = f_localTs(T, stz, -s, sh, sm)
+            int e0 = f_localTs(st, etz, 0, eh, em)
+            int en2 = e0 > st ? e0 : f_localTs(st, etz, 1, eh, em)   // first end strictly after the start
+            int dw = dayofweek(st, stz)
+            bool dayOk = inWkd == "Every day" or (dw >= dayofweek.monday and dw <= dayofweek.friday)
+            if dayOk and T >= st and T < en2
+                if na(bs) or st > bs
+                    bs := st
+                    be := en2
+    [bs, be]
+
+// Deterministic assignment: latest start wins; equal starts: NY morning, then NY afternoon, then Asia -> London.
+f_selectWindow(int T) =>
+    [sA, eA] = f_winCand(T, inWinAsia, okWinAs, inAsH, inAsM, inAsTz, inLoH, inLoM, inLoTz)
+    [sM, eM] = f_winCand(T, inWinAm, okWinAm, inAmSH, inAmSM, inAmTz, inAmEH, inAmEM, inAmTz)
+    [sP, eP] = f_winCand(T, inWinPm, okWinPm, inPmSH, inPmSM, inPmTz, inPmEH, inPmEM, inPmTz)
+    string bn = ""
+    int bs = na
+    int be = na
+    if not na(sM)
+        bn := "New York morning"
+        bs := sM
+        be := eM
+    if not na(sP) and (na(bs) or sP > bs)
+        bn := "New York afternoon"
+        bs := sP
+        be := eP
+    if not na(sA) and (na(bs) or sA > bs)
+        bn := "Asia -> London"
+        bs := sA
+        be := eA
+    [bn, bs, be]
+
+f_statusText(int T) =>
+    string t = "Outside entry windows"
+    if not (inWinAsia or inWinAm or inWinPm)
+        t := "All entry windows disabled"
+    else if not na(T)
+        [wn, ws, we] = f_selectWindow(T)
+        if not na(ws)
+            t := wn
+    t
+
 f_evaluate(Zone z) =>
     z.qEval := true
     bool bull = z.state == ST_BULL_IFVG          // bullish inversion direction (original bearish FVG)
@@ -1124,7 +1219,31 @@ f_evaluate(Zone z) =>
             ok := false
             why := f_addWhy(why, "Required HTF contact absent")
     // freeze
+    // timing gate (additional and mandatory): the inversion candle's CONFIRMED CLOSE time must lie in an enabled window
+    string winName = ""
+    int winStart = na
+    int winEnd = na
+    int tConf = time_close
+    if not (inWinAsia or inWinAm or inWinPm)
+        ok := false
+        why := f_addWhy(why, "All entry windows disabled")
+    else if na(tConf) or tConf <= time
+        ok := false
+        why := f_addWhy(why, "No reliable close time")
+    else
+        [wn, ws, we] = f_selectWindow(tConf)
+        if na(ws)
+            ok := false
+            why := f_addWhy(why, "Outside entry windows")
+        else
+            winName := wn
+            winStart := ws
+            winEnd := we
     z.qual := ok
+    z.qWin := winName
+    z.qWinId := winName + "|" + str.tostring(winStart)
+    z.qWinStart := winStart
+    z.qWinEnd := winEnd
     z.qEntry := entry
     z.qStop := stop
     z.qHorizon := horizon
@@ -1139,7 +1258,7 @@ f_evaluate(Zone z) =>
         f_evInc(bull ? 9 : 10, "")
         int di = bull ? 0 : 1
         if qMsg.get(di) == ""
-            qMsg.set(di, "Qualified " + (bull ? "bullish" : "bearish") + " iFVG " + syminfo.ticker + " " + timeframe.period + " | Entry " + str.tostring(entry, format.mintick) + " | Stop " + str.tostring(stop, format.mintick) + " | Target " + tName + " @ " + str.tostring(tPrice, format.mintick) + " | " + str.tostring(math.floor(tR * 10) / 10, "#.0") + "R | " + route + " | " + (inPathToTarget ? "path to target clear" : str.tostring(inMinR, "#.##") + "R path clear") + " (horizon " + str.tostring(horizon, format.mintick) + ") | HTF checked: " + srcTxt + (note == "" ? "" : " | note: " + note))
+            qMsg.set(di, "Qualified " + (bull ? "bullish" : "bearish") + " iFVG " + syminfo.ticker + " " + timeframe.period + " | Session " + winName + " | Entry " + str.tostring(entry, format.mintick) + " | Stop " + str.tostring(stop, format.mintick) + " | Target " + tName + " @ " + str.tostring(tPrice, format.mintick) + " | " + str.tostring(math.floor(tR * 10) / 10, "#.0") + "R | " + route + " | " + (inPathToTarget ? "path to target clear" : str.tostring(inMinR, "#.##") + "R path clear") + " (horizon " + str.tostring(horizon, format.mintick) + ") | HTF checked: " + srcTxt + (note == "" ? "" : " | note: " + note))
     true
 
 // ═════════════════════════════ MAIN: confirmed-bar processing ═════════════════════════════════
@@ -1154,6 +1273,12 @@ if supported and barstate.isfirst
         warnArr.push(f_tfText(sec4) + " disabled: not an integer multiple of the chart timeframe")
     if nSlots > 0 and effBudget < inBudget
         warnArr.push("Source-history budget clamped to " + str.tostring(effBudget) + " candles (memory bound)")
+    if inWinAsia and not okWinAs
+        warnArr.push("Entry window A disabled: start equals end")
+    if inWinAm and not okWinAm
+        warnArr.push("Entry window B disabled: start equals end")
+    if inWinPm and not okWinPm
+        warnArr.push("Entry window C disabled: start equals end")
 
 // Drawings are mutated only on confirmed bars at/after the last confirmed historical bar.
 bool drawNow = supported and barstate.isconfirmed and (barstate.islast or barstate.islastconfirmedhistory or barstate.isrealtime)
@@ -1279,6 +1404,33 @@ if supported and barstate.isconfirmed
         f_drawAll()
 
 // ═════════════════════════════════════ WARNINGS (concise) ═════════════════════════════════════
+// Live display expiry ONLY (drawings, never lifecycle state): on each realtime update at/after a setup's stored window end,
+// hide it. Ids go into a varip array so a rollback cannot make the setup flicker back; hiding is re-applied each tick.
+if supported and liveNow and not barstate.isconfirmed
+    int ncx = chartZ.size()
+    if ncx > 0
+        for i = 0 to ncx - 1
+            Zone zx = chartZ.get(i)
+            if zx.qual and not na(zx.qWinEnd) and timenow >= zx.qWinEnd
+                if not expIds.includes(zx.id)
+                    expIds.push(zx.id)
+                f_destroy(zx)
+    while expIds.size() > 200
+        expIds.shift()
+
+var label statusLbl = na
+if supported and barstate.islast
+    if inStatus
+        string stx = f_statusText(dispClock)
+        if na(statusLbl)
+            statusLbl := label.new(bar_index, na, stx, yloc = yloc.abovebar, style = label.style_label_down, textcolor = color.gray, color = color.new(color.gray, 85), size = size.tiny)
+        else
+            label.set_x(statusLbl, bar_index)
+            label.set_text(statusLbl, stx)
+    else if not na(statusLbl)
+        label.delete(statusLbl)
+        statusLbl := na
+
 var table warnTbl = table.new(position.top_right, 1, 1, border_width = 0)
 f_slotWarn(bool act, int idx, int secs) =>
     string r = ""
