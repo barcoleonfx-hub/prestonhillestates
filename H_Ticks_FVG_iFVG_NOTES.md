@@ -27,7 +27,7 @@ A lifecycle engine runs inside `request.security` on each source series (touches
 * A slot is disabled with a warning if its TF is not an integer multiple of the chart TF, or a chart candle straddles a source boundary (session misalignment).
 * Non-standard charts (Heikin Ashi, Renko, Range, tick…) are rejected with a warning.
 * Session basis: `syminfo.tickerid` (the chart’s session/adjustment settings) for all requests.
-* Drawings are rebuilt from state on the last bar (rollback-safe). Result: no duplicates, but boxes are not mutated in place across bars. Box left edge is clamped to the first loaded chart bar. Box starts at candle 3’s open (formation candle), which does not mean the gap was confirmed then — see `confTime`. Recolouring an iFVG box represents its *current* state across its whole width; enable the inversion marker to see the actual confirmation bar. Right extension is approximate across session gaps.
+* Drawings use persistent handles, mutated by setters only on confirmed bars (never on provisional ticks); hidden/removed zones are deleted. Box left edge is clamped to the first loaded chart bar. Box starts at candle 3’s open (formation candle), which does not mean the gap was confirmed then — see `confTime`. Recolouring an iFVG box represents its *current* state across its whole width; enable the inversion marker to see the actual confirmation bar. Right extension is approximate across session gaps.
 * Providers can revise data and differ in available history; no immunity is claimed.
 
 ## Install
@@ -37,3 +37,10 @@ A lifecycle engine runs inside `request.security` on each source series (touches
 ## Alerts
 * **Aggregated (recommended):** Create Alert → Condition “H Ticks — FVG / iFVG” → “Any alert() function call”. One message per closed bar listing all enabled events with counts and source TFs.
 * **Per-event:** pick one of the eight `alertcondition` entries instead (don’t enable both).
+
+## Repair pass (audit findings)
+* **Coverage policy:** a zone is tracked only while its formation candle is within the last N candles of its own series (HTF: source-history budget; chart: new "Tracking window" input, default 4500 bars, keep below bars your plan loads). Older zones expire silently (never an inversion, never alerted). The engine reconstructs only inside the same window, so live == fresh reload.
+* **Memory:** snapshots are 7 floats/zone and a new array is published only when engine state changes (otherwise the same unmutated reference). The effective budget is clamped so slots x budget x 7 x cap x 8 B <= 64 MB (default 4 slots/1000/100 = 22.4 MB bound; max 4000/200 clamps to ~1428). These are upper bounds from arithmetic, **not measured on TradingView**.
+* **Events:** the first reconciliation per slot is bootstrap and announces nothing; later "new HTF FVG" requires the zone to be confirmed by the just-completed source candle.
+* **Pruning/expiry** never flag inversion; the engine prunes the oldest *unflagged* zone, so a just-inverted zone's removal event is never lost.
+* **Verification status:** static review + Python model tests only. Not compiled in TradingView; not run in Bar Replay.

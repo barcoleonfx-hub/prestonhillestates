@@ -137,6 +137,108 @@ chk('E: stale snapshot cannot revert Tapped -> Untapped', tapped)
 def covered(first_time, cur_open): return first_time <= cur_open
 chk('E: chart starting mid source-period is not trusted for that period', not covered(907, 900) and covered(900, 900) and covered(907, 1800))
 
+
+# ======================= repair-pass models (mirror the revised f_engine / f_reconcile) =======================
+import random
+def mkcandles(n, seed):
+    rnd = random.Random(seed); out = []; px = 100.0
+    for i in range(n):
+        o = px + rnd.choice([-2, -1, 0, 0, 1, 2]) * 0.75
+        h = o + rnd.randint(1, 6) * 0.25; l = o - rnd.randint(1, 6) * 0.25
+        c = rnd.choice([l, h, (h + l) / 2]); c = round(c / TICK) * TICK
+        out.append((i * 100, i * 100 + 100, h, l, c)); px = c
+    return out
+def run_engine(cd, first, last, budget, cap, minT=1):
+    """Z rows: [ft, code(+-1 live, +-2 flagged), top, bot, conf, tap, fidx]. Candle c processed at bar c+1."""
+    Z = []
+    for c in range(first, last + 1):
+        to, tc, h, l, cl = cd[c]
+        Z = [z for z in Z if abs(z[1]) != 2]
+        for z in Z:
+            if to >= z[4]:
+                inv = tk(cl) < tk(z[3]) if z[1] > 0 else tk(cl) > tk(z[2])
+                if inv: z[1] *= 2
+                elif z[5] == 0 and overlap(h, l, z[3], z[2]): z[5] = tc
+        if c >= 2:
+            h3, l3 = cd[c - 2][2], cd[c - 2][3]
+            if tk(l) - tk(h3) >= minT: Z.append([to, 1, l, h3, tc, 0, c])
+            elif tk(l3) - tk(h) >= minT: Z.append([to, -1, l3, h, tc, 0, c])
+        Z = [z for z in Z if not (abs(z[1]) == 1 and c - z[6] >= budget)]
+        over = len(Z) - sum(abs(z[1]) == 2 for z in Z) - cap
+        i = 0
+        while over > 0 and i < len(Z):
+            if abs(Z[i][1]) == 1: Z.pop(i); over -= 1
+            else: i += 1
+    return Z
+BUD = 40
+cd = mkcandles(900, 7)
+def window_equal(cap, bounds):
+    bad = []
+    for L in bounds:   # L = index of last bar; its last completed candle is L-1
+        live = run_engine(cd, 0, L - 1, BUD, cap)
+        fresh = run_engine(cd, max(0, L - BUD), L - 1, BUD, cap)
+        if live != fresh: bad.append(L)
+    return bad
+bnds = list(range(60, 880, 7))
+chk('Repair2: uninterrupted == fresh reconstruction across 117 advancing history boundaries (cap 100)', window_equal(100, bnds) == [])
+bad_small = window_equal(3, bnds)
+chk(f'Repair2: same with a tiny cap (3) [mismatching boundaries: {len(bad_small)}/117]', bad_small == [])
+# without expiry the old behaviour would diverge (shows the test is able to fail)
+def run_noexp(cd, L, budget, cap):
+    return [z for z in run_engine(cd, 0, L - 1, 10**9, cap)]
+div = sum(1 for L in bnds if run_noexp(cd, L, BUD, 100) != run_engine(cd, max(0, L - BUD), L - 1, BUD, 100))
+chk(f'Repair2: control - without age expiry live != fresh at {div} boundaries (test can fail)', div > 0)
+# expiry is silent: an expired zone is absent and NOT flagged
+zz = run_engine(cd, 0, 500, BUD, 100)
+chk('Repair2: expired zones are absent, never flagged as inverted', all(abs(z[1]) in (1, 2) and (abs(z[1]) == 2 or 500 - z[6] < BUD) for z in zz))
+# capacity prune must not drop a just-inverted zone's event
+man = [(0, 100, 100, 95, 98), (100, 200, 108, 99, 100), (200, 300, 112, 105, 111), (300, 400, 98.75, 98, 98.5)]
+zm = run_engine(man, 0, 2, 50, 1)
+chk('Repair: bull gap forms at candle 2 (setup)', len(zm) == 1 and zm[0][1] == 1 and zm[0][3] == 100 and zm[0][2] == 105)
+zm = run_engine(man, 0, 3, 50, 1)
+chk('Repair: cap=1; inverted zone flagged AND new gap added; inversion event retained (not pruned)',
+    len(zm) == 2 and zm[0][1] == 2 and zm[1][1] == -1)
+zm = run_engine(man + [(400, 500, 99, 98, 98.5)], 0, 4, 50, 1)
+chk('Repair: flagged zone purged next bar, no stale entry', all(abs(z[1]) == 1 for z in zm))
+# bootstrap import must not announce; later genuine events must
+def reconcile(store, snap, gen, asOf, wm):
+    evs = []; seen = set()
+    for z in snap:
+        ft, flg, conf, tap = z['ft'], z.get('flag', False), z['conf'], z.get('tap', 0)
+        m = next((s for s in store if s['ft'] == ft), None)
+        if m:
+            seen.add(ft)
+            if flg: m['end'] = True
+            elif tap and not m['tapped']:
+                m['tapped'] = True
+                if gen: evs.append('tap')
+        elif not flg and ft > wm[0]:
+            store.append(dict(ft=ft, tapped=bool(tap), conf=conf)); seen.add(ft); wm[0] = ft
+            if gen and conf == asOf: evs.append('new')
+    for s in list(store):
+        if s.get('end'):
+            store.remove(s)
+            if gen: evs.append('inv')
+        elif s['ft'] not in seen: store.remove(s)
+    return evs
+store, wm = [], [0]
+e1 = reconcile(store, [dict(ft=1, conf=10), dict(ft=2, conf=20, tap=25), dict(ft=3, conf=30)], False, 30, wm)
+chk('Repair4: bootstrap import of 3 old zones announces nothing', e1 == [] and len(store) == 3 and store[1]['tapped'])
+e2 = reconcile(store, [dict(ft=1, conf=10, flag=True), dict(ft=2, conf=20, tap=25), dict(ft=3, conf=30, tap=40), dict(ft=4, conf=60)], True, 60, wm)
+chk('Repair4: later tap, inversion and genuine new zone ARE announced', sorted(e2) == ['inv', 'new', 'tap'])
+e3 = reconcile(store, [dict(ft=2, conf=20, tap=25), dict(ft=3, conf=30, tap=40), dict(ft=4, conf=60), dict(ft=5, conf=70)], True, 90, wm)
+chk('Repair4: zone imported late (conf != asOf) is silent', e3 == [] and any(s['ft'] == 5 for s in store))
+chk('Repair: watermark does not block updates to existing zones (tap on ft<=wm applied)', store[1]['tapped'])
+# exact-token timeframe de-duplication
+def tok_add(cur, tf):
+    t = cur.split(','); return cur if tf in t else (tf if cur == '' else cur + ',' + tf)
+chk('Repair6: "5m" and "15m" are distinct tokens, true duplicate ignored', tok_add(tok_add('15m', '5m'), '15m') == '15m,5m' and tok_add('', '1H') == '1H')
+# memory bound
+def bound(slots, budget, cap):
+    eff = min(budget, 8_000_000 // (slots * 7 * cap)); return eff, slots * eff * 7 * cap * 8 / 1e6
+for sl, bu, cp in [(3, 1000, 100), (4, 1000, 100), (4, 4000, 200), (4, 1000, 200)]:
+    eff, mb = bound(sl, bu, cp); print(f"   memory bound slots={sl} budget={bu} cap={cp}: effective budget {eff}, worst-case {mb:.1f} MB")
+chk('Repair3: default worst-case bound <= 64 MB and max settings are clamped to <= 64 MB', bound(4, 1000, 100)[1] <= 64 and bound(4, 4000, 200)[1] <= 64.01)
 print(f"{'test':72} {'result':6} basis")
 for n, r, k in R: print(f"{n:72} {r:6} {k}")
 print(sum(r == 'PASS' for _, r, _ in R), '/', len(R), 'passed')
