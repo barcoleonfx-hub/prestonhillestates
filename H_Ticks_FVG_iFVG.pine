@@ -32,6 +32,13 @@
 //   same zones at the same bar. Capacity pruning (oldest unflagged first) is likewise silent and is
 //   never price-based. The chart-window must not exceed the number of bars the chart loads.
 //
+// QUALIFIED iFVG (deterministic mandatory gates, no score)
+//   Evaluated ONCE per chart iFVG, at its confirmed inversion, and frozen: (1) iFVG size filter, (2) momentum
+//   route A (single-candle displacement) OR B (multi-candle impulse), (3) valid close-entry/stop/risk,
+//   (4) nearest eligible unconsumed target, (5) target >= min R, (6) no active tracked OPPOSING HTF FVG
+//   (all sources, any size, tapped or not, drawn or not) intersecting the closed entry..2R-horizon interval,
+//   (7) complete HTF coverage (unknown coverage rejects), plus optional sweep / HTF-contact gates.
+//   A setup filter, not a profitability claim.
 // SESSION BASIS
 //   All requests use syminfo.tickerid, so the chart's symbol, session (RTH/ETH) and adjustment settings
 //   are shared by every source timeframe. Standard time-based candles only.
@@ -42,13 +49,13 @@
 //   full) = slots x budget x 8 x capacity x 8 bytes; the effective budget is clamped so that bound
 //   stays <= 8,000,000 floats (64 MB). Default (2 slots, 1000, 100): <= ~13 MB bound, typically far less.
 // ─────────────────────────────────────────────────────────────────────────────────────────────
-indicator("H Ticks — FVG / iFVG", shorttitle = "H Ticks FVG/iFVG", overlay = true, max_boxes_count = 500, max_lines_count = 500, max_labels_count = 500)
+indicator("H Ticks — FVG / iFVG", shorttitle = "H Ticks FVG/iFVG", overlay = true, max_boxes_count = 500, max_lines_count = 500, max_labels_count = 500, max_bars_back = 500)
 
 // ═════════════════════════════════════════ INPUTS ═════════════════════════════════════════════
 const string GRP_GEN = "General"
 const string GRP_CH  = "Current-chart layer"
 const string GRP_HTF = "Higher-timeframe context layer"
-const string GRP_AL  = "Alerts (aggregated alert() calls)"
+const string GRP_AL  = "Alerts (aggregated alert() calls; mechanical alerts are opt-in)"
 
 bool   inLabels  = input.bool(true,  "Show labels", group = GRP_GEN)
 bool   inMid     = input.bool(false, "Show midpoint line (visual only)", group = GRP_GEN)
@@ -60,6 +67,38 @@ color  inBear    = input.color(color.rgb(201, 82, 77), "Bearish colour", group =
 int    inBordT   = input.int(70, "Border transparency", minval = 0, maxval = 100, group = GRP_GEN)
 string inPrio    = input.string("Nearest to price", "Display priority", options = ["Nearest to price", "Most recently formed"], group = GRP_GEN, tooltip = "Ranks which zones fill the display budgets. Reference = last confirmed chart close; ranking changes only on confirmed bars. Nearest uses nearest-EDGE distance (0 if price is inside), ties by most recent formation.")
 bool   inNearest = inPrio == "Nearest to price"
+
+const string GRP_SET = "Qualified iFVG setup (starting parameters, NOT optimised)"
+string inMode    = input.string("My Setup Only", "Display mode", options = ["My Setup Only", "All Size-Filtered Gaps"], group = GRP_SET, tooltip = "My Setup Only hides ordinary FVGs and unqualified iFVGs. All Size-Filtered Gaps is diagnostic. Display never changes qualification, lifecycle or alerts.")
+bool   inSetupOnly = inMode == "My Setup Only"
+bool   inDebug   = input.bool(false, "Debug: show rejection reasons on unqualified iFVGs", group = GRP_SET, tooltip = "Shows the failed gate(s) on unqualified iFVG boxes (also in My Setup Only mode).")
+int    inMaxQual = input.int(2, "Max visible qualified iFVGs (newest first)", minval = 1, maxval = 10, group = GRP_SET)
+int    inN       = input.int(3, "Impulse and stop lookback (candles incl. inversion)", minval = 2, maxval = 20, group = GRP_SET, tooltip = "Shared by the multi-candle impulse window and the stop lookback.")
+float  inBodyAtr = input.float(0.8, "Route A: min body (x ATR(14)[1])", minval = 0.0, step = 0.05, group = GRP_SET)
+float  inBodyFrac = input.float(0.65, "Route A: min body / range", minval = 0.0, maxval = 1.0, step = 0.05, group = GRP_SET)
+float  inCloseLoc = input.float(0.20, "Route A: close within this fraction of the range extreme", minval = 0.0, maxval = 1.0, step = 0.05, group = GRP_SET)
+int    inExtTicks = input.int(1, "Min close extension beyond boundary (ticks)", minval = 1, group = GRP_SET, tooltip = "Extension needed beyond the original boundary (bullish iFVG: original top; bearish: original bottom) is max(this, ATR multiple x ATR(14)[1]). Used by BOTH routes.")
+float  inExtAtr  = input.float(0.10, "Min close extension (x ATR(14)[1])", minval = 0.0, step = 0.05, group = GRP_SET)
+float  inEff     = input.float(0.70, "Route B: min efficiency |net| / travel", minval = 0.0, maxval = 1.0, step = 0.05, group = GRP_SET)
+float  inNetAtr  = input.float(1.0, "Route B: min |net move| (x ATR(14)[1])", minval = 0.0, step = 0.1, group = GRP_SET)
+int    inStopBuf = input.int(1, "Stop buffer (ticks)", minval = 0, group = GRP_SET, tooltip = "Stop = lowest low (bullish) / highest high (bearish) over the lookback, beyond by this buffer. Entry = inversion close. Illustrative close-entry model: no fills, commissions or slippage.")
+float  inMinR    = input.float(2.0, "Minimum target multiple (R)", minval = 1.0, step = 0.1, group = GRP_SET, tooltip = "Target R = distance to the NEAREST eligible target / risk, from the inversion-close entry and frozen stop. Compared unrounded.")
+bool   inPathToTarget = input.bool(false, "Require clear path to selected target (not just the R horizon)", group = GRP_SET)
+bool   inReqSweep = input.bool(false, "Require recent liquidity sweep", group = GRP_SET)
+bool   inReqContact = input.bool(false, "Require recent relevant HTF-gap contact", group = GRP_SET, tooltip = "Both optional gates must pass when both are enabled (AND).")
+int    inRecent  = input.int(5, "Recent window for optional gates (candles incl. inversion)", minval = 1, maxval = 50, group = GRP_SET)
+bool   inTgtDay  = input.bool(true, "Target: previous completed day high/low", group = GRP_SET)
+bool   inTgtPivot = input.bool(true, "Target: confirmed chart swing highs/lows", group = GRP_SET)
+int    inPivL    = input.int(3, "Swing left bars", minval = 1, maxval = 20, group = GRP_SET)
+int    inPivR    = input.int(3, "Swing right bars", minval = 1, maxval = 20, group = GRP_SET)
+int    inLvlAge  = input.int(1000, "Swing target horizon (chart bars; coverage boundary, not inversion)", minval = 50, maxval = 4000, group = GRP_SET)
+bool   inTgtAsia = input.bool(false, "Target: completed Asia session high/low", group = GRP_SET)
+string inAsiaSess = input.session("0900-1500", "Asia session (explicit)", group = GRP_SET)
+string inAsiaTz  = input.string("Asia/Tokyo", "Asia timezone (IANA)", group = GRP_SET, tooltip = "No timezone is assumed: verify both values for your instrument. Session edges should align with chart bars.")
+bool   inTgtLon  = input.bool(false, "Target: completed London session high/low", group = GRP_SET)
+string inLonSess = input.session("0800-1600", "London session (explicit)", group = GRP_SET)
+string inLonTz   = input.string("Europe/London", "London timezone (IANA)", group = GRP_SET)
+bool   inGuides  = input.bool(false, "Show entry / stop / target guides on qualified iFVGs", group = GRP_SET)
 
 bool   inShowFvg  = input.bool(true, "Show current-chart FVGs", group = GRP_CH)
 bool   inShowIfvg = input.bool(true, "Show current-chart iFVGs", group = GRP_CH)
@@ -94,17 +133,19 @@ string tf3 = input.timeframe("240", "", inline = "s3", group = GRP_HTF)
 bool   en4 = input.bool(false, "Slot 4", inline = "s4", group = GRP_HTF)
 string tf4 = input.timeframe("1D",  "", inline = "s4", group = GRP_HTF)
 
-bool   alNewBull = input.bool(true,  "New bullish chart FVG", group = GRP_AL)
-bool   alNewBear = input.bool(true,  "New bearish chart FVG", group = GRP_AL)
-bool   alBullIf  = input.bool(true,  "Bullish chart iFVG confirmed", group = GRP_AL)
-bool   alBearIf  = input.bool(true,  "Bearish chart iFVG confirmed", group = GRP_AL)
-bool   alHtfNew  = input.bool(true,  "New HTF FVG", group = GRP_AL)
-bool   alHtfTap  = input.bool(true,  "HTF FVG first tapped", group = GRP_AL)
-bool   alHtfRem  = input.bool(true,  "HTF FVG removed by source inversion", group = GRP_AL)
+bool   alQual    = input.bool(true,  "Newly Qualified iFVG (default signal)", group = GRP_AL)
+bool   alNewBull = input.bool(false, "New bullish chart FVG", group = GRP_AL)
+bool   alNewBear = input.bool(false, "New bearish chart FVG", group = GRP_AL)
+bool   alBullIf  = input.bool(false, "Bullish chart iFVG confirmed", group = GRP_AL)
+bool   alBearIf  = input.bool(false, "Bearish chart iFVG confirmed", group = GRP_AL)
+bool   alHtfNew  = input.bool(false, "New HTF FVG", group = GRP_AL)
+bool   alHtfTap  = input.bool(false, "HTF FVG first tapped", group = GRP_AL)
+bool   alHtfRem  = input.bool(false, "HTF FVG removed by source inversion", group = GRP_AL)
 bool   alIfRem   = input.bool(false, "Chart iFVG removed (overlap / invalidation)", group = GRP_AL)
 
 // ═════════════════════════════════════════ TYPES ══════════════════════════════════════════════
 const int ZS = 8   // engine record size (floats per zone)
+const int HDR = 2   // snapshot header: [0] truncated flag, [1] reserved
 const int ST_BULL_FVG  = 1
 const int ST_BEAR_FVG  = 2
 const int ST_BULL_IFVG = 3   // arises from a BEARISH FVG (green)
@@ -142,9 +183,34 @@ type Zone
     int    cat = -1          // transient display classification (never lifecycle state)
     float  dist = 0.0
     bool   vis = false
+    bool   qEval = false     // qualification evaluated (exactly once, at confirmed inversion)
+    bool   qual = false      // FROZEN outcome
+    float  qEntry
+    float  qStop
+    float  qTarget
+    float  qHorizon
+    float  qR
+    string qTargetName = ""
+    string qRoute = ""
+    string qSrcs = ""
+    string qReasons = ""
+    string qNote = ""
     box    bx                // persistent drawing handles (mutated only on confirmed bars)
     line   mid
     label  mk
+    line   gE
+    line   gS
+    line   gT
+
+type Level
+    string id
+    float  price
+    bool   isHigh
+    string src
+    int    originTime
+    int    availTime
+    int    originBar = -1
+    bool   consumed = false
 
 // ═════════════════════════════════════════ PURE HELPERS ═══════════════════════════════════════
 // Tick-aware integer comparison: prices are snapped to whole ticks; no buffer is added.
@@ -189,7 +255,9 @@ f_push(array<float> z, int ft, int dir, float tp, float bt, int conf, int fidx, 
 // (c - formationCandle) >= budget, so live == fresh reconstruction.
 f_engine(int cap, int minTicks, int budget) =>
     var array<float> Z = array.new_float(0)
-    var array<float> pub = array.new_float(0)
+    var array<float> pub = array.from(0.0, 0.0)
+    var float maxPruned = -1.0
+    var bool lastTrunc = false
     var float lastProc = 0.0
     array<float> out = na
     float atrS = ta.atr(14)      // source-timeframe ATR, evaluated every bar
@@ -264,15 +332,23 @@ f_engine(int cap, int minTicks, int budget) =>
             int p = 0
             while over > 0 and p < int(Z.size() / ZS)
                 if math.abs(Z.get(p * ZS + 1)) == 1.0
+                    maxPruned := math.max(maxPruned, Z.get(p * ZS + 6))   // remember: a live zone was truncated
                     for k = 1 to ZS
                         Z.remove(p * ZS)
                     over -= 1
                     dirty := true
                 else
                     p += 1
-            // 6) publish a NEW array only if something changed
+            // 6) truncation flag: a capacity-pruned zone would still be inside the age horizon => coverage unknown
+            bool truncNow = maxPruned >= 0 and cidx - maxPruned < budget
+            if truncNow != lastTrunc
+                lastTrunc := truncNow
+                dirty := true
+            // 7) publish a NEW array only if something changed
             if dirty
-                pub := Z.copy()
+                array<float> tmp = array.from(truncNow ? 1.0 : 0.0, 0.0)
+                tmp.concat(Z)
+                pub := tmp
         out := pub
     out
 
@@ -339,8 +415,8 @@ var array<bool>   srcSeen  = array.new_bool(4, false)
 var array<bool>   srcInit  = array.new_bool(4, false) // false until the bootstrap import has happened
 var array<string> warnArr  = array.new_string(0)
 // per-bar event counters: 0 newBull,1 newBear,2 bullIfvg,3 bearIfvg,4 htfNew,5 htfTap,6 htfRem,7 ifRemTouch,8 ifRemInval
-var array<int>    ev   = array.new_int(10, 0)
-var array<string> evTf = array.new_string(10, "")
+var array<int>    ev   = array.new_int(12, 0)    // 9 qualified bull, 10 qualified bear
+var array<string> evTf = array.new_string(12, "")
 var int firstTime = time
 var int lastConfClose = na
 var float refPrice = na          // last confirmed chart close: display reference only
@@ -348,6 +424,37 @@ float chartAtr = ta.atr(14)
 int prevCloseT = time_close[1]
 float h2c = high[2]
 float l2c = low[2]
+float chartAtr1 = chartAtr[1]     // ATR(14) of the candle BEFORE the evaluated one (common volatility baseline)
+var array<bool>   srcTrunc = array.new_bool(4, false)
+var array<Level>  levels = array.new<Level>()
+var array<Zone>   pend = array.new<Zone>()
+var array<int>    cBars = array.new_int(0)       // recent HTF-gap contact ring
+var array<string> cIds  = array.new_string(0)
+var array<int>    cDirs = array.new_int(0)
+var array<string> qMsg  = array.new_string(2, "")  // first qualifying zone's frozen text per direction (0 bull, 1 bear)
+var int  lastSweepBull = -1000000
+var int  lastSweepBear = -1000000
+var int  lastDayEnd = 0
+var bool dayReady = false
+var array<float> sessHi = array.new_float(2, na)
+var array<float> sessLo = array.new_float(2, na)
+var array<int>   sessStart = array.new_int(2, 0)
+var array<bool>  sessIn = array.new_bool(2, false)
+var array<bool>  sessPartial = array.new_bool(2, false)
+var array<bool>  sessReady = array.new_bool(2, false)
+
+// previous completed day (documented non-repainting [1] + lookahead_on pattern; same symbol/session basis)
+bool  dayOn = supported and inTgtDay and chartSecs < 86400
+float pdH = na
+float pdL = na
+int   pdEnd = na
+if dayOn
+    [dH_, dL_, dE_] = request.security(syminfo.tickerid, "D", [high[1], low[1], time_close[1]], lookahead = barmerge.lookahead_on)
+    pdH := dH_
+    pdL := dL_
+    pdEnd := dE_
+int tAsia = time(timeframe.period, inAsiaSess, inAsiaTz)
+int tLon  = time(timeframe.period, inLonSess, inLonTz)
 
 // ═════════════════════════════════════════ ACTIONS ════════════════════════════════════════════
 f_destroy(Zone z) =>
@@ -360,6 +467,15 @@ f_destroy(Zone z) =>
     if not na(z.mk)
         label.delete(z.mk)
         z.mk := na
+    if not na(z.gE)
+        line.delete(z.gE)
+        z.gE := na
+    if not na(z.gS)
+        line.delete(z.gS)
+        z.gS := na
+    if not na(z.gT)
+        line.delete(z.gT)
+        z.gT := na
     true
 
 f_clearStore(array<Zone> a) =>
@@ -381,7 +497,7 @@ f_evInc(int i, string tf) =>
     true
 
 f_resetEv() =>
-    for i = 0 to 9
+    for i = 0 to 11
         ev.set(i, 0)
         evTf.set(i, "")
     true
@@ -414,7 +530,8 @@ f_stepChart(Zone z, float hi, float lo, float cl, int bi, int t, int tc) =>
 // The watermark only gates creation of zones that have no store match; matched zones always update.
 f_reconcile(array<Zone> store, int idx, string tfTxt, array<float> snap, int asOf) =>
     bool gen = srcInit.get(idx)
-    int cnt = int(snap.size() / ZS)
+    srcTrunc.set(idx, snap.get(0) == 1.0)
+    int cnt = int((snap.size() - HDR) / ZS)
     int m = store.size()
     if m > 0
         for i = 0 to m - 1
@@ -424,7 +541,7 @@ f_reconcile(array<Zone> store, int idx, string tfTxt, array<float> snap, int asO
     int j = 0
     if cnt > 0
         for k = 0 to cnt - 1
-            int base = k * ZS
+            int base = HDR + k * ZS
             int ft = int(snap.get(base))
             float cd = snap.get(base + 1)
             int d = cd > 0 ? 1 : -1
@@ -505,18 +622,23 @@ f_sync(array<Zone> store, int idx, string tfTxt, array<float> snap, int asOf) =>
                     f_reconcile(store, idx, tfTxt, snap, asOf)
     true
 
-// Chart-candle taps on HTF zones. Candle must OPEN at/after formation confirmation; monotonic.
+// Chart-candle contact/taps on HTF zones. Candle must OPEN at/after formation confirmation. Tap is monotonic.
+// Every contact is also logged (bounded ring) for the optional "recent HTF-gap contact" gate.
 f_tapStore(array<Zone> a) =>
     int n = a.size()
     if n > 0
         for i = 0 to n - 1
             Zone z = a.get(i)
-            if not z.tapped and time >= z.confTime and f_overlap(high, low, z.bottom, z.top)
-                z.tapped := true
-                z.state := z.dir > 0 ? ST_TAP_BULL : ST_TAP_BEAR
-                z.tapTime := time
-                z.tapAvail := time_close
-                f_evInc(5, z.tfTxt)
+            if time >= z.confTime and f_overlap(high, low, z.bottom, z.top)
+                cBars.push(bar_index)
+                cIds.push(z.id)
+                cDirs.push(z.dir)
+                if not z.tapped
+                    z.tapped := true
+                    z.state := z.dir > 0 ? ST_TAP_BULL : ST_TAP_BEAR
+                    z.tapTime := time
+                    z.tapAvail := time_close
+                    f_evInc(5, z.tfTxt)
     true
 
 // ═════════════════════════════════════════ DRAWING ════════════════════════════════════════════
@@ -533,18 +655,28 @@ f_syncDraw(Zone z, bool htf, bool want) =>
         color base = bull ? inBull : inBear
         int fillT = htf ? (tap ? inHtfTapT : inHtfT) : inChT
         string txt = ""
+        bool qualZ = ifvg and z.qual and not htf
+        int bw = qualZ ? 2 : 1
         if inLabels
-            txt := htf ? z.tfTxt + " FVG · " + (tap ? "Tapped" : "Untapped") : (ifvg ? "iFVG" : "FVG")
+            if htf
+                txt := z.tfTxt + " FVG · " + (tap ? "Tapped" : "Untapped")
+            else if qualZ
+                txt := "Qualified iFVG · " + str.tostring(math.floor(z.qR * 10) / 10, "#.0") + "R"
+            else if ifvg
+                txt := inDebug and z.qReasons != "" ? "iFVG ✗ " + (str.length(z.qReasons) > 70 ? str.substring(z.qReasons, 0, 70) + "…" : z.qReasons) : "iFVG"
+            else
+                txt := "FVG"
         int l = z.formTime > firstTime ? z.formTime : firstTime   // clamp to first available chart bar
         int r = lastConfClose + inExt * chartMs
         if r <= l
             r := l + chartMs
         if na(z.bx)
-            z.bx := box.new(left = l, top = z.top, right = r, bottom = z.bottom, xloc = xloc.bar_time, border_color = color.new(base, inBordT), border_width = 1, border_style = ifvg ? line.style_dashed : line.style_solid, bgcolor = color.new(base, fillT), text = txt, text_size = size.small, text_color = color.new(base, 15), text_halign = text.align_right, text_valign = text.align_center)
+            z.bx := box.new(left = l, top = z.top, right = r, bottom = z.bottom, xloc = xloc.bar_time, border_color = color.new(base, inBordT), border_width = bw, border_style = ifvg ? line.style_dashed : line.style_solid, bgcolor = color.new(base, fillT), text = txt, text_size = size.small, text_color = color.new(base, 15), text_halign = text.align_right, text_valign = text.align_center)
         else
             box.set_right(z.bx, r)
             box.set_bgcolor(z.bx, color.new(base, fillT))
             box.set_border_color(z.bx, color.new(base, inBordT))
+            box.set_border_width(z.bx, bw)
             box.set_border_style(z.bx, ifvg ? line.style_dashed : line.style_solid)
             box.set_text(z.bx, txt)
             box.set_text_color(z.bx, color.new(base, 15))
@@ -566,6 +698,22 @@ f_syncDraw(Zone z, bool htf, bool want) =>
         else if not na(z.mk)
             label.delete(z.mk)
             z.mk := na
+        if inGuides and qualZ
+            if na(z.gE)
+                z.gE := line.new(x1 = z.invTime, y1 = z.qEntry, x2 = r, y2 = z.qEntry, xloc = xloc.bar_time, color = color.new(color.gray, 40), style = line.style_dotted, width = 1)
+                z.gS := line.new(x1 = z.invTime, y1 = z.qStop, x2 = r, y2 = z.qStop, xloc = xloc.bar_time, color = color.new(inBear, 40), style = line.style_dotted, width = 1)
+                z.gT := line.new(x1 = z.invTime, y1 = z.qTarget, x2 = r, y2 = z.qTarget, xloc = xloc.bar_time, color = color.new(inBull, 40), style = line.style_dotted, width = 1)
+            else
+                line.set_x2(z.gE, r)
+                line.set_x2(z.gS, r)
+                line.set_x2(z.gT, r)
+        else if not na(z.gE)
+            line.delete(z.gE)
+            line.delete(z.gS)
+            line.delete(z.gT)
+            z.gE := na
+            z.gS := na
+            z.gT := na
     true
 
 // ───────────── display selection (never touches lifecycle state or array order) ─────────────
@@ -591,7 +739,8 @@ f_dist(Zone z, float ref) =>
         d := ref - z.top
     d
 
-// Categories: 0 chart FVG, 1 chart iFVG, 2 HTF above, 3 HTF below, 4 HTF containing price (exclusive).
+// Categories: 0 chart FVG, 1 chart iFVG (unqualified), 5 qualified iFVG, 2/3/4 HTF above/below/containing (exclusive).
+// Display only: qualification and lifecycle are never read from or written by the visibility filters.
 f_classify(array<Zone> a, bool htf) =>
     int n = a.size()
     if n > 0
@@ -605,17 +754,19 @@ f_classify(array<Zone> a, bool htf) =>
                     z.cat := f_tk(z.bottom) > f_tk(refPrice) ? 2 : (f_tk(z.top) < f_tk(refPrice) ? 3 : 4)
             else
                 bool isI = z.state == ST_BULL_IFVG or z.state == ST_BEAR_IFVG
-                bool sizeOk = isI ? f_sizeOk(z.width, z.fatr, inIfvgMinT, inIfvgAtr) : f_sizeOk(z.width, z.fatr, inFvgMinT, inFvgAtr)
-                bool shown = isI ? inShowIfvg : inShowFvg
-                bool distOk = true
-                if inDistOn and z.dist > 0 and not na(chartAtr)
-                    distOk := z.dist <= inDistAtr * chartAtr
-                if shown and sizeOk and distOk
-                    z.cat := isI ? 1 : 0
+                if isI and z.qual
+                    z.cat := 5                      // qualified and still active: always eligible for display
+                else
+                    bool sizeOk = isI ? f_sizeOk(z.width, z.fatr, inIfvgMinT, inIfvgAtr) : f_sizeOk(z.width, z.fatr, inFvgMinT, inFvgAtr)
+                    bool shown = isI ? (inShowIfvg and (not inSetupOnly or inDebug)) : (inShowFvg and not inSetupOnly)
+                    bool distOk = true
+                    if inDistOn and z.dist > 0 and not na(chartAtr)
+                        distOk := z.dist <= inDistAtr * chartAtr
+                    if shown and sizeOk and distOk
+                        z.cat := isI ? 1 : 0
     true
 
-// Mark the best `limit` zones of one category. Nearest: smallest edge distance (inside = 0 = first), then most
-// recent formation; on a full tie the later array position wins (formTime is unique per array, so this is stable).
+// Mark the best `limit` zones of one category (flags only; arrays are never reordered).
 f_pickCat(array<Zone> a, int cat, int limit) =>
     int n = a.size()
     if n > 0 and limit > 0
@@ -629,7 +780,9 @@ f_pickCat(array<Zone> a, int cat, int limit) =>
                     else
                         Zone bz = a.get(best)
                         bool better = false
-                        if inNearest and z.dist != bz.dist
+                        if cat == 5
+                            better := z.invBar >= bz.invBar                 // newest inversion first
+                        else if inNearest and z.dist != bz.dist
                             better := z.dist < bz.dist
                         else
                             better := z.formTime >= bz.formTime
@@ -657,6 +810,7 @@ f_drawAll() =>
         f_classify(chartZ, false)
         f_pickCat(chartZ, 0, inMaxFvg)
         f_pickCat(chartZ, 1, inMaxIfvg)
+        f_pickCat(chartZ, 5, inMaxQual)
         int n = chartZ.size()
         if n > 0
             for i = 0 to n - 1
@@ -666,6 +820,326 @@ f_drawAll() =>
         f_drawHtf(hz2)
         f_drawHtf(hz3)
         f_drawHtf(hz4)
+    true
+
+
+// ═══════════════════════════ SETUP LAYER: pure gate helpers ═══════════════════════════════
+// Tick-aware "a >= b" (prices compared in ticks with a tiny float tolerance; never loosened by display rounding).
+f_ge(float a, float b) =>
+    a / syminfo.mintick >= b / syminfo.mintick - 0.000001
+
+f_rnd(float x) =>
+    math.round(x / syminfo.mintick) * syminfo.mintick
+
+f_dnT(float x) =>
+    math.floor(x / syminfo.mintick + 0.000001) * syminfo.mintick
+
+f_upT(float x) =>
+    math.ceil(x / syminfo.mintick - 0.000001) * syminfo.mintick
+
+f_addWhy(string a, string b) =>
+    a == "" ? b : a + "; " + b
+
+// Close must extend beyond the inversion boundary by max(ticks, ATR multiple x ATR(14)[1]). Both routes.
+f_extOk(bool bull, float c, float boundary, float atr1) =>
+    float needT = math.max(float(inExtTicks), inExtAtr * atr1 / syminfo.mintick)
+    float haveT = bull ? f_tk(c) - f_tk(boundary) : f_tk(boundary) - f_tk(c)
+    haveT >= needT - 0.000001
+
+// Route A: single-candle displacement (all mandatory). Zero-range / invalid ATR fail safely.
+f_routeA(bool bull, float o, float h, float l, float c, float atr1, float boundary) =>
+    bool ok = false
+    float rng = h - l
+    if atr1 > 0 and rng > 0
+        float body = c - o
+        bool dirOk = bull ? body > 0 : body < 0
+        float ab = math.abs(body)
+        float loc = bull ? (c - l) / rng : (h - c) / rng
+        ok := dirOk and f_ge(ab, inBodyAtr * atr1) and ab / rng >= inBodyFrac - 0.000001 and loc >= 1.0 - inCloseLoc - 0.000001 and f_extOk(bull, c, boundary, atr1)
+    ok
+
+// Route B: multi-candle impulse. netMove = close - close[N]; travel = sum |close[i] - close[i+1]|, i = 0..N-1.
+f_routeB(bool bull, int n, float o, float c, float atr1, float boundary) =>
+    bool ok = false
+    if atr1 > 0 and not na(close[n])
+        float net = c - close[n]
+        float travel = 0.0
+        for i = 0 to n - 1
+            travel += math.abs(close[i] - close[i + 1])
+        bool dirNet = bull ? net > 0 : net < 0
+        bool dirBody = bull ? c - o > 0 : c - o < 0
+        if travel > 0 and dirNet and dirBody
+            ok := math.abs(net) / travel >= inEff - 0.000001 and f_ge(math.abs(net), inNetAtr * atr1) and f_extOk(bull, c, boundary, atr1)
+    ok
+
+// One stop model for both routes: extreme over offsets 0..N-1, beyond by the buffer, tick-rounded outward.
+f_stop(bool bull, int n) =>
+    float ext = bull ? low : high
+    if n > 1
+        for i = 1 to n - 1
+            ext := bull ? math.min(ext, low[i]) : math.max(ext, high[i])
+    bull ? f_dnT(ext - inStopBuf * syminfo.mintick) : f_upT(ext + inStopBuf * syminfo.mintick)
+
+// ───────────── target registry ─────────────
+f_admit(float price, bool isHigh, string src, int originTime, int originBar, bool replace) =>
+    if replace
+        int n = levels.size()
+        if n > 0
+            for i = n - 1 to 0
+                if levels.get(i).src == src
+                    levels.remove(i)
+    // validate against the CURRENT candle (post-origin history through availability): already touched => never admitted
+    bool touched = isHigh ? f_tk(high) >= f_tk(price) : f_tk(low) <= f_tk(price)
+    if not touched
+        levels.push(Level.new(id = src + "|" + str.tostring(price) + "|" + str.tostring(originTime), price = price, isHigh = isHigh, src = src, originTime = originTime, availTime = time_close, originBar = originBar))
+    true
+
+f_sess(int idx, bool inS, string nm) =>
+    if inS
+        if not sessIn.get(idx)
+            sessIn.set(idx, true)
+            sessHi.set(idx, high)
+            sessLo.set(idx, low)
+            sessStart.set(idx, time)
+            sessPartial.set(idx, bar_index == 0)   // chart began inside the session: not a complete session
+        else
+            sessHi.set(idx, math.max(sessHi.get(idx), high))
+            sessLo.set(idx, math.min(sessLo.get(idx), low))
+    else if sessIn.get(idx)
+        sessIn.set(idx, false)
+        if not sessPartial.get(idx)
+            f_admit(sessHi.get(idx), true, nm + " high", sessStart.get(idx), -1, true)
+            f_admit(sessLo.get(idx), false, nm + " low", sessStart.get(idx), -1, true)
+            sessReady.set(idx, true)
+    true
+
+// Strict pivots, usable only once the right-side confirmation completed (offset R from the current bar).
+f_pivHigh(int L, int R) =>
+    bool ok = not na(high[L + R])
+    if ok
+        float p = high[R]
+        for k = 1 to L
+            if not (p > high[R + k])
+                ok := false
+        for k = 1 to R
+            if not (p > high[R - k])
+                ok := false
+    ok
+
+f_pivLow(int L, int R) =>
+    bool ok = not na(low[L + R])
+    if ok
+        float p = low[R]
+        for k = 1 to L
+            if not (p < low[R + k])
+                ok := false
+        for k = 1 to R
+            if not (p < low[R - k])
+                ok := false
+    ok
+
+// Nearest eligible unconsumed target strictly beyond entry; levels within one tick merge (descriptions kept).
+f_nearestTarget(bool bull, float entry) =>
+    float bestP = na
+    int bestT = 0
+    int eT = f_tk(entry)
+    int n = levels.size()
+    if n > 0
+        for i = 0 to n - 1
+            Level lv = levels.get(i)
+            if not lv.consumed and lv.isHigh == bull
+                int pT = f_tk(lv.price)
+                bool elig = bull ? pT > eT : pT < eT
+                if elig
+                    if na(bestP) or math.abs(pT - eT) < math.abs(bestT - eT)
+                        bestP := lv.price
+                        bestT := pT
+    string nm = ""
+    if not na(bestP)
+        for i = 0 to n - 1
+            Level lv = levels.get(i)
+            if not lv.consumed and lv.isHigh == bull
+                int pT = f_tk(lv.price)
+                bool elig = bull ? pT > eT : pT < eT
+                if elig and math.abs(pT - bestT) <= 1
+                    array<string> toks = str.split(nm, " + ")
+                    if not toks.includes(lv.src)
+                        nm := nm == "" ? lv.src : nm + " + " + lv.src
+    [bestP, nm]
+
+f_tgtReady() =>
+    (not dayOn or dayReady) and (not inTgtAsia or sessReady.get(0)) and (not inTgtLon or sessReady.get(1)) and (not inTgtPivot or bar_index >= inPivL + inPivR)
+
+// ───────────── HTF obstacle / coverage ─────────────
+// Opposing active tracked HTF FVGs whose ORIGINAL boundaries intersect the closed interval [lo, hi].
+// Deliberately ignores every display filter (size, budgets, nearest sets, visibility).
+f_scanObs(array<Zone> a, bool bull, float lo, float hi) =>
+    int cnt = 0
+    string nm = ""
+    int n = a.size()
+    if n > 0
+        float loT = lo / syminfo.mintick
+        float hiT = hi / syminfo.mintick
+        for i = 0 to n - 1
+            Zone z = a.get(i)
+            bool opp = bull ? z.dir < 0 : z.dir > 0
+            if opp and f_tk(z.top) >= loT - 0.000001 and f_tk(z.bottom) <= hiT + 0.000001
+                cnt += 1
+                if nm == ""
+                    nm := z.tfTxt + (z.dir < 0 ? " bearish" : " bullish") + " FVG"
+    [cnt, nm]
+
+f_scanAll(bool bull, float lo, float hi) =>
+    [ca, na_] = f_scanObs(hz1, bull, lo, hi)
+    [cb, nb_] = f_scanObs(hz2, bull, lo, hi)
+    [cc, nc_] = f_scanObs(hz3, bull, lo, hi)
+    [cd, nd_] = f_scanObs(hz4, bull, lo, hi)
+    string nm = na_ != "" ? na_ : (nb_ != "" ? nb_ : (nc_ != "" ? nc_ : nd_))
+    [ca + cb + cc + cd, nm]
+
+// 0 = not applicable (disabled / equal / lower / duplicate), 1 = valid, 2 = UNKNOWN (never "clear")
+f_slotState(bool en, bool okS, bool actS, int idx) =>
+    int st = 0
+    if en and okS
+        st := actS and srcSeen.get(idx) and srcInit.get(idx) and not srcBad.get(idx) and not srcTrunc.get(idx) ? 1 : 2
+    st
+
+// cov: 0 complete, 1 unknown (some applicable source not valid), 2 no applicable source
+f_coverage() =>
+    int s1 = f_slotState(en1, ok1, act1, 0)
+    int s2 = f_slotState(en2, ok2, act2, 1)
+    int s3 = f_slotState(en3, ok3, act3, 2)
+    int s4 = f_slotState(en4, ok4, act4, 3)
+    int nValid = (s1 == 1 ? 1 : 0) + (s2 == 1 ? 1 : 0) + (s3 == 1 ? 1 : 0) + (s4 == 1 ? 1 : 0)
+    int nUnk = (s1 == 2 ? 1 : 0) + (s2 == 2 ? 1 : 0) + (s3 == 2 ? 1 : 0) + (s4 == 2 ? 1 : 0)
+    string txt = ""
+    if s1 == 1
+        txt := f_tfText(sec1)
+    if s2 == 1
+        txt := txt == "" ? f_tfText(sec2) : txt + "," + f_tfText(sec2)
+    if s3 == 1
+        txt := txt == "" ? f_tfText(sec3) : txt + "," + f_tfText(sec3)
+    if s4 == 1
+        txt := txt == "" ? f_tfText(sec4) : txt + "," + f_tfText(sec4)
+    [nUnk > 0 ? 1 : (nValid > 0 ? 0 : 2), txt]
+
+f_hasId(array<Zone> a, string id) =>
+    bool f = false
+    int n = a.size()
+    if n > 0
+        for i = 0 to n - 1
+            if a.get(i).id == id
+                f := true
+    f
+
+// Recent contact with a STILL-ACTIVE same-direction HTF gap that existed at the time of contact.
+f_contactOk(bool bull) =>
+    bool found = false
+    int n = cBars.size()
+    if n > 0
+        for i = 0 to n - 1
+            if bar_index - cBars.get(i) <= inRecent - 1 and cDirs.get(i) == (bull ? 1 : -1)
+                string id = cIds.get(i)
+                if f_hasId(hz1, id) or f_hasId(hz2, id) or f_hasId(hz3, id) or f_hasId(hz4, id)
+                    found := true
+    found
+
+// ───────────── qualification: ONCE per zone, at its confirmed inversion; result is frozen ─────────────
+f_evaluate(Zone z) =>
+    z.qEval := true
+    bool bull = z.state == ST_BULL_IFVG          // bullish inversion direction (original bearish FVG)
+    string why = ""
+    bool ok = true
+    // gate 1: iFVG size (frozen width / formation ATR)
+    if not f_sizeOk(z.width, z.fatr, inIfvgMinT, inIfvgAtr)
+        ok := false
+        why := f_addWhy(why, inIfvgAtr > 0 and na(z.fatr) ? "Gap ATR unavailable" : "Gap too small")
+    // gate 2: momentum (route A OR route B) on a valid ATR(14)[1]
+    bool atrOk = not na(chartAtr1) and chartAtr1 > 0
+    float boundary = bull ? z.top : z.bottom
+    string route = ""
+    if atrOk
+        if f_routeA(bull, open, high, low, close, chartAtr1, boundary)
+            route := "Single-candle displacement"
+        else if f_routeB(bull, inN, open, close, chartAtr1, boundary)
+            route := "Multi-candle impulse"
+        if route == ""
+            ok := false
+            why := f_addWhy(why, "Weak impulse")
+    else
+        ok := false
+        why := f_addWhy(why, "Missing volatility data")
+    // gate 3: one entry / stop / risk model
+    float entry = f_rnd(close)
+    float stop = f_stop(bull, inN)
+    float risk = bull ? entry - stop : stop - entry
+    bool riskOk = not na(stop) and f_tk(risk) >= 1
+    if not riskOk
+        ok := false
+        why := f_addWhy(why, "Invalid risk")
+    // gate 4/5: nearest eligible target, then target room
+    bool tReady = f_tgtReady()
+    [tPrice, tName] = f_nearestTarget(bull, entry)
+    float tR = na
+    if not tReady
+        ok := false
+        why := f_addWhy(why, "Target data incomplete")
+    else if na(tPrice)
+        ok := false
+        why := f_addWhy(why, "No eligible target")
+    else if riskOk
+        tR := (f_tk(tPrice) - f_tk(entry)) / f_tk(risk) * (bull ? 1.0 : -1.0)
+        if tR < inMinR - 0.000000001
+            ok := false
+            why := f_addWhy(why, "Target below " + str.tostring(inMinR, "#.##") + "R (" + str.tostring(math.floor(tR * 100) / 100, "#.00") + "R to " + tName + ")")
+    // gate 6/7: coverage first (unknown is never clear), then clear path
+    [cov, srcTxt] = f_coverage()
+    float horizon = bull ? entry + inMinR * risk : entry - inMinR * risk
+    string note = ""
+    if cov != 0
+        ok := false
+        why := f_addWhy(why, cov == 2 ? "No applicable HTF source" : "HTF coverage unknown")
+    else if riskOk
+        float pathEnd = inPathToTarget and not na(tPrice) ? tPrice : horizon
+        float lo = bull ? entry : pathEnd
+        float hi = bull ? pathEnd : entry
+        [obs, obsName] = f_scanAll(bull, lo, hi)
+        if obs > 0
+            ok := false
+            why := f_addWhy(why, "Blocked by " + obsName)
+        else if not inPathToTarget and not na(tPrice)
+            float flo = bull ? horizon : tPrice
+            float fhi = bull ? tPrice : horizon
+            [farObs, farName] = f_scanAll(bull, flo, fhi)
+            if farObs > 0
+                note := farName + " between " + str.tostring(inMinR, "#.##") + "R and target"
+    // optional location context (AND when both enabled)
+    if inReqSweep
+        bool sw = bull ? bar_index - lastSweepBull <= inRecent - 1 : bar_index - lastSweepBear <= inRecent - 1
+        if not sw
+            ok := false
+            why := f_addWhy(why, "Required sweep absent")
+    if inReqContact
+        if not f_contactOk(bull)
+            ok := false
+            why := f_addWhy(why, "Required HTF contact absent")
+    // freeze
+    z.qual := ok
+    z.qEntry := entry
+    z.qStop := stop
+    z.qHorizon := horizon
+    z.qTarget := tPrice
+    z.qTargetName := tName
+    z.qR := tR
+    z.qRoute := route
+    z.qSrcs := srcTxt
+    z.qReasons := why
+    z.qNote := note
+    if ok
+        f_evInc(bull ? 9 : 10, "")
+        int di = bull ? 0 : 1
+        if qMsg.get(di) == ""
+            qMsg.set(di, "Qualified " + (bull ? "bullish" : "bearish") + " iFVG " + syminfo.ticker + " " + timeframe.period + " | Entry " + str.tostring(entry, format.mintick) + " | Stop " + str.tostring(stop, format.mintick) + " | Target " + tName + " @ " + str.tostring(tPrice, format.mintick) + " | " + str.tostring(math.floor(tR * 10) / 10, "#.0") + "R | " + route + " | " + (inPathToTarget ? "path to target clear" : str.tostring(inMinR, "#.##") + "R path clear") + " (horizon " + str.tostring(horizon, format.mintick) + ") | HTF checked: " + srcTxt + (note == "" ? "" : " | note: " + note))
     true
 
 // ═════════════════════════════ MAIN: confirmed-bar processing ═════════════════════════════════
@@ -686,10 +1160,14 @@ bool drawNow = supported and barstate.isconfirmed and (barstate.islast or barsta
 
 if supported and barstate.isconfirmed
     f_resetEv()
+    qMsg.set(0, "")
+    qMsg.set(1, "")
+    pend.clear()
     lastConfClose := time_close
     refPrice := close
 
-    // 1) current-chart layer: step existing zones (only bars AFTER the formation bar are eligible)
+    // 1) current-chart layer: step existing zones (only bars AFTER the formation bar are eligible).
+    //    Inversions are queued; they are qualified AFTER HTF state and targets are updated (step 5).
     int nc = chartZ.size()
     if nc > 0
         for i = nc - 1 to 0
@@ -697,6 +1175,7 @@ if supported and barstate.isconfirmed
             int r = f_stepChart(z, high, low, close, bar_index, time, time_close)
             if r == 1
                 f_evInc(z.dir > 0 ? 3 : 2, "")
+                pend.push(z)
             else if r >= 2
                 f_destroy(z)
                 chartZ.remove(i)
@@ -720,7 +1199,7 @@ if supported and barstate.isconfirmed
         Zone old = chartZ.shift()
         f_destroy(old)          // capacity pruning: silent, not a price event
 
-    // 3) HTF layer: source snapshots first (removal dominates), then chart-candle taps
+    // 3) HTF layer: source snapshots first (source-confirmed inversions remove obstacles), then chart-candle contact/taps
     if act1
         f_sync(hz1, 0, f_tfText(sec1), snap1, asOf1)
     if act2
@@ -733,8 +1212,69 @@ if supported and barstate.isconfirmed
     f_tapStore(hz2)
     f_tapStore(hz3)
     f_tapStore(hz4)
+    bool pruneC = cBars.size() > 0
+    while pruneC
+        pruneC := false
+        if cBars.size() > 0
+            if bar_index - cBars.get(0) > 60 or cBars.size() > 120
+                cBars.shift()
+                cIds.shift()
+                cDirs.shift()
+                pruneC := true
 
-    // 4) drawings follow the committed state on the same bar the alerts do
+    // 4) target registry: (a) consume existing levels with THIS candle (record sweeps first), (b) admit new levels
+    int nl = levels.size()
+    if nl > 0
+        for i = nl - 1 to 0
+            Level lv = levels.get(i)
+            if lv.originBar >= 0 and bar_index - lv.originBar > inLvlAge
+                levels.remove(i)      // coverage horizon, not a price event
+            else
+                bool touchedL = lv.isHigh ? f_tk(high) >= f_tk(lv.price) : f_tk(low) <= f_tk(lv.price)
+                if touchedL
+                    if not lv.isHigh and f_tk(low) < f_tk(lv.price) and f_tk(close) > f_tk(lv.price)
+                        lastSweepBull := bar_index
+                    if lv.isHigh and f_tk(high) > f_tk(lv.price) and f_tk(close) < f_tk(lv.price)
+                        lastSweepBear := bar_index
+                    lv.consumed := true
+                    levels.remove(i)
+    if dayOn and not na(pdEnd) and pdEnd != lastDayEnd
+        lastDayEnd := pdEnd
+        if firstTime <= pdEnd            // chart covers the whole period after the day ended
+            f_admit(pdH, true, "PDH", pdEnd, -1, true)
+            f_admit(pdL, false, "PDL", pdEnd, -1, true)
+            dayReady := true
+    if inTgtAsia
+        f_sess(0, not na(tAsia), "Asia")
+    if inTgtLon
+        f_sess(1, not na(tLon), "London")
+    if inTgtPivot and bar_index >= inPivL + inPivR
+        if f_pivHigh(inPivL, inPivR)
+            float ph = high[inPivR]
+            bool tchH = false
+            for k = 0 to inPivR - 1
+                if f_tk(high[k]) >= f_tk(ph)
+                    tchH := true
+            if not tchH
+                f_admit(ph, true, "Swing high", time[inPivR], bar_index - inPivR, false)
+        if f_pivLow(inPivL, inPivR)
+            float pl = low[inPivR]
+            bool tchL = false
+            for k = 0 to inPivR - 1
+                if f_tk(low[k]) <= f_tk(pl)
+                    tchL := true
+            if not tchL
+                f_admit(pl, false, "Swing low", time[inPivR], bar_index - inPivR, false)
+
+    // 5) qualify each newly inverted zone exactly once, independently of display state
+    int np = pend.size()
+    if np > 0
+        for i = 0 to np - 1
+            Zone q = pend.get(i)
+            if not q.qEval
+                f_evaluate(q)
+
+    // 6) drawings follow the committed state on the same bar the alerts do
     if drawNow
         f_drawAll()
 
@@ -765,8 +1305,8 @@ if barstate.islast
         table.cell(warnTbl, 0, 0, w, text_color = color.orange, text_size = size.small, bgcolor = color.new(color.black, 80), text_halign = text.align_left)
 
 // ═════════════════════════════════════════ ALERTS ═════════════════════════════════════════════
-// Only genuine lifecycle events on a confirmed REALTIME bar, i.e. the same bar on which drawings change.
-// Bootstrap imports, window expiry and capacity pruning never alert.
+// Only genuine lifecycle events on a confirmed REALTIME bar, i.e. the bar on which drawings change.
+// Bootstrap, expiry, pruning and display filtering never alert. Default signal: newly Qualified iFVG.
 bool evNow = supported and barstate.isrealtime and barstate.isconfirmed
 
 f_part(string label, int n, string tfs) =>
@@ -776,6 +1316,13 @@ f_add(string a, string b) =>
     b == "" ? a : (a == "" ? b : a + " | " + b)
 
 if evNow
+    // one aggregated alert per direction per candle (several zones qualifying together => a count)
+    if alQual
+        if ev.get(9) > 0
+            alert(qMsg.get(0) + " | zones: " + str.tostring(ev.get(9)), alert.freq_once_per_bar_close)
+        if ev.get(10) > 0
+            alert(qMsg.get(1) + " | zones: " + str.tostring(ev.get(10)), alert.freq_once_per_bar_close)
+    // explicit opt-in mechanical alerts (default OFF)
     string msg = ""
     msg := f_add(msg, alNewBull ? f_part("New bullish FVG", ev.get(0), "") : "")
     msg := f_add(msg, alNewBear ? f_part("New bearish FVG", ev.get(1), "") : "")
@@ -790,6 +1337,8 @@ if evNow
         alert("H Ticks FVG/iFVG " + syminfo.ticker + " " + timeframe.period + ": " + msg, alert.freq_once_per_bar_close)
 
 // Selectable per-event alertConditions (use these OR the aggregated alert() call, not both).
+alertcondition(evNow and ev.get(9) > 0, "Qualified bullish iFVG", "H Ticks: Qualified bullish iFVG on {{ticker}} {{interval}}")
+alertcondition(evNow and ev.get(10) > 0, "Qualified bearish iFVG", "H Ticks: Qualified bearish iFVG on {{ticker}} {{interval}}")
 alertcondition(evNow and ev.get(0) > 0, "New bullish chart FVG", "H Ticks: new bullish FVG on {{ticker}} {{interval}}")
 alertcondition(evNow and ev.get(1) > 0, "New bearish chart FVG", "H Ticks: new bearish FVG on {{ticker}} {{interval}}")
 alertcondition(evNow and ev.get(2) > 0, "Bullish chart iFVG confirmed", "H Ticks: bullish iFVG confirmed on {{ticker}} {{interval}}")
