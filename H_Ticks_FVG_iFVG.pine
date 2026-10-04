@@ -1,0 +1,625 @@
+//@version=6
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// H Ticks — FVG / iFVG
+//
+// ARCHITECTURE (short)
+//   * CURRENT-CHART LAYER : FVGs of the open chart timeframe -> may become iFVG -> removed on first
+//                           later touch / strict invalidation. Computed bar-by-bar on the chart series.
+//   * HTF CONTEXT LAYER   : up to 4 source-timeframe slots. A lifecycle engine runs INSIDE
+//                           request.security() on the source series (formation, source-close inversion,
+//                           source-range touches) and hands the chart a bounded snapshot of its live zones.
+//                           The chart adds finer-grained taps from chart candles and removes zones the
+//                           engine reports as inverted. HTF zones are never shown as iFVG.
+//   * Both layers keep separate state arrays, inputs, visibility and lifecycle code.
+//
+// NON-REPAINTING HTF DATA
+//   The engine only ever reads series offsets >= 1 (high[1], close[1], time[1] ...) i.e. the last
+//   COMPLETED source candle. Its snapshot at source bar j therefore depends only on candles <= j-1,
+//   which is known at the open of bar j; that is why barmerge.lookahead_on is safe here. No unfinished
+//   source OHLC is ever read, and there is no second offset on top (no extra source bar of delay).
+//
+// TIMING
+//   Everything commits on a CONFIRMED CHART BAR (barstate.isconfirmed). A wick touch becomes a
+//   committed state at the chart candle's close. HTF events become visible at the close of the first
+//   chart bar of the next source period (the data is available at that bar's open, but processing is
+//   committed at its close). Event times: formTime/confTime/tapTime/invTime are SOURCE times;
+//   availTime/tapAvail/invAvail are the CHART times at which the script processed them.
+//
+// SESSION BASIS
+//   All requests use syminfo.tickerid, so the chart's symbol, session (RTH/ETH) and adjustment
+//   settings are shared by every source timeframe. Standard time-based candles only.
+//
+// HISTORY / CAPACITY (distinct things)
+//   Chart-history coverage : bars the chart has loaded (plan dependent).
+//   Source-history budget  : the engine only runs on the last N source candles per slot (input, 1000).
+//   Tracking capacity      : chart 200 zones / HTF 100 zones per source; oldest pruned (not a price event).
+//   Visible limits         : chart 15 / HTF 5 per source; display only, tracking continues underneath.
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+indicator("H Ticks — FVG / iFVG", shorttitle = "H Ticks FVG/iFVG", overlay = true, max_boxes_count = 500, max_lines_count = 500, max_labels_count = 500)
+
+// ═════════════════════════════════════════ INPUTS ═════════════════════════════════════════════
+const string GRP_GEN = "General"
+const string GRP_CH  = "Current-chart layer"
+const string GRP_HTF = "Higher-timeframe context layer"
+const string GRP_AL  = "Alerts (aggregated alert() calls)"
+
+bool   inLabels  = input.bool(true,  "Show labels", group = GRP_GEN)
+bool   inMid     = input.bool(false, "Show midpoint line (visual only)", group = GRP_GEN)
+bool   inMarker  = input.bool(false, "Show inversion marker (chart iFVGs)", group = GRP_GEN)
+int    inMinTick = input.int(1, "Minimum gap size (whole ticks)", minval = 1, group = GRP_GEN)
+int    inExt     = input.int(0, "Right extension (chart bars, approximate across session gaps)", minval = 0, maxval = 50, group = GRP_GEN)
+color  inBull    = input.color(color.rgb(46, 160, 110), "Bullish colour", group = GRP_GEN)
+color  inBear    = input.color(color.rgb(201, 82, 77), "Bearish colour", group = GRP_GEN)
+int    inBordT   = input.int(70, "Border transparency", minval = 0, maxval = 100, group = GRP_GEN)
+
+bool   inShowFvg  = input.bool(true, "Show current-chart FVGs", group = GRP_CH)
+bool   inShowIfvg = input.bool(true, "Show current-chart iFVGs", group = GRP_CH)
+int    inChVis    = input.int(15, "Visible zones", minval = 1, maxval = 100, group = GRP_CH)
+int    inChCap    = input.int(200, "Tracking capacity (zones)", minval = 20, maxval = 500, group = GRP_CH)
+int    inChT      = input.int(92, "Fill transparency", minval = 0, maxval = 100, group = GRP_CH)
+
+bool   inShowHtf  = input.bool(true, "Show HTF context gaps", group = GRP_HTF)
+int    inHtfVis   = input.int(5, "Visible zones per source", minval = 1, maxval = 50, group = GRP_HTF)
+int    inHtfCap   = input.int(100, "Tracking capacity per source", minval = 10, maxval = 200, group = GRP_HTF)
+int    inHtfT     = input.int(92, "Untapped fill transparency", minval = 0, maxval = 100, group = GRP_HTF)
+int    inHtfTapT  = input.int(95, "Tapped fill transparency", minval = 0, maxval = 100, group = GRP_HTF)
+int    inBudget   = input.int(1000, "Source-history budget (source candles per slot)", minval = 100, maxval = 4000, group = GRP_HTF)
+bool   en1 = input.bool(true,  "Slot 1", inline = "s1", group = GRP_HTF)
+string tf1 = input.timeframe("15",  "", inline = "s1", group = GRP_HTF)
+bool   en2 = input.bool(true,  "Slot 2", inline = "s2", group = GRP_HTF)
+string tf2 = input.timeframe("60",  "", inline = "s2", group = GRP_HTF)
+bool   en3 = input.bool(true,  "Slot 3", inline = "s3", group = GRP_HTF)
+string tf3 = input.timeframe("240", "", inline = "s3", group = GRP_HTF)
+bool   en4 = input.bool(false, "Slot 4", inline = "s4", group = GRP_HTF)
+string tf4 = input.timeframe("1D",  "", inline = "s4", group = GRP_HTF)
+
+bool   alNewBull = input.bool(true,  "New bullish chart FVG", group = GRP_AL)
+bool   alNewBear = input.bool(true,  "New bearish chart FVG", group = GRP_AL)
+bool   alBullIf  = input.bool(true,  "Bullish chart iFVG confirmed", group = GRP_AL)
+bool   alBearIf  = input.bool(true,  "Bearish chart iFVG confirmed", group = GRP_AL)
+bool   alHtfNew  = input.bool(true,  "New HTF FVG", group = GRP_AL)
+bool   alHtfTap  = input.bool(true,  "HTF FVG first tapped", group = GRP_AL)
+bool   alHtfRem  = input.bool(true,  "HTF FVG removed by source inversion", group = GRP_AL)
+bool   alIfRem   = input.bool(false, "Chart iFVG removed (overlap / invalidation)", group = GRP_AL)
+
+// ═════════════════════════════════════════ TYPES ══════════════════════════════════════════════
+const int ST_BULL_FVG  = 1
+const int ST_BEAR_FVG  = 2
+const int ST_BULL_IFVG = 3   // arises from a BEARISH FVG (green)
+const int ST_BEAR_IFVG = 4   // arises from a BULLISH FVG (red)
+const int ST_UNT_BULL  = 11
+const int ST_TAP_BULL  = 12
+const int ST_UNT_BEAR  = 13
+const int ST_TAP_BEAR  = 14
+// REMOVED is terminal: removed zones are destroyed immediately and can never be re-created
+// (chart layer: creation only at the current bar; HTF layer: per-source import watermark).
+
+type Zone
+    string id
+    int    src = -1          // HTF slot index, -1 = chart layer
+    string tfTxt = ""
+    int    dir               // ORIGINAL direction: +1 bullish, -1 bearish
+    int    state
+    float  top               // immutable original boundaries
+    float  bottom
+    int    formTime          // open time of candle 3 (source time)
+    int    confTime          // close time of candle 3 = moment the gap became confirmed (source time)
+    int    availTime         // chart time at which the script processed/imported it
+    int    formBar = -1      // chart layer only
+    int    invBar = -1       // chart layer only
+    int    invTime           // chart inversion candle open time
+    int    invAvail          // chart time of inversion commit
+    bool   tapped = false
+    int    tapTime           // event time (source candle close, or chart candle open)
+    int    tapAvail          // chart time of commit
+    int    lastEvt           // last source snapshot (source bar close time) applied
+    bool   seen = false
+    bool   endNow = false
+    box    bx
+    line   mid
+    label  mk
+
+// ═════════════════════════════════════════ PURE HELPERS ═══════════════════════════════════════
+// Tick-aware integer comparison: prices are snapped to whole ticks; no buffer is added.
+f_tk(float x) =>
+    math.round(x / syminfo.mintick)
+
+// Closed-interval overlap of a candle range with the ORIGINAL zone boundaries.
+f_overlap(float hi, float lo, float zb, float zt) =>
+    f_tk(hi) >= f_tk(zb) and f_tk(lo) <= f_tk(zt)
+
+f_tfText(int s) =>
+    string r = ""
+    if s >= 604800 and s % 604800 == 0
+        r := str.tostring(int(s / 604800)) + "W"
+    else if s >= 86400 and s % 86400 == 0
+        r := str.tostring(int(s / 86400)) + "D"
+    else if s >= 3600 and s % 3600 == 0
+        r := str.tostring(int(s / 3600)) + "H"
+    else if s >= 60 and s % 60 == 0
+        r := str.tostring(int(s / 60)) + "m"
+    else
+        r := str.tostring(s) + "s"
+    r
+
+f_push(array<float> z, int ft, int dir, float tp, float bt, int conf) =>
+    z.push(float(ft))
+    z.push(float(dir))
+    z.push(tp)
+    z.push(bt)
+    z.push(float(conf))
+    z.push(0.0)   // tap time (source candle close), 0 = untapped
+    z.push(0.0)   // 1 = inverted on this source bar (removed next bar)
+    true
+
+// ═══════════════════════ SOURCE-CONTEXT LIFECYCLE ENGINE (runs inside request.security) ════════
+// Snapshot layout (array<float>): [0]=asOf (close time of last completed source candle),
+// [1]=open time of the current source bar, [2]=zone count, [3]=open time of last completed candle,
+// then 7 floats per zone: formTime, dir, top, bottom, confTime, tapTime, invertedFlag.
+// Zones are chronological (oldest first).
+f_engine(int cap, int minTicks, int budget) =>
+    var array<float> Z = array.new_float(0)
+    var float lastProc = 0.0
+    array<float> out = na
+    float h1 = high[1]
+    float l1 = low[1]
+    float c1 = close[1]
+    float h2 = high[2]
+    float l2 = low[2]
+    float h3 = high[3]
+    float l3 = low[3]
+    int   t1 = time[1]
+    int   tc1 = time_close[1]
+    bool  valid = not na(h1) and not na(l1) and not na(c1) and not na(t1) and not na(tc1)
+    bool  active = bar_index >= last_bar_index - budget
+    if valid and active and t1 > lastProc
+        lastProc := t1
+        // 1) drop zones that were flagged inverted on the previous source bar
+        int n0 = int(Z.size() / 7)
+        if n0 > 0
+            for i = n0 - 1 to 0 by -1
+                if Z.get(i * 7 + 6) == 1.0
+                    for k = 1 to 7
+                        Z.remove(i * 7)
+        // 2) lifecycle of existing zones on the completed candle. Only candles that OPEN at/after the
+        //    formation confirmation are eligible (the formation candle itself never touches/inverts).
+        int n1 = int(Z.size() / 7)
+        if n1 > 0
+            for i = 0 to n1 - 1 by 1
+                int b = i * 7
+                if t1 >= int(Z.get(b + 4))
+                    float zd = Z.get(b + 1)
+                    float zt = Z.get(b + 2)
+                    float zb = Z.get(b + 3)
+                    bool inv = zd > 0 ? f_tk(c1) < f_tk(zb) : f_tk(c1) > f_tk(zt)
+                    if inv
+                        Z.set(b + 6, 1.0)          // source CLOSE strictly beyond the opposite boundary
+                    else if Z.get(b + 5) == 0.0 and f_overlap(h1, l1, zb, zt)
+                        Z.set(b + 5, float(tc1))    // first touch (monotonic)
+        // 3) formation: candle 3 = [1], candle 1 = [3]; candle 2 only has to exist
+        if not na(h2) and not na(l2) and not na(h3) and not na(l3)
+            int bullGap = f_tk(l1) - f_tk(h3)
+            int bearGap = f_tk(l3) - f_tk(h1)
+            if bullGap >= minTicks
+                f_push(Z, t1, 1, l1, h3, tc1)
+            else if bearGap >= minTicks
+                f_push(Z, t1, -1, l3, h1, tc1)
+        // 4) tracking capacity: oldest first
+        int n2 = int(Z.size() / 7)
+        if n2 > cap
+            for k = 1 to (n2 - cap) * 7
+                Z.remove(0)
+        // 5) snapshot
+        out := array.new_float(4, 0.0)
+        out.set(0, float(tc1))
+        out.set(1, float(time))
+        out.set(2, float(int(Z.size() / 7)))
+        out.set(3, float(t1))
+        out.concat(Z)
+    out
+
+// ═════════════════════════════ CHART-SIDE SETUP (supported charts, slots) ═════════════════════
+bool supported = chart.is_standard and not timeframe.isticks
+int  chartSecs = timeframe.in_seconds()
+int  chartMs   = chartSecs * 1000
+
+int  sec1 = timeframe.in_seconds(tf1)
+int  sec2 = timeframe.in_seconds(tf2)
+int  sec3 = timeframe.in_seconds(tf3)
+int  sec4 = timeframe.in_seconds(tf4)
+// higher than chart only; equal -> chart layer; lower -> omitted; equivalent selections deduplicated
+bool ok1 = en1 and sec1 > chartSecs
+bool ok2 = en2 and sec2 > chartSecs and not (ok1 and sec2 == sec1)
+bool ok3 = en3 and sec3 > chartSecs and not (ok1 and sec3 == sec1) and not (ok2 and sec3 == sec2)
+bool ok4 = en4 and sec4 > chartSecs and not (ok1 and sec4 == sec1) and not (ok2 and sec4 == sec2) and not (ok3 and sec4 == sec3)
+bool al1 = sec1 % chartSecs == 0
+bool al2 = sec2 % chartSecs == 0
+bool al3 = sec3 % chartSecs == 0
+bool al4 = sec4 % chartSecs == 0
+bool act1 = supported and ok1 and al1
+bool act2 = supported and ok2 and al2
+bool act3 = supported and ok3 and al3
+bool act4 = supported and ok4 and al4
+
+array<float> snap1 = na
+array<float> snap2 = na
+array<float> snap3 = na
+array<float> snap4 = na
+if act1
+    snap1 := request.security(syminfo.tickerid, tf1, f_engine(inHtfCap, inMinTick, inBudget), lookahead = barmerge.lookahead_on)
+if act2
+    snap2 := request.security(syminfo.tickerid, tf2, f_engine(inHtfCap, inMinTick, inBudget), lookahead = barmerge.lookahead_on)
+if act3
+    snap3 := request.security(syminfo.tickerid, tf3, f_engine(inHtfCap, inMinTick, inBudget), lookahead = barmerge.lookahead_on)
+if act4
+    snap4 := request.security(syminfo.tickerid, tf4, f_engine(inHtfCap, inMinTick, inBudget), lookahead = barmerge.lookahead_on)
+
+// ═════════════════════════════════════════ STATE ══════════════════════════════════════════════
+var array<Zone>   chartZ = array.new<Zone>()
+var array<Zone>   hz1 = array.new<Zone>()
+var array<Zone>   hz2 = array.new<Zone>()
+var array<Zone>   hz3 = array.new<Zone>()
+var array<Zone>   hz4 = array.new<Zone>()
+var array<int>    lastAsOf = array.new_int(4, 0)      // per-slot: last snapshot already reconciled
+var array<int>    wm       = array.new_int(4, 0)      // per-slot import watermark (formTime): no resurrection
+var array<bool>   srcBad   = array.new_bool(4, false)
+var array<bool>   srcSeen  = array.new_bool(4, false)
+var array<bool>   srcOk    = array.new_bool(4, false)
+var array<string> warnArr  = array.new_string(0)
+// per-bar event counters: 0 newBull,1 newBear,2 bullIfvg,3 bearIfvg,4 htfNew,5 htfTap,6 htfRem,7 ifRemTouch,8 ifRemInval
+var array<int>    ev   = array.new_int(10, 0)
+var array<string> evTf = array.new_string(10, "")
+var int firstTime = time
+var int lastConfClose = na
+int prevCloseT = time_close[1]
+float h2c = high[2]
+float l2c = low[2]
+
+// ═════════════════════════════════════════ ACTIONS ════════════════════════════════════════════
+f_destroy(Zone z) =>
+    if not na(z.bx)
+        box.delete(z.bx)
+        z.bx := na
+    if not na(z.mid)
+        line.delete(z.mid)
+        z.mid := na
+    if not na(z.mk)
+        label.delete(z.mk)
+        z.mk := na
+    true
+
+f_clearStore(array<Zone> a) =>
+    int n = a.size()
+    if n > 0
+        for i = n - 1 to 0 by -1
+            f_destroy(a.get(i))
+            a.remove(i)
+    true
+
+f_evInc(int i, string tf) =>
+    ev.set(i, ev.get(i) + 1)
+    if tf != ""
+        string cur = evTf.get(i)
+        if not str.contains(cur, tf)
+            evTf.set(i, cur == "" ? tf : cur + "," + tf)
+    true
+
+f_resetEv() =>
+    for i = 0 to 9
+        ev.set(i, 0)
+        evTf.set(i, "")
+    true
+
+// One chart-layer lifecycle step. Returns 0 none, 1 inverted, 2 removed (touch), 3 removed (invalidation).
+f_stepChart(Zone z, float hi, float lo, float cl, int bi, int t, int tc) =>
+    int r = 0
+    if bi > z.formBar
+        bool bull = z.dir > 0
+        if z.state == ST_BULL_FVG or z.state == ST_BEAR_FVG
+            // inversion: confirmed close strictly through the opposite OUTER boundary
+            bool inv = bull ? f_tk(cl) < f_tk(z.bottom) : f_tk(cl) > f_tk(z.top)
+            if inv
+                z.state := bull ? ST_BEAR_IFVG : ST_BULL_IFVG
+                z.invBar := bi
+                z.invTime := t
+                z.invAvail := tc
+                r := 1
+        else if bi > z.invBar
+            // the inversion candle (bi == invBar) can never remove the new iFVG
+            bool invalid = bull ? f_tk(cl) > f_tk(z.top) : f_tk(cl) < f_tk(z.bottom)
+            if invalid
+                r := 3
+            else if f_overlap(hi, lo, z.bottom, z.top)
+                r := 2
+    r
+
+// Reconcile one source slot against the engine snapshot (HTF layer). Chronological two-pointer merge.
+f_reconcile(array<Zone> store, int idx, string tfTxt, array<float> snap, int asOf) =>
+    int cnt = int(snap.get(2))
+    int m = store.size()
+    if m > 0
+        for i = 0 to m - 1 by 1
+            Zone z0 = store.get(i)
+            z0.seen := false
+            z0.endNow := false
+    int j = 0
+    if cnt > 0
+        for k = 0 to cnt - 1 by 1
+            int base = 4 + k * 7
+            int ft = int(snap.get(base))
+            int d = int(snap.get(base + 1))
+            float zt = snap.get(base + 2)
+            float zb = snap.get(base + 3)
+            int conf = int(snap.get(base + 4))
+            int tp = int(snap.get(base + 5))
+            bool flg = snap.get(base + 6) == 1.0
+            bool adv = true
+            while adv
+                adv := false
+                if j < store.size()
+                    if store.get(j).formTime < ft
+                        j += 1
+                        adv := true
+            bool isMatch = false
+            if j < store.size()
+                isMatch := store.get(j).formTime == ft
+            if isMatch
+                Zone z = store.get(j)
+                z.seen := true
+                z.lastEvt := asOf
+                j += 1
+                if flg
+                    z.endNow := true
+                else if tp > 0 and not z.tapped
+                    z.tapped := true
+                    z.state := z.dir > 0 ? ST_TAP_BULL : ST_TAP_BEAR
+                    z.tapTime := tp
+                    z.tapAvail := time_close
+                    f_evInc(5, tfTxt)
+            else if not flg and ft > wm.get(idx)
+                bool tpd = tp > 0
+                int st = d > 0 ? (tpd ? ST_TAP_BULL : ST_UNT_BULL) : (tpd ? ST_TAP_BEAR : ST_UNT_BEAR)
+                Zone nz = Zone.new(id = syminfo.tickerid + "|" + tfTxt + "|" + str.tostring(ft) + "|" + str.tostring(d), src = idx, tfTxt = tfTxt, dir = d, state = st, top = zt, bottom = zb, formTime = ft, confTime = conf, availTime = time_close, tapped = tpd, tapTime = tp, tapAvail = time_close, lastEvt = asOf, seen = true)
+                store.push(nz)
+                wm.set(idx, ft)
+                f_evInc(4, tfTxt)
+    // zones missing from the snapshot are gone (capacity-pruned by the engine or already removed): silent.
+    // zones the engine flagged inverted: removal dominates any tap in the same step.
+    int n2 = store.size()
+    if n2 > 0
+        for i = n2 - 1 to 0 by -1
+            Zone z = store.get(i)
+            if z.endNow
+                f_destroy(z)
+                store.remove(i)
+                f_evInc(6, tfTxt)
+            else if not z.seen
+                f_destroy(z)
+                store.remove(i)
+    // deterministic capacity pruning, oldest first (never a price event)
+    while store.size() > inHtfCap
+        Zone old = store.shift()
+        f_destroy(old)
+    srcOk.set(idx, true)
+    true
+
+f_sync(array<Zone> store, int idx, string tfTxt, array<float> snap) =>
+    if not na(snap)
+        if snap.size() >= 4
+            srcSeen.set(idx, true)
+            int asOf = int(snap.get(0))
+            if asOf > lastAsOf.get(idx) and not srcBad.get(idx)
+                lastAsOf.set(idx, asOf)
+                int curOpen = int(snap.get(1))
+                // The chart must cover the WHOLE current source period, otherwise touches earlier in that
+                // period are unknowable: skip; the next snapshot already includes that period's source range.
+                if firstTime <= curOpen
+                    // A chart candle straddling the source boundary would make event order ambiguous.
+                    if not na(prevCloseT) and prevCloseT > curOpen
+                        srcBad.set(idx, true)
+                        warnArr.push(tfTxt + " disabled: chart candles do not align with " + tfTxt + " boundaries (session/timeframe alignment)")
+                        f_clearStore(store)
+                    else
+                        f_reconcile(store, idx, tfTxt, snap, asOf)
+    true
+
+// Chart-candle taps on HTF zones. Candle must OPEN at/after formation confirmation; monotonic.
+f_tapStore(array<Zone> a) =>
+    int n = a.size()
+    if n > 0
+        for i = 0 to n - 1 by 1
+            Zone z = a.get(i)
+            if not z.tapped and time >= z.confTime and f_overlap(high, low, z.bottom, z.top)
+                z.tapped := true
+                z.state := z.dir > 0 ? ST_TAP_BULL : ST_TAP_BEAR
+                z.tapTime := time
+                z.tapAvail := time_close
+                f_evInc(5, z.tfTxt)
+    true
+
+// ═════════════════════════════════════════ DRAWING ════════════════════════════════════════════
+f_draw(Zone z, bool htf) =>
+    bool bull = z.state == ST_BULL_FVG or z.state == ST_BULL_IFVG or z.state == ST_UNT_BULL or z.state == ST_TAP_BULL
+    bool ifvg = z.state == ST_BULL_IFVG or z.state == ST_BEAR_IFVG
+    bool tap  = z.state == ST_TAP_BULL or z.state == ST_TAP_BEAR
+    color base = bull ? inBull : inBear
+    int fillT = htf ? (tap ? inHtfTapT : inHtfT) : inChT
+    string txt = ""
+    if inLabels
+        txt := htf ? z.tfTxt + " FVG · " + (tap ? "Tapped" : "Untapped") : (ifvg ? "iFVG" : "FVG")
+    int l = z.formTime > firstTime ? z.formTime : firstTime   // clamp to first available chart bar
+    int r = lastConfClose + inExt * chartMs
+    if r <= l
+        r := l + chartMs
+    z.bx := box.new(left = l, top = z.top, right = r, bottom = z.bottom, xloc = xloc.bar_time, border_color = color.new(base, inBordT), border_width = 1, border_style = ifvg ? line.style_dashed : line.style_solid, bgcolor = color.new(base, fillT), text = txt, text_size = size.small, text_color = color.new(base, 15), text_halign = text.align_right, text_valign = text.align_center)
+    if inMid
+        float mp = (z.top + z.bottom) / 2
+        z.mid := line.new(x1 = l, y1 = mp, x2 = r, y2 = mp, xloc = xloc.bar_time, color = color.new(base, 45), style = line.style_dotted, width = 1)
+    if inMarker and ifvg and not htf
+        z.mk := label.new(x = z.invTime, y = z.dir > 0 ? z.bottom : z.top, xloc = xloc.bar_time, text = "", style = label.style_xcross, color = color.new(base, 0), size = size.tiny)
+    true
+
+f_rebuildHtf(array<Zone> a) =>
+    int shown = 0
+    int n = a.size()
+    if n > 0
+        for i = n - 1 to 0 by -1
+            if shown < inHtfVis
+                f_draw(a.get(i), true)
+                shown += 1
+    true
+
+f_clearDrawOnly(array<Zone> a) =>
+    int n = a.size()
+    if n > 0
+        for i = 0 to n - 1 by 1
+            f_destroy(a.get(i))
+    true
+
+// Idempotent rebuild from state (drawings are derived data, never state). Done on the last bar only:
+// old handles are deleted (a no-op if realtime rollback already removed them) and visible zones are
+// re-created, so there are never duplicate boxes. Visible limits are applied newest-first per layer.
+f_rebuildAll() =>
+    f_clearDrawOnly(chartZ)
+    f_clearDrawOnly(hz1)
+    f_clearDrawOnly(hz2)
+    f_clearDrawOnly(hz3)
+    f_clearDrawOnly(hz4)
+    if not na(lastConfClose)
+        int shown = 0
+        int n = chartZ.size()
+        if n > 0
+            for i = n - 1 to 0 by -1
+                Zone z = chartZ.get(i)
+                bool isI = z.state == ST_BULL_IFVG or z.state == ST_BEAR_IFVG
+                bool want = isI ? inShowIfvg : inShowFvg
+                if want and shown < inChVis
+                    f_draw(z, false)
+                    shown += 1
+        if inShowHtf
+            f_rebuildHtf(hz1)
+            f_rebuildHtf(hz2)
+            f_rebuildHtf(hz3)
+            f_rebuildHtf(hz4)
+    true
+
+// ═════════════════════════════ MAIN: confirmed-bar processing ═════════════════════════════════
+if supported and barstate.isfirst
+    if en1 and sec1 > chartSecs and not al1
+        warnArr.push(f_tfText(sec1) + " disabled: not an integer multiple of the chart timeframe")
+    if en2 and sec2 > chartSecs and not al2
+        warnArr.push(f_tfText(sec2) + " disabled: not an integer multiple of the chart timeframe")
+    if en3 and sec3 > chartSecs and not al3
+        warnArr.push(f_tfText(sec3) + " disabled: not an integer multiple of the chart timeframe")
+    if en4 and sec4 > chartSecs and not al4
+        warnArr.push(f_tfText(sec4) + " disabled: not an integer multiple of the chart timeframe")
+
+if supported and barstate.isconfirmed
+    f_resetEv()
+    lastConfClose := time_close
+
+    // 1) current-chart layer: step existing zones (only bars AFTER the formation bar are eligible)
+    int nc = chartZ.size()
+    if nc > 0
+        for i = nc - 1 to 0 by -1
+            Zone z = chartZ.get(i)
+            int r = f_stepChart(z, high, low, close, bar_index, time, time_close)
+            if r == 1
+                f_evInc(z.dir > 0 ? 3 : 2, "")
+            else if r >= 2
+                f_destroy(z)
+                chartZ.remove(i)
+                f_evInc(r == 2 ? 7 : 8, "")
+
+    // 2) current-chart layer: new gap confirmed by THIS closed bar (candle 3)
+    if bar_index >= 2 and not na(h2c) and not na(l2c)
+        int bullGap = f_tk(low) - f_tk(h2c)
+        int bearGap = f_tk(l2c) - f_tk(high)
+        int dirN = bullGap >= inMinTick ? 1 : (bearGap >= inMinTick ? -1 : 0)
+        if dirN != 0
+            float zt = dirN > 0 ? low : l2c
+            float zb = dirN > 0 ? h2c : high
+            Zone nz = Zone.new(id = syminfo.tickerid + "|" + timeframe.period + "|" + str.tostring(time) + "|" + str.tostring(dirN), dir = dirN, state = dirN > 0 ? ST_BULL_FVG : ST_BEAR_FVG, top = zt, bottom = zb, formTime = time, confTime = time_close, availTime = time_close, formBar = bar_index)
+            chartZ.push(nz)
+            f_evInc(dirN > 0 ? 0 : 1, "")
+    while chartZ.size() > inChCap
+        Zone old = chartZ.shift()
+        f_destroy(old)
+
+    // 3) HTF layer: source snapshots first (removal dominates), then chart-candle taps
+    if act1
+        f_sync(hz1, 0, f_tfText(sec1), snap1)
+    if act2
+        f_sync(hz2, 1, f_tfText(sec2), snap2)
+    if act3
+        f_sync(hz3, 2, f_tfText(sec3), snap3)
+    if act4
+        f_sync(hz4, 3, f_tfText(sec4), snap4)
+    f_tapStore(hz1)
+    f_tapStore(hz2)
+    f_tapStore(hz3)
+    f_tapStore(hz4)
+
+// Drawings are derived from state on the last bar only (cheap history, rollback-safe).
+if supported and barstate.islast
+    f_rebuildAll()
+
+// ═════════════════════════════════════ WARNINGS (concise) ═════════════════════════════════════
+var table warnTbl = table.new(position.top_right, 1, 1, border_width = 0)
+if barstate.islast
+    string w = supported ? array.join(warnArr, "\n") : "H Ticks FVG/iFVG: unsupported chart type (needs standard time-based candles; Heikin Ashi/Renko/Range/etc. are not valid traded-price OHLC)."
+    if supported
+        if act1 and not srcSeen.get(0)
+            w += (w == "" ? "" : "\n") + f_tfText(sec1) + ": no source data returned"
+        else if act1 and srcSeen.get(0) and not srcOk.get(0) and not srcBad.get(0)
+            w += (w == "" ? "" : "\n") + f_tfText(sec1) + ": chart history too short to establish zone state (omitted, not guessed)"
+        if act2 and not srcSeen.get(1)
+            w += (w == "" ? "" : "\n") + f_tfText(sec2) + ": no source data returned"
+        else if act2 and srcSeen.get(1) and not srcOk.get(1) and not srcBad.get(1)
+            w += (w == "" ? "" : "\n") + f_tfText(sec2) + ": chart history too short to establish zone state (omitted, not guessed)"
+        if act3 and not srcSeen.get(2)
+            w += (w == "" ? "" : "\n") + f_tfText(sec3) + ": no source data returned"
+        else if act3 and srcSeen.get(2) and not srcOk.get(2) and not srcBad.get(2)
+            w += (w == "" ? "" : "\n") + f_tfText(sec3) + ": chart history too short to establish zone state (omitted, not guessed)"
+        if act4 and not srcSeen.get(3)
+            w += (w == "" ? "" : "\n") + f_tfText(sec4) + ": no source data returned"
+        else if act4 and srcSeen.get(3) and not srcOk.get(3) and not srcBad.get(3)
+            w += (w == "" ? "" : "\n") + f_tfText(sec4) + ": chart history too short to establish zone state (omitted, not guessed)"
+    if w == ""
+        table.cell(warnTbl, 0, 0, "", bgcolor = na)
+    else
+        table.cell(warnTbl, 0, 0, w, text_color = color.orange, text_size = size.small, bgcolor = color.new(color.black, 80), text_halign = text.align_left)
+
+// ═════════════════════════════════════════ ALERTS ═════════════════════════════════════════════
+// Only genuine lifecycle events on a confirmed REALTIME bar. Historical bootstrap never alerts.
+bool evNow = supported and barstate.isrealtime and barstate.isconfirmed
+
+f_part(string label, int n, string tfs) =>
+    n > 0 ? label + " x" + str.tostring(n) + (tfs == "" ? "" : " [" + tfs + "]") : ""
+
+f_add(string a, string b) =>
+    b == "" ? a : (a == "" ? b : a + " | " + b)
+
+if evNow
+    string msg = ""
+    msg := f_add(msg, alNewBull ? f_part("New bullish FVG", ev.get(0), "") : "")
+    msg := f_add(msg, alNewBear ? f_part("New bearish FVG", ev.get(1), "") : "")
+    msg := f_add(msg, alBullIf ? f_part("Bullish iFVG confirmed", ev.get(2), "") : "")
+    msg := f_add(msg, alBearIf ? f_part("Bearish iFVG confirmed", ev.get(3), "") : "")
+    msg := f_add(msg, alHtfNew ? f_part("New HTF FVG", ev.get(4), evTf.get(4)) : "")
+    msg := f_add(msg, alHtfTap ? f_part("HTF FVG first tapped", ev.get(5), evTf.get(5)) : "")
+    msg := f_add(msg, alHtfRem ? f_part("HTF FVG removed by source inversion", ev.get(6), evTf.get(6)) : "")
+    msg := f_add(msg, alIfRem ? f_part("iFVG removed (touch)", ev.get(7), "") : "")
+    msg := f_add(msg, alIfRem ? f_part("iFVG removed (invalidation)", ev.get(8), "") : "")
+    if msg != ""
+        alert("H Ticks FVG/iFVG " + syminfo.ticker + " " + timeframe.period + ": " + msg, alert.freq_once_per_bar_close)
+
+// Selectable per-event alertConditions (use these OR the aggregated alert() call, not both).
+alertcondition(evNow and ev.get(0) > 0, "New bullish chart FVG", "H Ticks: new bullish FVG on {{ticker}} {{interval}}")
+alertcondition(evNow and ev.get(1) > 0, "New bearish chart FVG", "H Ticks: new bearish FVG on {{ticker}} {{interval}}")
+alertcondition(evNow and ev.get(2) > 0, "Bullish chart iFVG confirmed", "H Ticks: bullish iFVG confirmed on {{ticker}} {{interval}}")
+alertcondition(evNow and ev.get(3) > 0, "Bearish chart iFVG confirmed", "H Ticks: bearish iFVG confirmed on {{ticker}} {{interval}}")
+alertcondition(evNow and ev.get(4) > 0, "New HTF FVG", "H Ticks: new HTF FVG on {{ticker}} (chart {{interval}})")
+alertcondition(evNow and ev.get(5) > 0, "HTF FVG first tapped", "H Ticks: HTF FVG first tapped on {{ticker}} (chart {{interval}})")
+alertcondition(evNow and ev.get(6) > 0, "HTF FVG removed by source inversion", "H Ticks: HTF FVG removed by source inversion on {{ticker}} (chart {{interval}})")
+alertcondition(evNow and (ev.get(7) > 0 or ev.get(8) > 0), "Chart iFVG removed", "H Ticks: chart iFVG removed on {{ticker}} {{interval}}")
