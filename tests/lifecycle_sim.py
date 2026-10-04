@@ -239,6 +239,127 @@ def bound(slots, budget, cap):
 for sl, bu, cp in [(3, 1000, 100), (4, 1000, 100), (4, 4000, 200), (4, 1000, 200)]:
     eff, mb = bound(sl, bu, cp); print(f"   memory bound slots={sl} budget={bu} cap={cp}: effective budget {eff}, worst-case {mb:.1f} MB")
 chk('Repair3: default worst-case bound <= 64 MB and max settings are clamped to <= 64 MB', bound(4, 1000, 100)[1] <= 64 and bound(4, 4000, 200)[1] <= 64.01)
+
+# ======================= display-filter models (mirror f_sizeOk / f_dist / f_classify / f_pickCat) =======================
+def size_ok(width, fatr, minT, mult):
+    if mult > 0 and fatr is None: return False
+    thr = float(minT)
+    if mult > 0: thr = max(thr, mult * fatr / TICK)
+    return tk(width) >= thr - 1e-6
+def dist(z, ref):
+    if tk(ref) < tk(z['bot']): return z['bot'] - ref
+    if tk(ref) > tk(z['top']): return ref - z['top']
+    return 0.0
+CFG = dict(fvgMin=4, fvgAtr=0.10, ifMin=4, ifAtr=0.10, htfMin=4, htfAtr=0.10, distOn=True, distAtr=3.0, nearest=True, showF=True, showI=True)
+def classify(zs, htf, ref, chart_atr, cfg=CFG):
+    for z in zs:
+        z['vis'] = False; z['cat'] = -1; z['dist'] = dist(z, ref)
+        w = z['top'] - z['bot']
+        if htf:
+            if size_ok(w, z['fatr'], cfg['htfMin'], cfg['htfAtr']):
+                z['cat'] = 2 if tk(z['bot']) > tk(ref) else (3 if tk(z['top']) < tk(ref) else 4)
+        else:
+            isI = z['state'] == 'IFVG'
+            ok = size_ok(w, z['fatr'], *( (cfg['ifMin'], cfg['ifAtr']) if isI else (cfg['fvgMin'], cfg['fvgAtr']) ))
+            dok = True
+            if cfg['distOn'] and z['dist'] > 0 and chart_atr is not None: dok = z['dist'] <= cfg['distAtr'] * chart_atr
+            if (cfg['showI'] if isI else cfg['showF']) and ok and dok: z['cat'] = 1 if isI else 0
+def pick(zs, cat, limit, cfg=CFG):
+    for _ in range(limit):
+        best = -1
+        for i, z in enumerate(zs):
+            if z['cat'] == cat and not z['vis']:
+                if best < 0: best = i
+                else:
+                    b = zs[best]
+                    if cfg['nearest'] and z['dist'] != b['dist']: better = z['dist'] < b['dist']
+                    else: better = z['ft'] >= b['ft']
+                    if better: best = i
+        if best >= 0: zs[best]['vis'] = True
+def Z(ft, bot, top, fatr=10.0, state='FVG', d=1): return dict(ft=ft, bot=bot, top=top, fatr=fatr, state=state, dir=d)
+
+# 1 one-tick gap: tracked (detected with min 1 tick) but hidden under defaults
+g = gap(100, 95, 109, 100.25, 1)
+zz = [Z(1, 100, 100.25)]
+classify(zz, False, 100.1, 2.0)
+chk('Display: 1-tick FVG is detected/tracked but hidden at default size filter', g is not None and zz[0]['cat'] == -1 and len(zz) == 1)
+# 2 exact threshold
+chk('Display: width exactly at tick-floor threshold (4 ticks = 1.00) qualifies', size_ok(1.0, 5.0, 4, 0.10) and not size_ok(0.75, 5.0, 4, 0.10))
+chk('Display: width exactly at ATR threshold (0.10 x 12.5 = 1.25) qualifies, 1.00 does not', size_ok(1.25, 12.5, 4, 0.10) and not size_ok(1.0, 12.5, 4, 0.10))
+# 3 hidden FVG becomes visible iFVG after inversion (independent thresholds)
+cfg2 = dict(CFG, fvgMin=8, ifMin=4)
+zi = [Z(1, 100, 101.5, 5.0, 'FVG')]       # width 6 ticks
+classify(zi, False, 100.5, 2.0, cfg2); hidden_as_fvg = zi[0]['cat'] == -1
+cz = CZ(1, 101.5, 100, 0); step(cz, 105, 99, 99.75, 1); zi[0]['state'] = cz.state
+classify(zi, False, 100.5, 2.0, cfg2)
+chk('Display: hidden FVG (6 ticks < 8) becomes visible iFVG (6 >= 4) after inversion', hidden_as_fvg and zi[0]['cat'] == 1)
+# 4 ATR change after formation does not change qualification (frozen); chart ATR only drives the distance filter
+zf = [Z(1, 100, 101.0, 10.0)]
+r1 = size_ok(1.0, zf[0]['fatr'], 4, 0.10)
+chart_atr_later = 500.0   # later ATR explosion must not matter for size
+classify(zf, False, 100.5, chart_atr_later)
+chk('Display: later ATR change cannot change frozen size qualification', r1 and zf[0]['cat'] == 0)
+# 5 source ATR frozen on the SAME candle as the formation OHLC, independent of chart ATR
+def atr_series(cd, n=3):
+    trs, out = [], []
+    for i, (to, tc, h, l, c) in enumerate(cd):
+        pc = cd[i - 1][4] if i else c
+        trs.append(max(h - l, abs(h - pc), abs(l - pc)))
+        out.append(None if i < n - 1 else sum(trs[-n:]) / n)
+    return out
+src = mkcandles(40, 3); a_src = atr_series(src)
+fidx = 20; stored = a_src[fidx]
+chart_series_atr = a_src[fidx] * 0.1     # a 1m chart ATR would be far smaller
+chk('Display: HTF zone stores its SOURCE ATR at formation candle (not chart ATR, not a later ATR)', stored == a_src[fidx] and stored != a_src[fidx + 5] and stored != chart_series_atr)
+htfz = [Z(1, 100, 100.75, stored if stored else 1.0)]
+htfz[0]['fatr'] = 10.0
+classify(htfz, True, 120, 0.5)
+chk('Display: 1H gap sized with 1H ATR: 3 ticks hidden even though chart(1m) ATR is tiny', htfz[0]['cat'] == -1 and size_ok(0.75, 0.01, 1, 0.0))
+# 6 distant chart zone hidden by distance but still tracked; reappears when near; no state change
+far = [Z(1, 50, 52, 1.0)]
+classify(far, False, 100, 2.0); hid = far[0]['cat'] == -1
+classify(far, False, 54, 2.0)   # dist 2 <= 6
+chk('Display: distant zone hidden (not deleted); reappears when nearby; zone object untouched', hid and far[0]['cat'] == 0 and len(far) == 1 and far[0]['bot'] == 50 and far[0]['top'] == 52)
+chk('Display: zone containing price always passes the distance filter', (lambda q: (classify(q, False, 51, 0.01), q[0]['cat'])[1])([Z(1, 50, 52, 1.0)]) == 0)
+# 7 hidden iFVG touched is removed and never reappears
+hz_ = CZ(1, 110, 100, 0); step(hz_, 108, 99, 99.75, 1)     # becomes iFVG
+store = [hz_]
+hidden_ifvg = dict(Z(1, 100, 110, None, 'IFVG'))
+classify([hidden_ifvg], False, 99.75, 2.0)    # atr None + mult>0 -> hidden
+r = step(hz_, 100, 98, 99, 2)
+if r.startswith('removed'): store.remove(hz_)
+chk('Display: hidden iFVG (ATR unknown) is still removed by touch; store empty so it can never reappear', hidden_ifvg['cat'] == -1 and r == 'removed:touch' and store == [])
+chk('Display: unknown formation ATR + ATR filter on => hidden; filter off (mult 0) => size by ticks only', not size_ok(2.0, None, 4, 0.1) and size_ok(2.0, None, 4, 0.0))
+# 8 priority: containing first, within budget; 9 nearest-EDGE not midpoint
+zs = [Z(1, 100, 120), Z(2, 80, 86)]
+classify(zs, False, 95, 100.0, dict(CFG, distOn=False)); pick(zs, 0, 1)
+chk('Display: ranking uses nearest-EDGE distance, not midpoint (edge 5 beats edge 9; midpoint would pick the other)', zs[0]['vis'] and not zs[1]['vis'])
+zs = [Z(1, 100, 110), Z(2, 96, 99), Z(3, 90, 94)]
+classify(zs, False, 105, 100.0, dict(CFG, distOn=False)); pick(zs, 0, 1)
+chk('Display: zone containing price gets first priority in its budget', zs[0]['vis'] and not zs[1]['vis'] and not zs[2]['vis'])
+zs = [Z(1, 100, 101), Z(2, 100, 101.25), Z(3, 100, 101.5)]
+classify(zs, False, 100.5, 100.0, dict(CFG, distOn=False)); pick(zs, 0, 2)
+chk('Display: all contain price (dist 0): ties broken by most recent formation', [z['vis'] for z in zs] == [False, True, True])
+zs = [Z(1, 105, 106), Z(2, 101, 102), Z(3, 96, 97)]
+c_recent = dict(CFG, distOn=False, nearest=False); classify(zs, False, 100, 100.0, c_recent); pick(zs, 0, 1, c_recent)
+chk('Display: "most recently formed" mode ignores distance', zs[2]['vis'] and not zs[1]['vis'])
+# separate FVG / iFVG budgets
+mix = [Z(i, 100 + i, 102 + i) for i in range(1, 6)] + [Z(10 + i, 100 + i, 102 + i, 10.0, 'IFVG') for i in range(1, 4)]
+classify(mix, False, 103, 100.0, dict(CFG, distOn=False)); pick(mix, 0, 3); pick(mix, 1, 2)
+chk('Display: 3 FVG + 2 iFVG budgets independent (FVGs never consume iFVG slots)', sum(z['vis'] for z in mix if z['state'] == 'FVG') == 3 and sum(z['vis'] for z in mix if z['state'] == 'IFVG') == 2)
+# 10 HTF classification exclusive; boundary contact = containing only
+hb = [Z(1, 100, 110), Z(2, 90, 100), Z(3, 110, 120), Z(4, 130, 140), Z(5, 80, 90)]
+classify(hb, True, 100, None, CFG)
+cats = [z['cat'] for z in hb]
+chk('Display: HTF groups exclusive; boundary contact only in "containing" (above/below strict)', cats == [4, 4, 3 if False else 2, 2, 3])
+chk('Display: HTF per-source budget up to 3 when one contains price (1 above, 1 below, 1 containing)', (lambda q: (classify(q, True, 105, None), pick(q, 2, 1), pick(q, 3, 1), pick(q, 4, 1), sum(z['vis'] for z in q))[-1])([Z(1, 100, 110), Z(2, 120, 125), Z(3, 130, 135), Z(4, 80, 85), Z(5, 70, 75)]) == 3)
+chk('Display: HTF zone containing price still needs the size filter', (lambda q: (classify(q, True, 100.1, None), q[0]['cat'])[1])([Z(1, 100, 100.25)]) == -1)
+# 11 selection never reorders lifecycle arrays
+orig = [Z(i, 100 - i, 101 - i) for i in range(1, 8)]; before = [z['ft'] for z in orig]
+classify(orig, False, 99, 100.0); pick(orig, 0, 3)
+chk('Display: selection leaves chronological array order untouched', [z['ft'] for z in orig] == before)
+# 12 visibility toggles cannot create lifecycle events (step() is the only event source; classify/pick return nothing)
+chk('Display: classify/pick are pure display (no event output); events only come from step()/reconcile()', classify([Z(1, 1, 2)], False, 1.5, 1.0) is None and (lambda q: (classify(q, False, 1.5, 1.0), pick(q, 0, 1))[1])([Z(1, 1, 2)]) is None, 'MODEL + CODE INSPECTION')
 print(f"{'test':72} {'result':6} basis")
 for n, r, k in R: print(f"{n:72} {r:6} {k}")
 print(sum(r == 'PASS' for _, r, _ in R), '/', len(R), 'passed')

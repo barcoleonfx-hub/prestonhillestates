@@ -37,10 +37,10 @@
 //   are shared by every source timeframe. Standard time-based candles only.
 //
 // MEMORY
-//   A snapshot is 7 floats per live zone. The engine publishes a NEW array only when its state changed
+//   A snapshot is 8 floats per live zone. The engine publishes a NEW array only when its state changed
 //   and otherwise returns the same, never-mutated reference. Worst case (every bar changes, every slot
-//   full) = slots x budget x 7 x capacity x 8 bytes; the effective budget is clamped so that bound
-//   stays <= 8,000,000 floats (64 MB). Default (4 slots, 1000, 100): <= ~22 MB bound, typically far less.
+//   full) = slots x budget x 8 x capacity x 8 bytes; the effective budget is clamped so that bound
+//   stays <= 8,000,000 floats (64 MB). Default (2 slots, 1000, 100): <= ~13 MB bound, typically far less.
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 indicator("H Ticks — FVG / iFVG", shorttitle = "H Ticks FVG/iFVG", overlay = true, max_boxes_count = 500, max_lines_count = 500, max_labels_count = 500)
 
@@ -53,21 +53,34 @@ const string GRP_AL  = "Alerts (aggregated alert() calls)"
 bool   inLabels  = input.bool(true,  "Show labels", group = GRP_GEN)
 bool   inMid     = input.bool(false, "Show midpoint line (visual only)", group = GRP_GEN)
 bool   inMarker  = input.bool(false, "Show inversion marker (chart iFVGs)", group = GRP_GEN)
-int    inMinTick = input.int(1, "Minimum gap size (whole ticks)", minval = 1, group = GRP_GEN)
+int    inMinTick = input.int(1, "Minimum DETECTION size (whole ticks)", minval = 1, group = GRP_GEN, tooltip = "Gaps at least this wide are detected and TRACKED. Display filters only decide what is drawn; hidden zones remain tracked and still invert, get tapped or are removed.")
 int    inExt     = input.int(0, "Right extension (chart bars, approximate across session gaps)", minval = 0, maxval = 50, group = GRP_GEN)
 color  inBull    = input.color(color.rgb(46, 160, 110), "Bullish colour", group = GRP_GEN)
 color  inBear    = input.color(color.rgb(201, 82, 77), "Bearish colour", group = GRP_GEN)
 int    inBordT   = input.int(70, "Border transparency", minval = 0, maxval = 100, group = GRP_GEN)
+string inPrio    = input.string("Nearest to price", "Display priority", options = ["Nearest to price", "Most recently formed"], group = GRP_GEN, tooltip = "Ranks which zones fill the display budgets. Reference = last confirmed chart close; ranking changes only on confirmed bars. Nearest uses nearest-EDGE distance (0 if price is inside), ties by most recent formation.")
+bool   inNearest = inPrio == "Nearest to price"
 
 bool   inShowFvg  = input.bool(true, "Show current-chart FVGs", group = GRP_CH)
 bool   inShowIfvg = input.bool(true, "Show current-chart iFVGs", group = GRP_CH)
-int    inChVis    = input.int(15, "Visible zones", minval = 1, maxval = 100, group = GRP_CH)
+int    inMaxFvg   = input.int(3, "Max visible ordinary FVGs", minval = 0, maxval = 20, group = GRP_CH, tooltip = "Separate budget: ordinary FVGs never use an iFVG slot. Display limits do not change inversion logic.")
+int    inMaxIfvg  = input.int(2, "Max visible iFVGs", minval = 0, maxval = 20, group = GRP_CH)
+float  inFvgAtr   = input.float(0.10, "FVG size filter: ATR multiple (0 = off)", minval = 0.0, step = 0.05, group = GRP_CH, tooltip = "Formation-size filter. Width must be >= max(min ticks x mintick, multiple x formation ATR(14)). ATR is frozen at the gap's confirmed formation candle (chart ATR for chart zones). If ATR is unavailable and the multiple is > 0 the zone is hidden (still tracked).")
+int    inFvgMinT  = input.int(4, "FVG size filter: min ticks", minval = 1, group = GRP_CH)
+float  inIfvgAtr  = input.float(0.10, "iFVG size filter: ATR multiple (0 = off)", minval = 0.0, step = 0.05, group = GRP_CH, tooltip = "Independent iFVG threshold. Uses the ORIGINAL gap's frozen formation ATR, not ATR at inversion. A hidden ordinary FVG can become a visible iFVG.")
+int    inIfvgMinT = input.int(4, "iFVG size filter: min ticks", minval = 1, group = GRP_CH)
+bool   inDistOn   = input.bool(true, "Chart-zone distance filter", group = GRP_CH, tooltip = "Distance filtering uses CURRENT confirmed chart ATR(14) and changes as price/ATR change. Zones containing price always pass. Hidden zones remain tracked and may reappear without any alert. Not applied to HTF zones.")
+float  inDistAtr  = input.float(3.0, "Max distance (chart ATR)", minval = 0.1, step = 0.5, group = GRP_CH)
 int    inChCap    = input.int(200, "Tracking capacity (zones)", minval = 20, maxval = 500, group = GRP_CH)
 int    inChWin    = input.int(4500, "Tracking window (chart bars; keep below bars your plan loads)", minval = 100, maxval = 20000, group = GRP_CH)
 int    inChT      = input.int(92, "Fill transparency", minval = 0, maxval = 100, group = GRP_CH)
 
 bool   inShowHtf  = input.bool(true, "Show HTF context gaps", group = GRP_HTF)
-int    inHtfVis   = input.int(5, "Visible zones per source", minval = 1, maxval = 50, group = GRP_HTF)
+int    inHtfAbove = input.int(1, "Max zones ABOVE price (per source)", minval = 0, maxval = 10, group = GRP_HTF, tooltip = "Separate budgets per source: above (bottom > price), below (top < price), containing (bottom <= price <= top; boundary contact counts here only). Up to three zones per source.")
+int    inHtfBelow = input.int(1, "Max zones BELOW price (per source)", minval = 0, maxval = 10, group = GRP_HTF)
+int    inHtfCont  = input.int(1, "Max zones CONTAINING price (per source)", minval = 0, maxval = 10, group = GRP_HTF)
+float  inHtfAtr   = input.float(0.10, "HTF size filter: ATR multiple (0 = off)", minval = 0.0, step = 0.05, group = GRP_HTF, tooltip = "Width must be >= max(min ticks x mintick, multiple x the gap's frozen SOURCE-timeframe ATR(14) at its confirmed formation candle). Never chart ATR.")
+int    inHtfMinT  = input.int(4, "HTF size filter: min ticks", minval = 1, group = GRP_HTF)
 int    inHtfCap   = input.int(100, "Tracking capacity per source", minval = 10, maxval = 200, group = GRP_HTF)
 int    inHtfT     = input.int(92, "Untapped fill transparency", minval = 0, maxval = 100, group = GRP_HTF)
 int    inHtfTapT  = input.int(95, "Tapped fill transparency", minval = 0, maxval = 100, group = GRP_HTF)
@@ -76,7 +89,7 @@ bool   en1 = input.bool(true,  "Slot 1", inline = "s1", group = GRP_HTF)
 string tf1 = input.timeframe("15",  "", inline = "s1", group = GRP_HTF)
 bool   en2 = input.bool(true,  "Slot 2", inline = "s2", group = GRP_HTF)
 string tf2 = input.timeframe("60",  "", inline = "s2", group = GRP_HTF)
-bool   en3 = input.bool(true,  "Slot 3", inline = "s3", group = GRP_HTF)
+bool   en3 = input.bool(false, "Slot 3", inline = "s3", group = GRP_HTF)
 string tf3 = input.timeframe("240", "", inline = "s3", group = GRP_HTF)
 bool   en4 = input.bool(false, "Slot 4", inline = "s4", group = GRP_HTF)
 string tf4 = input.timeframe("1D",  "", inline = "s4", group = GRP_HTF)
@@ -91,6 +104,7 @@ bool   alHtfRem  = input.bool(true,  "HTF FVG removed by source inversion", grou
 bool   alIfRem   = input.bool(false, "Chart iFVG removed (overlap / invalidation)", group = GRP_AL)
 
 // ═════════════════════════════════════════ TYPES ══════════════════════════════════════════════
+const int ZS = 8   // engine record size (floats per zone)
 const int ST_BULL_FVG  = 1
 const int ST_BEAR_FVG  = 2
 const int ST_BULL_IFVG = 3   // arises from a BEARISH FVG (green)
@@ -121,8 +135,13 @@ type Zone
     int    tapTime           // event time (source candle close, or chart candle open)
     int    tapAvail          // chart time of commit
     int    lastEvt           // last source snapshot (source bar close time) applied
+    float  width             // frozen original width (top - bottom)
+    float  fatr              // frozen formation ATR(14) of the zone's own timeframe (na = unavailable)
     bool   seen = false
     bool   endNow = false
+    int    cat = -1          // transient display classification (never lifecycle state)
+    float  dist = 0.0
+    bool   vis = false
     box    bx                // persistent drawing handles (mutated only on confirmed bars)
     line   mid
     label  mk
@@ -150,9 +169,9 @@ f_tfText(int s) =>
         r := str.tostring(s) + "s"
     r
 
-// Engine zone record (7 floats): formTime, code (+-1 live, +-2 inverted-this-bar; sign = direction),
-// top, bottom, confTime, tapTime (0 = untapped), formation candle index.
-f_push(array<float> z, int ft, int dir, float tp, float bt, int conf, int fidx) =>
+// Engine zone record (8 floats): formTime, code (+-1 live, +-2 inverted-this-bar; sign = direction),
+// top, bottom, confTime, tapTime (0 = untapped), formation candle index, formation ATR (-1 = n/a).
+f_push(array<float> z, int ft, int dir, float tp, float bt, int conf, int fidx, float atr) =>
     z.push(float(ft))
     z.push(float(dir))
     z.push(tp)
@@ -160,10 +179,11 @@ f_push(array<float> z, int ft, int dir, float tp, float bt, int conf, int fidx) 
     z.push(float(conf))
     z.push(0.0)
     z.push(float(fidx))
+    z.push(na(atr) ? -1.0 : atr)   // frozen formation ATR of this source candle, -1 = unavailable
     true
 
 // ═══════════════════════ SOURCE-CONTEXT LIFECYCLE ENGINE (runs inside request.security) ════════
-// Returns the published snapshot (array<float>, 7 floats per zone, oldest first). The same array object
+// Returns the published snapshot (array<float>, 8 floats per zone, oldest first). The same array object
 // is returned on every bar on which nothing changed; a published array is never mutated.
 // Window policy: candle c is processed only if c > lastCandle - budget, and a zone expires once
 // (c - formationCandle) >= budget, so live == fresh reconstruction.
@@ -172,6 +192,8 @@ f_engine(int cap, int minTicks, int budget) =>
     var array<float> pub = array.new_float(0)
     var float lastProc = 0.0
     array<float> out = na
+    float atrS = ta.atr(14)      // source-timeframe ATR, evaluated every bar
+    float fatr1 = atrS[1]        // ATR on the SAME completed candle [1] as the formation OHLC
     float h1 = high[1]
     float l1 = low[1]
     float c1 = close[1]
@@ -189,19 +211,19 @@ f_engine(int cap, int minTicks, int budget) =>
             lastProc := t1
             bool dirty = false
             // 1) drop zones flagged inverted on the previous source bar
-            int n0 = int(Z.size() / 7)
+            int n0 = int(Z.size() / ZS)
             if n0 > 0
                 for i = n0 - 1 to 0
-                    if math.abs(Z.get(i * 7 + 1)) == 2.0
-                        for k = 1 to 7
-                            Z.remove(i * 7)
+                    if math.abs(Z.get(i * ZS + 1)) == 2.0
+                        for k = 1 to ZS
+                            Z.remove(i * ZS)
                         dirty := true
             // 2) lifecycle of existing zones on the completed candle. Only candles that OPEN at/after the
             //    formation confirmation are eligible (the formation candle never touches/inverts itself).
-            int n1 = int(Z.size() / 7)
+            int n1 = int(Z.size() / ZS)
             if n1 > 0
                 for i = 0 to n1 - 1
-                    int b = i * 7
+                    int b = i * ZS
                     if t1 >= int(Z.get(b + 4))
                         float cd = Z.get(b + 1)
                         float zt = Z.get(b + 2)
@@ -218,32 +240,32 @@ f_engine(int cap, int minTicks, int budget) =>
                 int bullGap = f_tk(l1) - f_tk(h3)
                 int bearGap = f_tk(l3) - f_tk(h1)
                 if bullGap >= minTicks
-                    f_push(Z, t1, 1, l1, h3, tc1, cidx)
+                    f_push(Z, t1, 1, l1, h3, tc1, cidx, fatr1)
                     dirty := true
                 else if bearGap >= minTicks
-                    f_push(Z, t1, -1, l3, h1, tc1, cidx)
+                    f_push(Z, t1, -1, l3, h1, tc1, cidx, fatr1)
                     dirty := true
             // 4) age expiry (silent, never an inversion). Flagged zones are left so the inversion is published.
-            int n2 = int(Z.size() / 7)
+            int n2 = int(Z.size() / ZS)
             if n2 > 0
                 for i = n2 - 1 to 0
-                    if math.abs(Z.get(i * 7 + 1)) == 1.0 and cidx - int(Z.get(i * 7 + 6)) >= budget
-                        for k = 1 to 7
-                            Z.remove(i * 7)
+                    if math.abs(Z.get(i * ZS + 1)) == 1.0 and cidx - int(Z.get(i * ZS + 6)) >= budget
+                        for k = 1 to ZS
+                            Z.remove(i * ZS)
                         dirty := true
             // 5) capacity: oldest UNFLAGGED zone first, so a just-inverted zone's event is never pruned away
-            int n3 = int(Z.size() / 7)
+            int n3 = int(Z.size() / ZS)
             int nFlag = 0
             if n3 > 0
                 for i = 0 to n3 - 1
-                    if math.abs(Z.get(i * 7 + 1)) == 2.0
+                    if math.abs(Z.get(i * ZS + 1)) == 2.0
                         nFlag += 1
             int over = n3 - nFlag - cap
             int p = 0
-            while over > 0 and p < int(Z.size() / 7)
-                if math.abs(Z.get(p * 7 + 1)) == 1.0
-                    for k = 1 to 7
-                        Z.remove(p * 7)
+            while over > 0 and p < int(Z.size() / ZS)
+                if math.abs(Z.get(p * ZS + 1)) == 1.0
+                    for k = 1 to ZS
+                        Z.remove(p * ZS)
                     over -= 1
                     dirty := true
                 else
@@ -280,7 +302,7 @@ bool act4 = ok4 and al4
 
 // Effective source budget: bound worst-case snapshot memory (see header).
 int  nSlots = (act1 ? 1 : 0) + (act2 ? 1 : 0) + (act3 ? 1 : 0) + (act4 ? 1 : 0)
-int  memBudget = nSlots > 0 ? int(8000000 / (nSlots * 7 * inHtfCap)) : inBudget
+int  memBudget = nSlots > 0 ? int(8000000 / (nSlots * ZS * inHtfCap)) : inBudget
 int  effBudget = memBudget < inBudget ? memBudget : inBudget
 
 array<float> snap1 = na
@@ -321,6 +343,8 @@ var array<int>    ev   = array.new_int(10, 0)
 var array<string> evTf = array.new_string(10, "")
 var int firstTime = time
 var int lastConfClose = na
+var float refPrice = na          // last confirmed chart close: display reference only
+float chartAtr = ta.atr(14)
 int prevCloseT = time_close[1]
 float h2c = high[2]
 float l2c = low[2]
@@ -390,7 +414,7 @@ f_stepChart(Zone z, float hi, float lo, float cl, int bi, int t, int tc) =>
 // The watermark only gates creation of zones that have no store match; matched zones always update.
 f_reconcile(array<Zone> store, int idx, string tfTxt, array<float> snap, int asOf) =>
     bool gen = srcInit.get(idx)
-    int cnt = int(snap.size() / 7)
+    int cnt = int(snap.size() / ZS)
     int m = store.size()
     if m > 0
         for i = 0 to m - 1
@@ -400,7 +424,7 @@ f_reconcile(array<Zone> store, int idx, string tfTxt, array<float> snap, int asO
     int j = 0
     if cnt > 0
         for k = 0 to cnt - 1
-            int base = k * 7
+            int base = k * ZS
             int ft = int(snap.get(base))
             float cd = snap.get(base + 1)
             int d = cd > 0 ? 1 : -1
@@ -409,6 +433,7 @@ f_reconcile(array<Zone> store, int idx, string tfTxt, array<float> snap, int asO
             float zb = snap.get(base + 3)
             int conf = int(snap.get(base + 4))
             int tp = int(snap.get(base + 5))
+            float fa = snap.get(base + 7)
             bool adv = true
             while adv
                 adv := false
@@ -436,7 +461,7 @@ f_reconcile(array<Zone> store, int idx, string tfTxt, array<float> snap, int asO
             else if not flg and ft > wm.get(idx)
                 bool tpd = tp > 0
                 int st = d > 0 ? (tpd ? ST_TAP_BULL : ST_UNT_BULL) : (tpd ? ST_TAP_BEAR : ST_UNT_BEAR)
-                Zone nz = Zone.new(id = syminfo.tickerid + "|" + tfTxt + "|" + str.tostring(ft) + "|" + str.tostring(d), src = idx, tfTxt = tfTxt, dir = d, state = st, top = zt, bottom = zb, formTime = ft, confTime = conf, availTime = time_close, tapped = tpd, tapTime = tp, tapAvail = time_close, lastEvt = asOf, seen = true)
+                Zone nz = Zone.new(id = syminfo.tickerid + "|" + tfTxt + "|" + str.tostring(ft) + "|" + str.tostring(d), src = idx, tfTxt = tfTxt, dir = d, state = st, top = zt, bottom = zb, formTime = ft, confTime = conf, availTime = time_close, width = zt - zb, fatr = fa < 0 ? na : fa, tapped = tpd, tapTime = tp, tapAvail = time_close, lastEvt = asOf, seen = true)
                 store.push(nz)
                 wm.set(idx, ft)
                 // genuine formation = confirmed by the source candle that just completed, after bootstrap
@@ -543,30 +568,100 @@ f_syncDraw(Zone z, bool htf, bool want) =>
             z.mk := na
     true
 
-// Visible limits are applied newest-first per layer; everything beyond the limit is hidden, not untracked.
-f_drawHtf(array<Zone> a) =>
-    int shown = 0
+// ───────────── display selection (never touches lifecycle state or array order) ─────────────
+// Size filter on FROZEN width and FROZEN formation ATR. Tick-aware, so a width exactly at the threshold qualifies.
+f_sizeOk(float width, float fatr, int minT, float mult) =>
+    bool ok = true
+    if mult > 0 and na(fatr)
+        ok := false              // ATR qualification unknown: hide (still tracked)
+    else
+        float thrT = float(minT)
+        if mult > 0
+            float atrT = mult * fatr / syminfo.mintick
+            thrT := atrT > thrT ? atrT : thrT
+        ok := f_tk(width) >= thrT - 0.000001
+    ok
+
+// Nearest-EDGE distance (0 when price is inside or on a boundary).
+f_dist(Zone z, float ref) =>
+    float d = 0.0
+    if f_tk(ref) < f_tk(z.bottom)
+        d := z.bottom - ref
+    else if f_tk(ref) > f_tk(z.top)
+        d := ref - z.top
+    d
+
+// Categories: 0 chart FVG, 1 chart iFVG, 2 HTF above, 3 HTF below, 4 HTF containing price (exclusive).
+f_classify(array<Zone> a, bool htf) =>
     int n = a.size()
     if n > 0
-        for i = n - 1 to 0
-            bool want = inShowHtf and shown < inHtfVis
-            f_syncDraw(a.get(i), true, want)
-            if want
-                shown += 1
+        for i = 0 to n - 1
+            Zone z = a.get(i)
+            z.vis := false
+            z.cat := -1
+            z.dist := f_dist(z, refPrice)
+            if htf
+                if inShowHtf and f_sizeOk(z.width, z.fatr, inHtfMinT, inHtfAtr)
+                    z.cat := f_tk(z.bottom) > f_tk(refPrice) ? 2 : (f_tk(z.top) < f_tk(refPrice) ? 3 : 4)
+            else
+                bool isI = z.state == ST_BULL_IFVG or z.state == ST_BEAR_IFVG
+                bool sizeOk = isI ? f_sizeOk(z.width, z.fatr, inIfvgMinT, inIfvgAtr) : f_sizeOk(z.width, z.fatr, inFvgMinT, inFvgAtr)
+                bool shown = isI ? inShowIfvg : inShowFvg
+                bool distOk = true
+                if inDistOn and z.dist > 0 and not na(chartAtr)
+                    distOk := z.dist <= inDistAtr * chartAtr
+                if shown and sizeOk and distOk
+                    z.cat := isI ? 1 : 0
+    true
+
+// Mark the best `limit` zones of one category. Nearest: smallest edge distance (inside = 0 = first), then most
+// recent formation; on a full tie the later array position wins (formTime is unique per array, so this is stable).
+f_pickCat(array<Zone> a, int cat, int limit) =>
+    int n = a.size()
+    if n > 0 and limit > 0
+        for pick = 1 to limit
+            int best = -1
+            for i = 0 to n - 1
+                Zone z = a.get(i)
+                if z.cat == cat and not z.vis
+                    if best < 0
+                        best := i
+                    else
+                        Zone bz = a.get(best)
+                        bool better = false
+                        if inNearest and z.dist != bz.dist
+                            better := z.dist < bz.dist
+                        else
+                            better := z.formTime >= bz.formTime
+                        if better
+                            best := i
+            if best >= 0
+                Zone sel = a.get(best)
+                sel.vis := true
+    true
+
+f_drawHtf(array<Zone> a) =>
+    f_classify(a, true)
+    f_pickCat(a, 2, inHtfAbove)
+    f_pickCat(a, 3, inHtfBelow)
+    f_pickCat(a, 4, inHtfCont)
+    int n = a.size()
+    if n > 0
+        for i = 0 to n - 1
+            Zone z = a.get(i)
+            f_syncDraw(z, true, z.vis)
     true
 
 f_drawAll() =>
-    if not na(lastConfClose)
-        int shown = 0
+    if not na(lastConfClose) and not na(refPrice)
+        f_classify(chartZ, false)
+        f_pickCat(chartZ, 0, inMaxFvg)
+        f_pickCat(chartZ, 1, inMaxIfvg)
         int n = chartZ.size()
         if n > 0
-            for i = n - 1 to 0
+            for i = 0 to n - 1
                 Zone z = chartZ.get(i)
-                bool isI = z.state == ST_BULL_IFVG or z.state == ST_BEAR_IFVG
-                bool want = (isI ? inShowIfvg : inShowFvg) and shown < inChVis
-                f_syncDraw(z, false, want)
-                if want
-                    shown += 1
+                f_syncDraw(z, false, z.vis)
         f_drawHtf(hz1)
         f_drawHtf(hz2)
         f_drawHtf(hz3)
@@ -592,6 +687,7 @@ bool drawNow = supported and barstate.isconfirmed and (barstate.islast or barsta
 if supported and barstate.isconfirmed
     f_resetEv()
     lastConfClose := time_close
+    refPrice := close
 
     // 1) current-chart layer: step existing zones (only bars AFTER the formation bar are eligible)
     int nc = chartZ.size()
@@ -617,7 +713,7 @@ if supported and barstate.isconfirmed
         if dirN != 0
             float zt = dirN > 0 ? low : l2c
             float zb = dirN > 0 ? h2c : high
-            Zone nz = Zone.new(id = syminfo.tickerid + "|" + timeframe.period + "|" + str.tostring(time) + "|" + str.tostring(dirN), dir = dirN, state = dirN > 0 ? ST_BULL_FVG : ST_BEAR_FVG, top = zt, bottom = zb, formTime = time, confTime = time_close, availTime = time_close, formBar = bar_index)
+            Zone nz = Zone.new(id = syminfo.tickerid + "|" + timeframe.period + "|" + str.tostring(time) + "|" + str.tostring(dirN), dir = dirN, state = dirN > 0 ? ST_BULL_FVG : ST_BEAR_FVG, top = zt, bottom = zb, formTime = time, confTime = time_close, availTime = time_close, width = zt - zb, fatr = chartAtr, formBar = bar_index)
             chartZ.push(nz)
             f_evInc(dirN > 0 ? 0 : 1, "")
     while chartZ.size() > inChCap

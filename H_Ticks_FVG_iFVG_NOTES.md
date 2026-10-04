@@ -44,3 +44,12 @@ A lifecycle engine runs inside `request.security` on each source series (touches
 * **Events:** the first reconciliation per slot is bootstrap and announces nothing; later "new HTF FVG" requires the zone to be confirmed by the just-completed source candle.
 * **Pruning/expiry** never flag inversion; the engine prunes the oldest *unflagged* zone, so a just-inverted zone's removal event is never lost.
 * **Verification status:** static review + Python model tests only. Not compiled in TradingView; not run in Bar Replay.
+
+## Declutter update (display filters; lifecycle rules unchanged)
+* **Detection vs display:** gaps ≥ *Minimum DETECTION size* (default 1 tick) are always detected and tracked. Display filters only choose what is drawn; hidden zones still invert, get tapped and are removed.
+* **Frozen size filter** (separate for chart FVG, chart iFVG, HTF): width ≥ max(min ticks × mintick, ATR multiple × formation ATR). Default 4 ticks / 0.10. Width and ATR(14) are stored at the confirmed formation candle (source ATR from the same source candle for HTF; chart ATR for chart zones) and never change. iFVGs use the original gap's stored ATR. ATR unavailable + multiple > 0 ⇒ hidden (still tracked); multiple 0 turns the ATR part off.
+* **Budgets:** chart: 3 ordinary FVGs, 2 iFVGs (separate). Each HTF source: 1 above (bottom > price), 1 below (top < price), 1 containing (bottom ≤ price ≤ top; boundary contact is "containing" only). Defaults: 15m and 1H on, 4H and 1D off.
+* **Priority:** *Nearest to price* (default) = nearest-edge distance (0 inside), ties → most recent formation, then later array position; or *Most recently formed*. Reference = last confirmed chart close; selection runs only on confirmed bars, via flags, never reordering lifecycle arrays.
+* **Chart distance filter:** distance to nearest edge ≤ 3.0 × current confirmed chart ATR(14); zones containing price always pass; not applied to HTF. If chart ATR is not yet available the filter passes.
+* **Alerts** are tied to tracked lifecycle events and are NOT filtered by display settings: a hidden zone can still alert when it forms/inverts/taps. Visibility changes never alert.
+* **Verification:** static review + 76 Python model checks only. Not compiled in TradingView; no chart or Bar Replay testing.
