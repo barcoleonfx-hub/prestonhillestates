@@ -58,6 +58,7 @@ chk('only the selected variant raises alerts', 'if slot == selSlot' in CODE and 
 chk('STD / PREC labels, pending vs filled vs cancelled styles', all(x in CODE for x in ('"STD"', '"PREC"', 'PENDING', 'FILLED', 'CANCELLED', 'line.style_dashed', 'line.style_dotted')))
 chk('expired / unfilled orders create no Trade (trades are pushed only at fill)', len(re.findall(r'trades\.push\(', CODE)) == 1 and 'trades.push(t)' in fn_text(CODE, 'f_fillTry'))
 chk('standard entry models A/B/C/C-wick still present (mapped into Standard)', all(x in CODE for x in ('f_waitB', 'f_waitC', 'f_cReject', 'A: plain retest', 'B: retest + iFVG', 'C: Fib overlap + rejection', 'Rejection wick (experimental)')))
+chk('f_newDay creates exactly NS models (the runtime error RE10045 on array.get index 4)', len(re.findall(r'Mdl\.new\(slot = \d\)', fn_text(CODE, 'f_newDay'))) == int(re.search(r'const int NS = (\d+)', CODE).group(1)))
 chk('size under TradingView-safe budget when stripped (< 100k chars)', len(open(os.path.join(ROOT, 'H_Ticks_C_10AM_Precision_paste.pine'), encoding='utf-8').read()) < 100000)
 if OLD:
     for f in ['f_posStep', 'f_waitB', 'f_waitC', 'f_cReject', 'f_exceeded', 'f_fibLvl', 'f_invalidate', 'f_cond']:

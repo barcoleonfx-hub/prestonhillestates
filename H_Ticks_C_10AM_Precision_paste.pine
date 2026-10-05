@@ -896,7 +896,7 @@ f_dayStep(Day dy) =>
             dy.st := 6
     true
 f_newDay(int key, int dow, Day prev) =>
-    Day d = Day.new(key = key, active = dow >= dayofweek.monday and dow <= dayofweek.friday, lvlP = array.new_float(4, na), lvlT = array.new_int(4, na), ms = array.from(Mdl.new(slot = 0), Mdl.new(slot = 1), Mdl.new(slot = 2), Mdl.new(slot = 3)))
+    Day d = Day.new(key = key, active = dow >= dayofweek.monday and dow <= dayofweek.friday, lvlP = array.new_float(4, na), lvlT = array.new_int(4, na), ms = array.from(Mdl.new(slot = 0), Mdl.new(slot = 1), Mdl.new(slot = 2), Mdl.new(slot = 3), Mdl.new(slot = 4)))
     if not na(prev)
         if prev.rthN >= 390
             d.pdH := prev.rthH
