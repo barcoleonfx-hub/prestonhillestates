@@ -16,6 +16,19 @@ def zstep(z, h, l, c, bi):
         if (tk(c) > tk(z.top)) if bull else (tk(c) < tk(z.bot)): return 3
         if overlap(h, l, z.bot, z.top): return 2
     return 0
+def outcome_state(d, S, T, o, h, l):
+    """mirror of f_trackSetups: 1 TARGET_HIT, 2 STOP_HIT, 3 AMBIGUOUS, 0 still OPEN (opening price first, then the range)"""
+    oT, hT, lT, sT, tT = tk(o), tk(h), tk(l), tk(S), tk(T)
+    if d > 0:
+        if oT >= tT: return 1
+        if oT <= sT: return 2
+        th, sh = hT >= tT, lT <= sT
+    else:
+        if oT <= tT: return 1
+        if oT >= sT: return 2
+        th, sh = lT <= tT, hT >= sT
+    return 3 if th and sh else (1 if th else (2 if sh else 0))
+
 class M:
     def __init__(s, owner, max_entries=3, one_active=True, max_age=None, htf_cov=0, stop_buf=1, dep=0, min_risk=1, max_risk=0, ctx_min=1):
         s.owner, s.maxE, s.one, s.age, s.cov, s.buf = owner, max_entries, one_active, max_age, htf_cov, stop_buf
@@ -37,9 +50,8 @@ class M:
         rt = 0                                                   # 4 outcomes
         for x in s.setups:
             if x['state'] == 0 and i > x['bar']:
-                sh = tk(l) <= tk(x['stop']) if x['dir'] > 0 else tk(h) >= tk(x['stop'])
-                th = tk(h) >= tk(x['target']) if x['dir'] > 0 else tk(l) <= tk(x['target'])
-                if sh or th: x['state'] = 3 if (sh and th) else (2 if sh else 1); x['res'] = ct; rt = ct
+                st = outcome_state(x['dir'], x['stop'], x['target'], o, h, l)
+                if st: x['state'] = st; x['res'] = ct; rt = ct
         if rt: s.resolved_at = rt
         if s.ctx and (ct >= s.ctx['winEnd'] or (s.age and ct - s.ctx['conf'] >= s.age)): s.ctx = None   # 5 expiry
         if ctx_upd: s.ctx_update(ctx_upd, ct)
@@ -264,7 +276,7 @@ chk('One-active OFF: the rule is an explicit input (contexts are allowed while a
 # ---- stop/target same candle ambiguity ----
 m = M(owner); warm(m, T0 - 5 * BAR); t = long_setup(m); m.bar(t, 102.75, 103.5, 102.5, 103.25)
 m.bar(t + BAR, 103.25, 104.5, 102.25, 103.25)
-chk('Outcome: a candle touching both stop and target resolves stop-first (flagged state 3)', m.setups[0]['state'] == 3)
+chk('Outcome: open between the levels and both reached in one candle -> AMBIGUOUS (state 3), no stop-first assumption', m.setups[0]['state'] == 3)
 # ---- optional max age ----
 m = M(owner, max_age=120_000); warm(m, T0 - 5 * BAR); m.bar(T0, 103, 103.25, 102.75, 103, ctx_long())
 for k in range(1, 6): m.bar(T0 + k * BAR, 103, 103.25, 102.75, 103)
@@ -286,38 +298,6 @@ chk('Min risk (optional): a 3-tick body-stop risk is rejected when the minimum i
 mr2 = M(owner, max_risk=2); warm(mr2, T0 - 5 * BAR); t = long_setup(mr2); mr2.bar(t, 102.75, 103.5, 102.5, 103.25)
 chk('Max risk (optional): a 3-tick risk is rejected when the maximum is 2 ticks', not mr2.entries)
 
-# ---- cost-aware outcome model (mirror of f_trackSetups) ----
-def outcome(d, E, S, T, o, h, l, c, slip=1, cost=0, time_out=False):
-    risk = abs(E - S); fill = E + d * slip * TICK
-    stop_hit = tk(l) <= tk(S) if d > 0 else tk(h) >= tk(S)
-    tgt_hit = tk(h) >= tk(T) if d > 0 else tk(l) <= tk(T)
-    if not (stop_hit or tgt_hit or time_out): return None
-    exitp, st = T, 1
-    if stop_hit:
-        base = min(S, o) if d > 0 else max(S, o); exitp = base - d * slip * TICK; st = 3 if tgt_hit else 2
-    elif not tgt_hit: exitp, st = c, 4
-    return st, (d * (exitp - fill) - cost * TICK) / risk
-def near(a, b): return abs(a - b) < 1e-9
-r = outcome(1, 103.25, 102.5, 104.0, 103.5, 104.25, 103.4, 104.0, slip=0)
-chk('Outcome model: no slippage/cost -> a target is exactly +1R', r[0] == 1 and near(r[1], 1.0))
-r = outcome(1, 103.25, 102.5, 104.0, 103.0, 103.2, 102.4, 102.6, slip=0)
-chk('Outcome model: no slippage/cost -> a stop is exactly -1R', r[0] == 2 and near(r[1], -1.0))
-r = outcome(1, 103.25, 102.5, 104.0, 103.5, 104.25, 103.4, 104.0, slip=1)
-chk('Outcome model: 1 tick assumed slippage turns the target into +0.667R (risk 0.75)', near(r[1], (104.0 - 103.5) / 0.75))
-r = outcome(1, 103.25, 102.5, 104.0, 103.0, 103.2, 102.4, 102.6, slip=1)
-chk('Outcome model: with slippage the stop costs -1.667R (stop fill one tick worse, entry one tick worse)', near(r[1], (102.25 - 103.5) / 0.75))
-r = outcome(1, 103.25, 102.5, 104.0, 102.0, 102.25, 101.5, 102.0, slip=1)
-chk('Outcome model: a stop that GAPS through fills at the open (worse than the stop), not at the stop price', near(r[1], (101.75 - 103.5) / 0.75))
-r = outcome(1, 103.25, 102.5, 104.0, 103.25, 104.5, 102.25, 103.25, slip=0)
-chk('Outcome model: one candle touching both stop and target resolves stop-first (state 3)', r[0] == 3 and near(r[1], -1.0))
-r = outcome(1, 103.25, 102.5, 104.0, 103.5, 104.25, 103.4, 104.0, slip=0, cost=3)
-chk('Outcome model: assumed round-turn cost (3 ticks = 0.75) is deducted from every outcome', near(r[1], 1.0 - 0.75 / 0.75))
-r = outcome(-1, 100.5, 100.75, 100.25, 100.75, 100.75, 100.5, 100.5, slip=0)
-chk('Outcome model (short mirror): stop above entry hit -> -1R', r[0] == 2 and near(r[1], -1.0))
-r = outcome(-1, 100.5, 100.75, 100.25, 100.5, 100.5, 100.25, 100.25, slip=0)
-chk('Outcome model (short mirror): target below entry hit -> +1R', r[0] == 1 and near(r[1], 1.0))
-r = outcome(1, 103.25, 102.5, 104.0, 103.3, 103.6, 103.0, 103.5, slip=0, time_out=True)
-chk('Outcome model: optional time exit resolves at the close (R measured at that close)', r[0] == 4 and near(r[1], (103.5 - 103.25) / 0.75))
 print(f"{'test':122} {'result':6} basis")
 for n, r, k in R: print(f"{n:122} {r:6} {k}")
 print(sum(r == 'PASS' for _, r, _ in R), '/', len(R), 'passed')

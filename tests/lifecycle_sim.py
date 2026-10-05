@@ -233,12 +233,7 @@ chk('Repair: watermark does not block updates to existing zones (tap on ft<=wm a
 def tok_add(cur, tf):
     t = cur.split(','); return cur if tf in t else (tf if cur == '' else cur + ',' + tf)
 chk('Repair6: "5m" and "15m" are distinct tokens, true duplicate ignored', tok_add(tok_add('15m', '5m'), '15m') == '15m,5m' and tok_add('', '1H') == '1H')
-# memory bound
-def bound(slots, budget, cap):
-    eff = min(budget, 8_000_000 // (slots * 7 * cap)); return eff, slots * eff * 7 * cap * 8 / 1e6
-for sl, bu, cp in [(3, 1000, 100), (4, 1000, 100), (4, 4000, 200), (4, 1000, 200)]:
-    eff, mb = bound(sl, bu, cp); print(f"   memory bound slots={sl} budget={bu} cap={cp}: effective budget {eff}, worst-case {mb:.1f} MB")
-chk('Repair3: default worst-case bound <= 64 MB and max settings are clamped to <= 64 MB', bound(4, 1000, 100)[1] <= 64 and bound(4, 4000, 200)[1] <= 64.01)
+# (memory-bound clamp removed from the indicator: horizons are time-based and capacity overflow marks coverage UNKNOWN; see tests/report_sim.py)
 
 # ======================= display-filter models (mirror f_sizeOk / f_dist / f_classify / f_pickCat) =======================
 def size_ok(width, fatr, minT, mult):
