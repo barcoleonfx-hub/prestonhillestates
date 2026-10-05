@@ -8,8 +8,11 @@ def chk(name, ok): res.append(ok); print(f'{name:110s} {"PASS" if ok else "FAIL"
 defs = set(re.findall(r'^(f_\w+)\(', CODE, re.M)); calls = set(re.findall(r'\b(f_\w+)\(', CODE))
 chk('every f_ function that is called is defined', not (calls - defs))
 chk('no unused helper functions left', not [d for d in defs if len(re.findall(r'\b' + d + r'\(', CODE)) < 2])
-for w in ['chartZ', 'f_evalCand', 'f_decisive', 'f_pickTrigger', 'f_stepChart', 'inUse15', 'z15', 'f_enter(', 'f_drawCtx']:
+for w in ['f_evalCand', 'f_decisive', 'f_pickTrigger', 'inUse15', 'z15', 'f_enter(', 'f_drawCtx', 'timeframe.isseconds']:
     chk(f'A-only code removed: {w}', w not in CODE)
+chk('runs on a standard 1-minute chart, not 30s', 'timeframe.isminutes and timeframe.multiplier == 1' in CODE and 'Switch to a standard 1-minute chart' in CODE and '30-second' not in CODE)
+chk('1m trigger is detected on the chart itself (native gaps, inversion at the candle close)', 'f_stepChart(zc, high, low, close, bar_index, time, time_close)' in CODE and 'f_armInv(0, time_close, zc.dir > 0 ? -1 : 1, high, low, zc.top, zc.bottom, zc.formTime)' in CODE)
+chk('no 30s wording left', '30s' not in CODE.replace('"30s"', ''))
 chk('indicator, not strategy', 'indicator(' in CODE and 'strategy(' not in CODE)
 chk('title says B', 'indicator("H Ticks B' in CODE)
 # rules

@@ -3,7 +3,7 @@
 // H Ticks B — TAP + TRIGGER : a 15m / 1H / 4H gap is TAPPED in the bias direction -> a later 1m or 2m FVG inverts in that
 //                              direction -> entry at the close of the candle that processes it -> stop beyond the inversion
 //                              candle -> target exactly 1R.     (Indicator B. Indicator A is the 30s chain, a separate script.)
-// REQUIRES A STANDARD 30-SECOND CHART. Anything else shows "Switch to a standard 30-second chart" and generates nothing.
+// REQUIRES A STANDARD 1-MINUTE CHART. Anything else shows "Switch to a standard 1-minute chart" and generates nothing. The 1m trigger is a 1m gap inverting ON the chart; the optional 2m trigger comes from a 2m request.
 //   1. BIAS: the chosen Bias source (15m structure / 4H structure / VWAP / EMAs), or OFF with the Relaxed tickbox.
 //   2. TAP (arms): a tracked 15m/1H/4H gap, pointing the SAME way as the bias, is first touched by price inside an enabled
 //      entry window. One tap is armed at a time. The arm ends at the window end, at a bias flip, or at an entry.
@@ -29,7 +29,7 @@ const string GRP_APP = "Chart appearance"
 const string GRP_ST  = "Statistics"
 const string GRP_DBG = "Debug"
 const string GRP_AL  = "Alerts"
-string inCtxSel = input.string("Auto (1m, 2m)", "Trigger timeframe", options = ["Auto (1m, 2m)", "1m only", "2m only"], group = GRP_CTX, tooltip = "Which source timeframes may supply the trigger inversion. Auto: either a 1m or a 2m inversion (whichever comes first).")
+string inCtxSel = input.string("Auto (1m, 2m)", "Trigger timeframe", options = ["Auto (1m, 2m)", "1m only", "2m only"], group = GRP_CTX, tooltip = "Which timeframes may supply the trigger inversion. 1m = a 1m gap inverting on the chart (entry at that candle close). 2m = a 2m gap inverting (known one chart candle later). Auto: either, whichever comes first.")
 bool   inRelaxWin = input.bool(false, "Relaxed: allow ALL hours (ignore the windows above)", group = GRP_WIN, tooltip = "OFF = original windows. ON = contexts and entries are accepted at any time Mon-Fri; the whole New York trading day (18:00 to 18:00) is ONE window instance with the usual entry limit, so a context can live until 18:00 NY. Stats then count every bar under the 'outside any window' row.")
 bool   inWinAsia = input.bool(true, "Window A: Asia open -> London open", group = GRP_WIN)
 bool   inWinAm = input.bool(true, "Window B: New York morning 09:45-11:30", group = GRP_WIN, tooltip = "Start inclusive, end exclusive. BOTH the context inversion and the entry must belong to the same window instance (max 3 entries per instance, one unresolved setup at a time).")
@@ -42,14 +42,14 @@ int    inEmaS = input.int(50, "EMA slow length (5m, used by EMAs)", minval = 2, 
 int    inMaxRisk = input.int(80, "Maximum risk (ticks); wider setups are skipped", minval = 4, group = GRP_Q, tooltip = "Risk = entry to stop. NQ: 4 ticks = 1 point. 80 ticks = 20 points.")
 string inConf = input.string("None", "Confluence at the trigger", options = ["None", "VWAP side", "EMA 9/21 trend", "VWAP + EMA stack"], group = GRP_Q, tooltip = "None = off. VWAP side: close above (long) / below (short) the NY-09:30-anchored VWAP. EMA 9/21 trend: 1m EMA9 above/below EMA21. VWAP + EMA stack: VWAP side AND close beyond both EMAs with EMA9 beyond EMA21. Evaluated at the trigger, not at the tap.")
 bool   inClear = input.bool(true, "Require a clear path to 1R (HTF gaps + 3m swing)", group = GRP_Q, tooltip = "ON = skip the setup if an opposing 15m/1H/4H gap or an unconsumed 3m swing level sits between entry and the 1R target (unknown coverage also skips). OFF = no path check.")
-bool   inShowPair = input.bool(true, "Show the context gap + 30s trigger gap of every setup", group = GRP_APP)
+bool   inShowPair = input.bool(true, "Show the tapped gap + trigger gap of every setup", group = GRP_APP)
 bool   inShowHtf = input.bool(false, "Show nearby HTF gap boxes (clutter; OFF by default)", group = GRP_APP, tooltip = "Display only. Obstacle checks ALWAYS use all tracked 15m/1H/4H gaps, shown or hidden.")
 bool   inShowMarkers = input.bool(false, "Show detail markers (retest, stop anchor, inversion candles)", group = GRP_APP, tooltip = "Small labels that explain how a setup formed. The same facts are always in the label tooltips.")
 bool   inShowRR = input.bool(true, "Show risk/reward shading", group = GRP_APP)
 string inTheme = input.string("Light", "Theme (labels and tables)", options = ["Light", "Dark"], group = GRP_APP, tooltip = "Light: black entry line. Dark: white entry line (black would be invisible). Tables always use opaque backgrounds.")
 bool   inStats = input.bool(true, "Show the small stats box (top-right)", group = GRP_ST)
 bool   inDaily = input.bool(false, "Optional: daily breakdown under the stats box", group = GRP_ST)
-int    inRepDays = input.int(20, "Days reported (stats box and debug counts)", minval = 1, maxval = 20, group = GRP_ST, tooltip = "How many of the latest Mon-Fri New York dates the stats box and the debug counts cover. If the chart has fewer dates loaded, everything available is used and Coverage reads Partial. TradingView limits how many 30s bars are loaded; the script cannot add more.")
+int    inRepDays = input.int(20, "Days reported (stats box and debug counts)", minval = 1, maxval = 20, group = GRP_ST, tooltip = "How many of the latest Mon-Fri New York dates the stats box and the debug counts cover. If the chart has fewer dates loaded, everything available is used and Coverage reads Partial. TradingView limits how many 1m bars are loaded; the script cannot add more.")
 bool   inDebug = input.bool(false, "Debug panel: per-date / per-session funnel, first failed gate, lock intervals, source readiness, rejection records", group = GRP_DBG, tooltip = "Counts cover the reported NY dates (setting: Days reported). Every rejected candidate is counted once at its FIRST failed gate and written to Pine Logs with timestamps, source timeframe and measured value vs threshold.")
 bool   alEntry = input.bool(true, "Alert on each new entry", group = GRP_AL)
 bool   alTarget = input.bool(true, "Alert when a setup hits its target", group = GRP_AL)
@@ -60,6 +60,8 @@ const string TZ_NY = "America/New_York"
 const int REP_MAX = 20
 int    REP_DATES = inRepDays
 const int DRAW_MAX = 40
+const int inChCap = 200
+const int inChWin = 1500
 const int MAX_ENTRIES = 3
 const int LS = 4
 const int LVL_CAP = 200
@@ -245,7 +247,7 @@ type Setup
     int    ctxInvT
     float  ctxInvPx
     string trgId = ""
-    string trgTf = "30s"
+    string trgTf = "1m"
     int    trgInvT
     float  trgInvPx
     string tip = ""
@@ -608,7 +610,7 @@ f_bias15() =>
 
 // ═════════════════════════════ CHART SUPPORT, SOURCES, REQUESTS ═════════════════════════════
 bool stdChart  = chart.is_standard and not timeframe.isticks
-bool supported = stdChart and timeframe.isseconds and timeframe.multiplier == 30
+bool supported = stdChart and timeframe.isminutes and timeframe.multiplier == 1
 int  chartSecs = supported ? timeframe.in_seconds() : 0
 int  chartMs   = chartSecs * 1000
 
@@ -633,7 +635,7 @@ int  secL = 180
 bool actL = supported and chartSecs > 0 and secL % chartSecs == 0
 bool sel1 = inCtxSel == "Auto (1m, 2m)" or inCtxSel == "1m only"
 bool sel2 = inCtxSel == "Auto (1m, 2m)" or inCtxSel == "2m only"
-bool actC0 = supported and sel1 and chartSecs > 0 and 60 % chartSecs == 0
+bool actC0 = false
 bool actC1 = supported and sel2 and chartSecs > 0 and 120 % chartSecs == 0
 bool actC2 = false
 bool actC3 = false
@@ -743,6 +745,7 @@ if act3
 if act4
     snap4 := request.security(syminfo.tickerid, tf4, f_engine(inHtfCap, inMinTick, hrz4), lookahead = barmerge.lookahead_on)
     asOf4 := request.security(syminfo.tickerid, tf4, time_close[1], lookahead = barmerge.lookahead_on)
+var array<Zone>   chartZ = array.new<Zone>()
 var array<Zone>   hz1 = array.new<Zone>()
 var array<Zone>   hz2 = array.new<Zone>()
 var array<Zone>   hz3 = array.new<Zone>()
@@ -768,8 +771,6 @@ int   prevCloseT = time_close[1]
 float h2c = high[2]
 float l2c = low[2]
 var array<Ctx>    cxs = array.from(Ctx.new(k = 0, tfTxt = "1m", tfSecs = 60), Ctx.new(k = 1, tfTxt = "2m", tfSecs = 120), Ctx.new(k = 2, tfTxt = "3m", tfSecs = 180), Ctx.new(k = 3, tfTxt = "5m", tfSecs = 300))
-var array<int>    fnl = array.new_int(NCTX * FN, 0)    // per-timeframe funnel: inversions, admitted, retests, eligible 30s inversions, impulse, stop/risk, clear path, entries
-var array<int>    fnb = array.new_int(NCTX * FB, 0)
 // Diagnostic matrix: for each NY reporting date (same order as dKey) x session (0 Asia, 1 NY morning, 2 NY afternoon, 3 outside any
 // window) x DGN columns. Layout: 0 eligible bars, 1 bars fully covered, 2 bars with 15m bias UNKNOWN, 3-6 context inversions 1m/2m/3m/5m,
 // 7 contexts admitted, 8 retested, 9 candidates, 10 formed-after-context, 11 overlap, 12 impulse, 13 stop/risk, 14 clear path,
@@ -1675,6 +1676,30 @@ f_dateTxt(int k) =>
     str.substring(t, 4, 6) + "-" + str.substring(t, 6, 8)
 
 // ═════════════ INDICATOR B: HTF gap tapped in the bias direction -> 1m / 2m inversion in that direction ═════════════
+// One chart-layer lifecycle step. Returns 0 none, 1 inverted, 2 removed (touch), 3 removed (invalidation).
+f_stepChart(Zone z, float hi, float lo, float cl, int bi, int t, int tc) =>
+    int r = 0
+    if bi > z.formBar
+        bool bull = z.dir > 0
+        if z.state == ST_BULL_FVG or z.state == ST_BEAR_FVG
+            // inversion: confirmed close strictly through the opposite OUTER boundary
+            bool inv = bull ? f_tk(cl) < f_tk(z.bottom) : f_tk(cl) > f_tk(z.top)
+            if inv
+                z.state := bull ? ST_BEAR_IFVG : ST_BULL_IFVG
+                z.invBar := bi
+                z.invTime := t
+                z.invAvail := tc
+                r := 1
+        else if bi > z.invBar
+            // the inversion candle (bi == invBar) can never remove the new iFVG
+            bool invalid = bull ? f_tk(cl) > f_tk(z.top) : f_tk(cl) < f_tk(z.bottom)
+            if invalid
+                r := 3
+            else if f_overlap(hi, lo, z.bottom, z.top)
+                r := 2
+    r
+
+
 f_vwapOk(int dir) =>
     not na(vwapNy) and (dir > 0 ? close > vwapNy : close < vwapNy)
 
@@ -1995,6 +2020,29 @@ if supported and barstate.isconfirmed
         f_lvlSync(snapL, asOfL)
     f_lvlConsume()
     int nBefore = setups.size()
+    // 1m trigger gaps live on the chart itself (chart timeframe = 1m): step the tracked gaps, then add the gap confirmed by THIS candle
+    if sel1
+        int ncz = chartZ.size()
+        if ncz > 0
+            for i = ncz - 1 to 0
+                Zone zc = chartZ.get(i)
+                int rz = f_stepChart(zc, high, low, close, bar_index, time, time_close)
+                if rz == 1
+                    f_armInv(0, time_close, zc.dir > 0 ? -1 : 1, high, low, zc.top, zc.bottom, zc.formTime)
+                else if rz >= 2 or bar_index - zc.formBar >= inChWin
+                    f_destroy(zc)
+                    chartZ.remove(i)
+        if bar_index >= 2 and not na(h2c) and not na(l2c)
+            int bullGap = f_tk(low) - f_tk(h2c)
+            int bearGap = f_tk(l2c) - f_tk(high)
+            int dirN = bullGap >= inMinTick ? 1 : (bearGap >= inMinTick ? -1 : 0)
+            if dirN != 0
+                float zt = dirN > 0 ? low : l2c
+                float zb = dirN > 0 ? h2c : high
+                chartZ.push(Zone.new(id = syminfo.tickerid + "|" + timeframe.period + "|" + str.tostring(time) + "|" + str.tostring(dirN), dir = dirN, state = dirN > 0 ? ST_BULL_FVG : ST_BEAR_FVG, top = zt, bottom = zb, formTime = time, confTime = time_close, availTime = time_close, width = zt - zb, fatr = chartAtr, formBar = bar_index))
+        while chartZ.size() > inChCap
+            Zone zold = chartZ.shift()
+            f_destroy(zold)
     if actC0
         f_ctxSync(0, snapC0, asOfC0, clsC0, hiC0, loC0)
     if actC1
@@ -2050,7 +2098,7 @@ f_srcLine(int idx, string nm, bool act) =>
 
 if barstate.islast
     if not supported
-        f_bx(0, "Switch to a standard 30-second chart", "")
+        f_bx(0, "Switch to a standard 1-minute chart", "")
         table.clear(stBox, 0, 1, 0, 5 + REP_MAX)
     else if inStats
         array<int> rd = f_reportDates()
@@ -2114,9 +2162,9 @@ if barstate.islast
         dr += 1
         f_dl(dr, "SOURCES: first data -> ready", true)
         dr += 1
-        f_dl(dr, f_srcLine(IX_CTX, "1m trigger", actCtxA.get(0)), false)
+        f_dl(dr, "1m trigger: " + (sel1 ? "chart gaps (" + str.tostring(chartZ.size()) + " tracked)" : "off"), false)
         dr += 1
-        f_dl(dr, f_srcLine(IX_CTX + 1, "2m trigger", actCtxA.get(1)), false)
+        f_dl(dr, f_srcLine(IX_CTX + 1, "2m trigger (2m request)", actCtxA.get(1)), false)
         dr += 1
         f_dl(dr, f_srcLine(IX_LVL, "3m swing levels", actL), false)
         dr += 1
