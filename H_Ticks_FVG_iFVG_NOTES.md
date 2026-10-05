@@ -224,3 +224,7 @@ New setting "Days reported (stats box and debug counts)", default 20 (1-20), rep
 - 15s candles come from `request.security_lower_tf("15S")`; the two 15s candles of each closed 30s bar are stepped in order with the same gap/inversion rules as the 30s gaps. A 15s gap that inverts on the bar and still stands joins the trigger candidates; everything after that (overlap with the context gap, freshness, impulse test on the 30s candle, stop, 1R, clear path, gates) is unchanged.
 - Touch/invalidation on the SAME 30s bar as the inversion never removes it (judged from the next bar).
 - Not compiled or replayed by me; needs 15s data on the TradingView plan. Entries from a 15s trigger say "15s trigger confirmed" in the label tooltip.
+
+## Bias source setting
+- New group "Directional bias": `inBiasSrc` = 15m structure (default, unchanged) | 4H structure (same swing-break engine on 240m) | VWAP (daily-session VWAP of the confirmed chart bar, bull above / bear below) | EMAs (5m EMA `inEmaF`/`inEmaS`, confirmed [1]: bull close>fast>slow, bear close<fast<slow, else no bias). Everything downstream (context creation, cancel on flip, entry re-check, counters) reads the same `biasDir`; only message/label text is dynamic (`biasTxt`).
+- Not compiled or replayed by me. 4H structure needs many days of loaded history, so expect "bias unknown" for a long time on short history.

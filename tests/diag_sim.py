@@ -22,7 +22,7 @@ same = ['f_pickTrigger', 'f_selectWindow', 'f_winCand', 'f_localTs', 'f_structCh
 for n in same:
     o_, n_ = fn(OLD, n), fn(NEW, n)
     if n == 'f_enter':   # only the optional 15s trigger label / timing helper differ (identical when the 15s option is off)
-        n_ = n_.replace('(t.tfTxt == "" ? "30s" : t.tfTxt) + " trigger confirmed: "', '"30s trigger confirmed: "').replace('f_zms(t)', 'chartMs')
+        n_ = n_.replace('(t.tfTxt == "" ? "30s" : t.tfTxt) + " trigger confirmed: "', '"30s trigger confirmed: "').replace('f_zms(t)', 'chartMs').replace('f_biasTip(bull) + "\\n"', '"15m bias: " + (bull ? "bullish (close above swing high " : "bearish (close below swing low ") + str.tostring(blR, format.mintick) + ", pivot " + f_nyT(int(btR)) + " NY, break confirmed " + f_nyT(int(baR)) + " NY)\\n"')
     chk(f'{n}: body byte-identical to the previous commit', o_ == n_, 'TEXT DIFF vs HEAD')
 ev_o, ev_n = fn(OLD, 'f_evalCand'), fn(NEW, 'f_evalCand')
 chk('f_evalCand: every if / else-if / loop condition identical (only messages and diagnostic fields added)', cond_lines(ev_o) == cond_lines(ev_n), 'TEXT DIFF vs HEAD')

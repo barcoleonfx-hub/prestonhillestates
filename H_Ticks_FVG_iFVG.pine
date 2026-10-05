@@ -39,6 +39,7 @@ indicator("H Ticks — FVG / iFVG", shorttitle = "H Ticks", overlay = true, max_
 const string GRP_CTX = "Context timeframe"
 const string GRP_WIN = "Entry windows (Asia 09:00 Tokyo -> 08:00 London, NY 09:45-11:30, NY 14:30-15:30; DST-aware; Mon-Fri)"
 const string GRP_Q   = "Setup quality"
+const string GRP_BIAS = "Directional bias"
 const string GRP_APP = "Chart appearance"
 const string GRP_ST  = "Statistics"
 const string GRP_DBG = "Debug"
@@ -49,6 +50,9 @@ bool   inWinAm = input.bool(true, "Window B: New York morning 09:45-11:30", grou
 bool   inWinPm = input.bool(true, "Window C: New York afternoon 14:30-15:30", group = GRP_WIN)
 string inPreset = input.string("Standard", "Impulse preset (decisive 30s inversion candle)", options = ["Standard", "Strong"], group = GRP_Q, tooltip = "Standard: body >= 0.8 x prev ATR, body/range >= 0.65, close in the outer 20% of the range. Strong: 1.0 x, 0.70, outer 15%. Both: body points in the setup direction and the close extends beyond the trigger gap boundary by max(1 tick, 0.10 x prev ATR). Starting parameters, not optimised or proven.")
 int    inMinTick = input.int(1, "Minimum gap size (ticks, all gap sources)", minval = 1, group = GRP_Q, tooltip = "Gaps at least this wide are detected and may form contexts, triggers and obstacles.")
+string inBiasSrc = input.string("15m structure", "Bias source", options = ["15m structure", "4H structure", "VWAP", "EMAs"], group = GRP_BIAS, tooltip = "Which direction filter a context must agree with. 15m structure = the original swing-break bias (default). 4H structure = the same engine on 4H candles (slow; needs many days of loaded history). VWAP = daily-session VWAP: bullish above, bearish below. EMAs = on 5m: bullish when price > fast EMA > slow EMA, bearish when price < fast < slow, otherwise no bias. If the bias flips against a pending context, that context is cancelled.")
+int    inEmaF = input.int(21, "EMA fast length (5m, used by EMAs)", minval = 1, group = GRP_BIAS)
+int    inEmaS = input.int(50, "EMA slow length (5m, used by EMAs)", minval = 2, group = GRP_BIAS)
 bool   inUse15 = input.bool(false, "Also accept 15s inversions as the trigger (30s chart only)", group = GRP_Q, tooltip = "OFF = original behaviour. ON = a fresh same-direction inverted 15s gap that overlaps the context gap can trigger exactly like a 30s one (same impulse test on the 30s candle, same stop, same gates). Needs 15s data on your TradingView plan.")
 int    inMin15 = input.int(3, "Minimum 15s trigger gap size (ticks)", minval = 1, group = GRP_Q, tooltip = "15s gaps narrower than this are ignored. The 30s gap size is the setting above.")
 bool   inShowPair = input.bool(true, "Show the context gap + 30s trigger gap of every setup", group = GRP_APP)
@@ -712,12 +716,33 @@ if actC3
 if actL
     snapL := request.security(syminfo.tickerid, "3", f_lvlEngine(LVL_CAP, hrzL), lookahead = barmerge.lookahead_on)
     asOfL := request.security(syminfo.tickerid, "3", time_close[1], lookahead = barmerge.lookahead_on)
+bool   biasStruct = inBiasSrc == "15m structure" or inBiasSrc == "4H structure"
+string biasTxt = inBiasSrc == "15m structure" ? "15m" : (inBiasSrc == "4H structure" ? "4H" : (inBiasSrc == "VWAP" ? "VWAP" : "EMA"))
+float  vwapV = ta.vwap(hlc3, timeframe.change("D"))
 if supported
-    [bz_, bl_, bt_, ba_] = request.security(syminfo.tickerid, "15", f_bias15(), lookahead = barmerge.lookahead_on)
-    bzR := bz_
-    blR := bl_
-    btR := bt_
-    baR := ba_
+    if inBiasSrc == "15m structure"
+        [bz_, bl_, bt_, ba_] = request.security(syminfo.tickerid, "15", f_bias15(), lookahead = barmerge.lookahead_on)
+        bzR := bz_
+        blR := bl_
+        btR := bt_
+        baR := ba_
+    else if inBiasSrc == "4H structure"
+        [bz4_, bl4_, bt4_, ba4_] = request.security(syminfo.tickerid, "240", f_bias15(), lookahead = barmerge.lookahead_on)
+        bzR := bz4_
+        blR := bl4_
+        btR := bt4_
+        baR := ba4_
+    else if inBiasSrc == "VWAP"
+        bzR := na(vwapV) ? 0.0 : (close > vwapV ? 1.0 : (close < vwapV ? -1.0 : 0.0))
+        blR := vwapV
+        btR := time
+        baR := time_close
+    else
+        [ef_, es_] = request.security(syminfo.tickerid, "5", [ta.ema(close, inEmaF)[1], ta.ema(close, inEmaS)[1]], lookahead = barmerge.lookahead_on)
+        bzR := na(ef_) or na(es_) ? 0.0 : (close > ef_ and ef_ > es_ ? 1.0 : (close < ef_ and ef_ < es_ ? -1.0 : 0.0))
+        blR := ef_
+        btR := time
+        baR := time_close
 if act1
     snap1 := request.security(syminfo.tickerid, tf1, f_engine(inHtfCap, inMinTick, hrz1), lookahead = barmerge.lookahead_on)
     asOf1 := request.security(syminfo.tickerid, tf1, time_close[1], lookahead = barmerge.lookahead_on)
@@ -2125,11 +2150,14 @@ f_evalCand(Ctx c, Zone t) =>
                     r.why := "Another setup is unresolved"
                 else if biasDir != c.dir
                     r.fail := 14
-                    r.why := "15m bias " + (biasDir > 0 ? "bullish" : (biasDir < 0 ? "bearish" : "unknown")) + " vs context " + (c.dir > 0 ? "long" : "short")
+                    r.why := biasTxt + " bias " + (biasDir > 0 ? "bullish" : (biasDir < 0 ? "bearish" : "unknown")) + " vs context " + (c.dir > 0 ? "long" : "short")
                 else
                     r.stage := 4
                     r.ok := true
     r
+
+f_biasTip(bool bull) =>
+    biasTxt + " bias: " + (biasStruct ? (bull ? "bullish (close above swing high " : "bearish (close below swing low ") + str.tostring(blR, format.mintick) + ", pivot " + f_nyT(int(btR)) + " NY, break confirmed " + f_nyT(int(baR)) + " NY)" : (bull ? "bullish (price above " : "bearish (price below ") + (inBiasSrc == "EMAs" ? "fast EMA " : "VWAP ") + str.tostring(blR, format.mintick) + ")")
 
 // Create the ONE entry from the chosen candidate. All levels are frozen on the record; both gaps are copied into it.
 f_enter(Cand r, Ctx c) =>
@@ -2138,7 +2166,7 @@ f_enter(Cand r, Ctx c) =>
     string sid = str.format_time(time_close, "yyyyMMdd-HHmmss", TZ_NY) + (bull ? "-L" : "-S")
     int dk = f_dateKey(time_close)
     string dirW = bull ? "LONG" : "SHORT"
-    string tip = "Setup " + sid + " " + dirW + " · " + c.winName + " · context " + c.tfTxt + "\n" + "15m bias: " + (bull ? "bullish (close above swing high " : "bearish (close below swing low ") + str.tostring(blR, format.mintick) + ", pivot " + f_nyT(int(btR)) + " NY, break confirmed " + f_nyT(int(baR)) + " NY)\n" + c.tfTxt + " inversion confirmed: " + f_nyT(c.confAsOf) + " NY\n" + "Chart first processed it: " + f_nyT(c.procTime) + " NY\n" + "Retest candle: " + f_nyT(c.retestTime) + " NY\n" + (t.tfTxt == "" ? "30s" : t.tfTxt) + " trigger confirmed: " + f_nyT(time_close) + " NY\n" + "Impulse " + inPreset + ": body " + str.tostring(r.bodyAtr, "#.00") + " x prev ATR\n" + "Stop anchor (" + c.tfTxt + " retest leg): " + str.tostring(r.legX, format.mintick) + " @ " + f_nyT(r.legT) + " NY (+" + str.tostring(r.bufT) + " tick buffer)\n" + "Risk: " + str.tostring(r.riskT) + " ticks (1:1)\n" + "HTF sources checked: " + r.srcTxt + "\n" + "Nearest 3m structural obstacle: " + r.nearTxt
+    string tip = "Setup " + sid + " " + dirW + " · " + c.winName + " · context " + c.tfTxt + "\n" + f_biasTip(bull) + "\n" + c.tfTxt + " inversion confirmed: " + f_nyT(c.confAsOf) + " NY\n" + "Chart first processed it: " + f_nyT(c.procTime) + " NY\n" + "Retest candle: " + f_nyT(c.retestTime) + " NY\n" + (t.tfTxt == "" ? "30s" : t.tfTxt) + " trigger confirmed: " + f_nyT(time_close) + " NY\n" + "Impulse " + inPreset + ": body " + str.tostring(r.bodyAtr, "#.00") + " x prev ATR\n" + "Stop anchor (" + c.tfTxt + " retest leg): " + str.tostring(r.legX, format.mintick) + " @ " + f_nyT(r.legT) + " NY (+" + str.tostring(r.bufT) + " tick buffer)\n" + "Risk: " + str.tostring(r.riskT) + " ticks (1:1)\n" + "HTF sources checked: " + r.srcTxt + "\n" + "Nearest 3m structural obstacle: " + r.nearTxt
     Setup s = Setup.new(id = sid, dateKey = dk, dir = c.dir, entry = r.entry, stop = r.stop, target = r.target, riskT = r.riskT, entryTime = time_close, entryBar = bar_index, winId = c.winId, winName = c.winName, ctxZid = c.zid, srcs = r.srcTxt, ctxTop = c.top, ctxBot = c.bottom, ctxFormT = c.formTime - 2 * c.tfSecs * 1000, trgTop = t.top, trgBot = t.bottom, trgFormT = t.formTime - 2 * f_zms(t), legExt = r.legX, stopAnchorT = r.legT, retestT = c.retestTime, retestPx = c.retestPx, ctxTf = c.tfTxt, ctxId = c.zid, ctxConfT = c.confAsOf, ctxInvT = c.confAsOf - c.tfSecs * 1000, ctxInvPx = c.invPx, trgId = t.id, trgInvT = time, trgInvPx = close, tip = tip)
     setups.push(s)
     f_winInc(c.winId)
@@ -2350,7 +2378,7 @@ if supported and barstate.isconfirmed
         for k = 0 to NCTX - 1
             Ctx cb = cxs.get(k)
             if cb.state != 0 and biasDir != cb.dir
-                cb.lastReason := "15m bias reversed against the pending " + cb.tfTxt + " context"
+                cb.lastReason := biasTxt + " bias reversed against the pending " + cb.tfTxt + " context"
                 f_fb(k, 3)
                 f_dg(f_winIdxN(cb.winName, cb.winStart), 42)
                 f_ctxClear(cb)
@@ -2633,7 +2661,7 @@ if barstate.islast
         array<string> nmLost = array.from("replaced", "discarded at another entry", "window expiry", "closed through", "bias flip")
         array<string> nmImp = array.from("direction", "body/ATR", "body/range", "close position", "extension", "ATR n/a")
         for w = 0 to 2
-            f_dl(dr, sn.get(w) + ": eligible bars " + str.tostring(f_dgSum(rdg, w, 0)) + " (fully covered " + str.tostring(f_dgSum(rdg, w, 1)) + ", 15m bias unknown " + str.tostring(f_dgSum(rdg, w, 2)) + ", open-setup bars " + str.tostring(f_dgSum(rdg, w, 55)) + ") | context inversions 1m " + str.tostring(f_dgSum(rdg, w, 3)) + " / 2m " + str.tostring(f_dgSum(rdg, w, 4)) + " / 3m " + str.tostring(f_dgSum(rdg, w, 5)) + " / 5m " + str.tostring(f_dgSum(rdg, w, 6)), true)
+            f_dl(dr, sn.get(w) + ": eligible bars " + str.tostring(f_dgSum(rdg, w, 0)) + " (fully covered " + str.tostring(f_dgSum(rdg, w, 1)) + ", " + biasTxt + " bias unknown " + str.tostring(f_dgSum(rdg, w, 2)) + ", open-setup bars " + str.tostring(f_dgSum(rdg, w, 55)) + ") | context inversions 1m " + str.tostring(f_dgSum(rdg, w, 3)) + " / 2m " + str.tostring(f_dgSum(rdg, w, 4)) + " / 3m " + str.tostring(f_dgSum(rdg, w, 5)) + " / 5m " + str.tostring(f_dgSum(rdg, w, 6)), true)
             dr += 1
             f_dl(dr, "   admitted(session+bias) " + str.tostring(f_dgSum(rdg, w, 7)) + " > retested " + str.tostring(f_dgSum(rdg, w, 8)) + " > candidates " + str.tostring(f_dgSum(rdg, w, 9)) + " > formed after context " + str.tostring(f_dgSum(rdg, w, 10)) + " > gap overlap " + str.tostring(f_dgSum(rdg, w, 11)) + " > impulse " + str.tostring(f_dgSum(rdg, w, 12)) + " > stop/risk " + str.tostring(f_dgSum(rdg, w, 13)) + " > clear path " + str.tostring(f_dgSum(rdg, w, 14)) + " > admission " + str.tostring(f_dgSum(rdg, w, 15)) + " > ENTRIES " + str.tostring(f_dgSum(rdg, w, 16)), false)
             dr += 1
@@ -2708,7 +2736,7 @@ if barstate.islast
         dr += 1
         f_dl(dr, f_srcLine(2, f_tfText(sec3) + " obstacles", act3), false)
         dr += 1
-        f_dl(dr, "15m bias: " + (biasDir == 0 ? "UNKNOWN (no qualifying break yet) - no contexts" : (biasDir > 0 ? "BULLISH above " : "BEARISH below ") + str.tostring(blR, format.mintick) + " (pivot " + f_nyT(int(btR)) + " NY)"), false)
+        f_dl(dr, biasTxt + " bias: " + (biasDir == 0 ? "UNKNOWN (no qualifying signal yet) - no contexts" : (biasDir > 0 ? "BULLISH above " : "BEARISH below ") + str.tostring(blR, format.mintick) + (biasStruct ? " (pivot " + f_nyT(int(btR)) + " NY)" : "")), false)
         dr += 1
         string lockTxt = "none"
         if setups.size() > 0

@@ -49,7 +49,7 @@ chk('A pivot cannot break on the candle that confirms it (availability never bac
 chk('Code: bias break test runs BEFORE the new pivot is stored; availability = confirming candle close; one break per level',
     CODE.index('f_tk(c1) > f_tk(swH)') < CODE.index('swH := h3') and 'swHB := true' in CODE and 'swHA := float(tc1)' in CODE, 'CODE INSPECTION')
 chk('Code: context needs bias == direction at creation, cancels on opposite bias, entry re-checks bias',
-    '(snap.get(base + 1) > 0 ? -1 : 1) == biasDir' in CODE and 'biasDir != c.dir' in CODE and '"15m bias " + (biasDir > 0' in CODE, 'CODE INSPECTION')
+    '(snap.get(base + 1) > 0 ? -1 : 1) == biasDir' in CODE and 'biasDir != c.dir' in CODE and 'biasTxt + " bias " + (biasDir > 0' in CODE, 'CODE INSPECTION')
 
 # ---------- inversion rules ----------
 def inverts(code, c, top, bot):      # bearish FVG (code<0) inverts upward on close > top; bullish inverts down on close < bottom
@@ -198,7 +198,7 @@ chk('Recorded resolution time stays distinct from the minimum drawing width (sta
 chk('Code: display width uses math.max(actualR, entryTime + 20 * chartMs); resolution marker line at s.resolveTime; guide width labelled display-only',
     'math.max(actualR + inExt * chartMs, s.entryTime + 20 * chartMs)' in CODE and 'f_lineUp(s.lR, s.resolveTime' in CODE and 'display-only' in CODE and 's.resolveTime := time_close' in CODE, 'CODE INSPECTION')
 chk('Code: both original gap boxes retained with shared ID ("3m CONTEXT · id" / "30s TRIGGER · id"), tooltip with NY timestamps, retest marker, stop anchor',
-    all(x in CODE for x in ('" CONTEXT · " + dirW', '"30s TRIGGER · " + dirW', '"retest"', '"stop anchor"', 'f_nyT(c.confAsOf)', '15m bias:', 'Nearest 3m structural obstacle')), 'CODE INSPECTION')
+    all(x in CODE for x in ('" CONTEXT · " + dirW', '"30s TRIGGER · " + dirW', '"retest"', '"stop anchor"', 'f_nyT(c.confAsOf)', 'f_biasTip(bull)', 'biasTxt + " bias: "', 'Nearest 3m structural obstacle')), 'CODE INSPECTION')
 
 # ---------- counts reconcile after recalculation ----------
 rng = random.Random(5); recs = [dict(day=rng.choice([1, 2, 3, 4, 5]), st=rng.choice([0, 1, 2, 3])) for _ in range(60)]
@@ -208,7 +208,7 @@ chk('Code: outcome model unchanged (strictly-after-entry candle, opening-price p
 
 # ---------- simple settings ----------
 inputs = re.findall(r'^\w+\s+(\w+)\s*=\s*input\.', CODE, re.M)
-chk('Only practical user inputs remain (%d): %s' % (len(inputs), ','.join(inputs)), len(inputs) <= 22 and 'inRepDays' in inputs and 'inPreset' in inputs and 'inTheme' in inputs and 'inDebug' in inputs, 'CODE INSPECTION')
+chk('Only practical user inputs remain (%d): %s' % (len(inputs), ','.join(inputs)), len(inputs) <= 26 and 'inRepDays' in inputs and 'inPreset' in inputs and 'inTheme' in inputs and 'inDebug' in inputs, 'CODE INSPECTION')
 chk('Debug defaults OFF; Standard default; Light default', 'inDebug = input.bool(false' in CODE and 'input.string("Standard"' in CODE and 'input.string("Light"' in CODE, 'CODE INSPECTION')
 _vo = set(); _cur = 'top'
 for _l in CODE.split('\n'):
