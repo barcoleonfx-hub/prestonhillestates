@@ -1,4 +1,59 @@
-# H Ticks - 10AM Precision Model C: guide
+# H Ticks - Powell Model C: guide (Contextual preset + Legacy 10am preset)
+
+**Research model. Profitability is unproven.** Everything is *our mechanical reading* of the guide, not Powell's official rules. Simulation on completed 1m
+candles. **Not compiled in TradingView and not chart-tested** (see "Verification status"). The paste file is about 143 KB stripped; whether TradingView accepts
+that size is **unverified** - if it reports "script too large", say so and a lean build (Contextual only) will be made.
+
+## Presets (Settings -> "10. Preset")
+* **Contextual (Powell guide)** - default, described below (sections 10-16 of the settings).
+* **Legacy 10am** - the earlier 10:00-open retest engine (sections 0-9), byte-identical logic to the previous version (checked by `tests/c_check.py`).
+  Existing saved settings keep working: all new inputs were appended after the old ones.
+
+## Rule provenance
+| Tag | Meaning |
+|---|---|
+| GUIDE | concept described in the guide: sweep of a pre-existing level, CISD, FVG/OB/breaker/iFVG areas, retracement entry, Fib 0.705 / 0.79, opposing-liquidity target, key opens as context |
+| OURS | our mechanical choice: CISD reference = first open of the contiguous opposite run into the sweep; area selection policy; breaker = block before the run, broken by a CLOSE; current-session level after N minutes; HTF bias definition; setup priority and replacement rules |
+| OPT | optional experimental filters (all OFF by default): HTF bias, PO3, confluence, iFVG required, chop, engineered-liquidity proximity, SMT reversal role, Fib-in-area |
+| ENG | engineering approximations: self-aggregated candles, late completion across the 17:00-18:00 break, 80%-complete ranges, whole-contract sizing |
+
+## Pipeline (per trading day = 18:00 NY to 17:00 NY)
+1. **Levels** (each with id, type, price, origin, *earliest knowable time*, status untouched/touched/swept): previous completed trading-day H/L (known when the next
+   trading day's first candle arrives), previous regular-session H/L (all 390 candles, known at 16:00), current-session extreme that stood N minutes, frozen
+   opening range (known 10:00), confirmed equal highs/lows, optional completed Asia/London/PO3 ranges. 18:00 / 00:00 / 10:00 opens are drawn as reference only and never
+   create a setup. NWOG/NDOG are **not implemented**.
+2. **Sweep**: a level exceeded by >= N ticks by a candle that opened *after* the level was known. A level created on a candle is first tested on the next candle.
+3. **CISD**: at the sweep the reference (first open of the contiguous opposite-colour run leading into the sweep candle; dojis end a run) is frozen; a *later* source-TF candle must
+   **close** through it. No run = CISD unavailable = setup rejected with a reason.
+4. **Areas** (must exist before an order uses them): FVG (usable after the 3rd candle closes), order block (last opposite candle before the displacement, full high-low, CE = midpoint),
+   breaker (a CLOSE through the block; a wick is not enough), rejection block (our wick/body thresholds), iFVG (opposite gap inverted by a close). An area dies when a 1m candle closes
+   through its far side and is stale once price touched its CE after it was known.
+5. **Selection (deterministic)**: prefer areas overlapping the selected HTF POI, else the CE nearest to the last close on the retracement side, tie -> most recently confirmed, then type.
+   Frozen when the order is armed. A setup formed before the window stays eligible (no fresh sweep needed) until it expires, is invalidated, or a new trading day starts.
+6. **Standard**: limit at the CE; stop = full sweep extreme + buffer (over the cap = rejected, never squeezed); target = nearest *unswept* opposing level known at arming; min planned R 3 on rounded prices; no target = rejected (no farther level substituted).
+7. **Precision** (sub-methods of ONE variant): **Fib** - anchors are the sweep extreme and the first confirmed swing after the CISD (known only when its right side closed, never back-dated); entry
+   high - 0.705*(high-low) (long) / low + 0.705*(high-low) (short); stop reference at 0.79 plus buffer; skipped as stale if 0.705 was already traversed before the anchor was known.
+   **Rejection CE** - a completed local candle (5m default) interacting with the parent area with a directional close and a wick share >= threshold; entry = wick midpoint; stop beyond the local extreme + buffer.
+   If both are on, the first executable candidate wins (same candle -> Fib first). A precision stop ends that *attempt*, not the larger setup.
+8. **Daily sequence** (each variant independently): "One trade per day" (default) or "win ends the day; one retry after a non-win at 50% of the first trade's actual cash risk (whole contracts, rounded down)".
+   A breakeven/time-exit counts as an attempt.
+9. **Simulation**: orders eligible from the candle after arming; touch (or trade-through) fills at the limit; an open beyond the frozen extreme invalidates; fill-candle target touches ignored; entry+stop+target on one candle or stop+target on a later candle = ambiguous = counted as a loss;
+   gaps through the stop exit at the open; slippage adverse; commission per contract per side; hard exit at the open of the first candle at/after the hard-exit time.
+
+## Not implemented (deferred)
+NWOG/NDOG; trailing / breakeven management; SMT *target* role (only the reversal role exists); local FVG / breaker overlap for rejections; retries beyond the one sequence retry; HTF bias beyond the simple
+"close beyond the previous candle" rule; Asia/London/PO3 are optional and off by default.
+
+## Reading the tables
+Funnel (Standard / Precision / Precision-Fib / Precision-Rejection), performance (same columns; planned >=4R / >=5R counts), ledger, "Why no trade?" (latest day detail + cumulative reasons),
+info panel (coverage, bias per timeframe with availability times, current setup, assumptions). Missing data is never counted as "no setup".
+
+## Verification status
+`tests/c_ctx_check.py` tests a Python model of the contextual logic (102 scenario checks, long and mirrored short); `tests/c_check.py` (142 checks) text-checks the Pine and proves the Legacy functions are unchanged.
+**The Pine script itself has not been compiled in TradingView or chart-tested.** The syntax parse used is a third-party parser.
+
+---
+# Previous guide (Legacy 10am preset)
 
 **Research model. Profitability is unproven.** The rules are *our* specification, not Powell's official rules. Everything is a simulation on completed
 1-minute candles. Not compiled in TradingView and not chart-tested by the author (see "Verification status").
