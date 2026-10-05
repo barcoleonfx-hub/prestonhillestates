@@ -1,5 +1,5 @@
 //@version=6
-indicator("H Ticks — FVG / iFVG", shorttitle = "H Ticks FVG/iFVG", overlay = true, max_boxes_count = 500, max_lines_count = 500, max_labels_count = 500, max_bars_back = 500)
+indicator("H Ticks — FVG / iFVG", shorttitle = "H Ticks", overlay = true, max_boxes_count = 500, max_lines_count = 500, max_labels_count = 500, max_bars_back = 500)
 const string GRP_GEN = "General"
 const string GRP_SET = "Setup: 3m context -> retest -> 30s trigger -> fixed 1R"
 const string GRP_WIN = "Entry windows (configured clock windows - NOT an exchange holiday / early-close calendar)"
@@ -403,13 +403,13 @@ f_winCand(int T, bool en, bool valid, int sh, int sm, string stz, int eh, int em
         for s = 0 to 1
             int st = f_localTs(T, stz, -s, sh, sm)
             int e0 = f_localTs(st, etz, 0, eh, em)
-            int en2 = e0 > st ? e0 : f_localTs(st, etz, 1, eh, em)
+            int eEnd = e0 > st ? e0 : f_localTs(st, etz, 1, eh, em)
             int dw = dayofweek(st, stz)
             bool dayOk = inWkd == "Every day" or (dw >= dayofweek.monday and dw <= dayofweek.friday)
-            if dayOk and T >= st and T < en2
+            if dayOk and T >= st and T < eEnd
                 if na(bs) or st > bs
                     bs := st
-                    be := en2
+                    be := eEnd
     [bs, be]
 f_selectWindow(int T) =>
     [sA, eA] = f_winCand(T, inWinAsia, okWinAs, inAsH, inAsM, inAsTz, inLoH, inLoM, inLoTz)
@@ -1125,7 +1125,6 @@ f_tryEntry(Zone t) =>
         int dxi = f_dateIdx(dk)
         if dxi >= 0
             dSetN.set(dxi, dSetN.get(dxi) + 1)
-        needPrune := true
         f_evInc(bull ? 9 : 10, "")
         string riskTxt = str.tostring(rT) + " ticks / " + str.tostring(riskPx * syminfo.pointvalue, "#.##") + " " + syminfo.currency + " per contract"
         string human = "H Ticks ENTRY " + (bull ? "LONG" : "SHORT") + " " + syminfo.ticker + " " + timeframe.period + " | ID " + sid + " | Entry " + str.tostring(entry, format.mintick) + " | Stop " + str.tostring(stop, format.mintick) + " | Target 1R " + str.tostring(target, format.mintick) + " | Risk " + riskTxt + " | Session " + cx.winName + " | 3m context " + str.tostring(cx.bottom, format.mintick) + "-" + str.tostring(cx.top, format.mintick) + " | HTF obstacles checked: " + srcTxt
@@ -1174,7 +1173,6 @@ f_trackSetups() =>
                     s.state := res
                     s.resolveTime := time_close
                     rt := time_close
-                    needPrune := true
                     f_evInc(res == 1 ? 7 : (res == 2 ? 8 : 11), "")
                     bool want = res == 1 ? alTarget : (res == 2 ? alStop : alAmb)
                     if want
@@ -1261,6 +1259,7 @@ if supported and barstate.isconfirmed
     int rt = f_trackSetups()
     if rt > 0
         lastResolveAt := rt
+        needPrune := true
     f_ctxExpire()
     if act0
         f_ctxSync(snap0, asOf0, cls0)
@@ -1277,7 +1276,8 @@ if supported and barstate.isconfirmed
     if cx.state == 2 and cx.retestBar < bar_index
         Zone trg = f_pickTrigger()
         if not na(trg)
-            f_tryEntry(trg)
+            if f_tryEntry(trg)
+                needPrune := true
     if cx.state == 1 and time >= cx.confAsOf
         bool touch = f_overlap(high, low, cx.bottom, cx.top)
         if touch and cx.away >= inDeparture
