@@ -112,30 +112,28 @@ for l in NEW.split('\n'):
     elif re.match(r'^\S', l) and not l.startswith('//'): _cur = 'top:' + l.split('(')[0].split(' ')[0] + ('/islast' if l.startswith('if barstate.islast') else '')
     if re.search(r'\barmI\b', l): _owners.add(_cur)
 chk('tap diagnostic: armI is read / written only by f_armInv, f_tapScan, f_armStep, its declaration and the debug panel: ' + str(sorted(_owners)),
-    _owners <= {'f_armInv', 'f_tapScan', 'f_armStep', 'top:var', 'top:if/islast'}, 'TEXT')
+    _owners <= {'f_armInv', 'f_tapScan', 'f_armStep', 'f_trigLog', 'top:var', 'top:if/islast'}, 'TEXT')
 chk('tap diagnostic: only chart-observed taps (tapTime == time and tapAvail == time_close) count; bias direction = gap direction; inside a window',
-    'z.tapped and z.tapTime == time and z.tapAvail == time_close' in NEW and 'biasDir != 0 and z.dir == biasDir' in NEW and 'f_tapScan(hz1, wT, not na(wsT), weT)' in NEW, 'TEXT')
+    'z.tapped and z.tapTime == time and z.tapAvail == time_close' in NEW and 'if z.dir != biasDir' in NEW and 'if not inWin' in NEW and 'f_dg(wT, 57)' in NEW and 'f_tapScan(hz1, wT, not na(wsT), weT)' in NEW, 'TEXT')
 chk('tap diagnostic: inversion strictly after the tap = source candle OPENED at/after the tap candle closed; same window instance; first valid one ends the arm',
     'if asOf - tfMs < armI.get(2)' in NEW and 'weI != armI.get(3)' in NEW and 'armI.set(0, 0)' in fn(NEW, 'f_armInv') and 'f_armInv(k, asOf, c.tfSecs * 1000)' in fn(NEW, 'f_ctxUpdate') and 'if k <= 1 and dirOk and wideOk' in NEW, 'TEXT')
-chk('tap diagnostic: VWAP anchored NY 09:30 (hmNy >= 570 and hmNy[1] < 570), EMA 9/21 from the confirmed 1m candle [1] (no repaint)',
+chk('tap diagnostic: VWAP anchored NY 09:30 (hmNy >= 570 and hmNy[1] < 570), EMA 9/21 from the confirmed 1m candle [1] (no repaint); confluence judged at the trigger (f_trendOk / f_vwapOk in f_armInv), not at the tap',
     'bool  vwAnchor = hmNy >= 570 and hmNy[1] < 570' in NEW and 'ta.ema(close, 9)[1], ta.ema(close, 21)[1]' in NEW and 'lookahead = barmerge.lookahead_on' in NEW.split('ta.ema(close, 9)')[1][:200], 'TEXT')
+chk('tap diagnostic: every tap and every trigger candidate writes a Pine Logs record (f_tapLog / f_trigLog)', 'f_tapLog(z, why, cf)' in NEW and 'f_trigLog(k, asOf, dirA)' in NEW and 'TAP " + z.tfTxt' in NEW and 'TRIGGER CANDIDATE' in NEW, 'TEXT')
 chk('tap diagnostic: no new entry path (still exactly one f_enter call, no new Setup.new)', NEW.count('f_enter(') == 2 and NEW.count('Setup.new(') == 1, 'TEXT')
 def run_tap(events):
-    arm = None; c = dict(tapB=0, armed=0, vw=0, ema=0, na=0, already=0, trig=0, ended=0)
+    arm = None; c = dict(tapB=0, armed=0, already=0, trig=0, ended=0, strict=0, trend=0, vw=0)
     for e in events:
         if e['kind'] == 'bar':
             if arm and (e['t'] >= arm['wend'] or e['bias'] != arm['dir']): c['ended'] += 1; arm = None
         elif e['kind'] == 'tap' and e['bias'] != 0 and e['zdir'] == e['bias'] and e['inwin']:
-            c['tapB'] += 1
-            if e['cf'] == 3: c['na'] += 1
-            elif e['cf'] == 1: c['vw'] += 1
-            elif e['cf'] == 2: c['ema'] += 1
-            elif arm: c['already'] += 1
+            c['tapB'] += 1                      # NO confluence requirement at the tap
+            if arm: c['already'] += 1
             else: c['armed'] += 1; arm = dict(dir=e['bias'], t=e['t'], wend=e['wend'])
         elif e['kind'] == 'inv' and arm:
             if e['asof'] - e['tf'] < arm['t']: continue
             if e['wend'] != arm['wend']: continue
-            c['trig'] += 1; arm = None
+            c['trig'] += 1; c['strict'] += e['strict']; c['trend'] += e['trend']; c['vw'] += e['vw']; arm = None
     return c, arm
 random.seed(5); bad = 0
 for _ in range(5000):
@@ -144,11 +142,11 @@ for _ in range(5000):
         t += random.randint(1, 4) * 30
         ev.append(dict(kind='bar', t=t, bias=random.choice([1, 1, 1, -1, 0])))
         r = random.random()
-        if r < .25: ev.append(dict(kind='tap', t=t, bias=ev[-1]['bias'], zdir=random.choice([1, -1]), inwin=random.random() < .8, cf=random.choice([0, 0, 0, 1, 2, 3]), wend=600))
-        elif r < .5: ev.append(dict(kind='inv', asof=t, tf=random.choice([60, 120]), wend=random.choice([600, 600, 900])))
+        if r < .25: ev.append(dict(kind='tap', t=t, bias=ev[-1]['bias'], zdir=random.choice([1, -1]), inwin=random.random() < .8, wend=600))
+        elif r < .5: ev.append(dict(kind='inv', asof=t, tf=random.choice([60, 120]), wend=random.choice([600, 600, 900]), strict=random.choice([0, 1]), trend=random.choice([0, 1]), vw=random.choice([0, 1])))
     c, arm = run_tap(ev)
-    if c['tapB'] != c['armed'] + c['vw'] + c['ema'] + c['na'] + c['already'] or c['armed'] != c['trig'] + c['ended'] + (1 if arm else 0): bad += 1
-chk('model: bias-direction in-window taps == armed + not armed; armed == triggered + ended + still armed (5000 random sequences)', bad == 0, 'MODEL')
+    if c['tapB'] != c['armed'] + c['already'] or c['armed'] != c['trig'] + c['ended'] + (1 if arm else 0) or c['strict'] > c['trig'] or c['trend'] > c['trig'] or c['vw'] > c['trig']: bad += 1
+chk('model: bias-direction in-window taps == armed + ignored (no confluence test at the tap); armed == triggered + ended + still armed; each trigger-time variant <= triggers (5000 random sequences)', bad == 0, 'MODEL')
 w = sum(1 for r in res if r[1]); 
 for n, ok, b in res: print(f'{n[:150]:150s} {"PASS" if ok else "FAIL":5s} {b}')
 print(f'{w} / {len(res)} passed'); sys.exit(0 if w == len(res) else 1)

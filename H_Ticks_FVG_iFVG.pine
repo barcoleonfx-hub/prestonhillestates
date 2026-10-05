@@ -74,7 +74,7 @@ const int NCTX = 4
 const int FN = 8
 const int FB = 16
 const int NSS = 4
-const int DGN = 71
+const int DGN = 73
 bool   alAmb = false
 bool   alCtx = false
 bool   alJson = false
@@ -768,11 +768,12 @@ var array<int>    fnb = array.new_int(NCTX * FB, 0)
 // 35 other inversion chosen, 36 unresolved-setup lock, 37 no window), 38-42 context lost (38 replaced, 39 discarded at another entry,
 // 40 window expiry, 41 closed through, 42 bias flip), 43 informational (candle-1 before confirmation), 44-49 impulse FIRST failed
 // sub-check (dir, body/ATR, body/range, close position, extension, unavailable), 50-54 impulse sub-check failed at all, 55 bars with an open setup.
-// TAP DIAGNOSTIC (no entries): 56 HTF gaps tapped on the chart candle (any direction), 57 taps of a gap in the bias direction,
-// 58 unused, 59 ARMED (bias known, in window, VWAP + EMA agree), 60 not armed: VWAP disagrees, 61 not armed: EMA disagrees,
-// 62 tap while already armed, 63 / 64 1m / 2m inversions strictly after the tap (trigger candidates), 65 inversions that straddle
-// the tap, 66 inversions in another window instance, 67 / 68 trigger candidates with VWAP+EMA still agreeing / not agreeing,
-// 69 arms ended by window end or bias flip without an inversion, 70 not armed: VWAP / EMA unavailable.
+// TAP DIAGNOSTIC (no entries): 56 HTF gaps tapped on the chart candle (any direction), 57 in-window taps of a gap in the bias direction,
+// 58 unused, 59 ARMED (bias known, in window, no tap already armed; NO confluence requirement), 60 / 61 / 70 informational: at the tap
+// the strict VWAP+EMA test would have failed on VWAP / EMA / was unavailable, 62 tap while already armed, 63 / 64 1m / 2m inversions
+// strictly after the tap (trigger candidates), 65 inversions that straddle the tap, 66 inversions in another window instance,
+// 67 / 68 trigger candidates with the strict VWAP+EMA test ok / not ok AT THE TRIGGER, 69 arms ended by window end or bias flip
+// without an inversion, 71 trigger candidates with the EMA 9/21 trend alone in the bias direction, 72 with price on the bias side of VWAP.
 var array<int>    dg = array.new_int(0)
 var array<int>    armI = array.new_int(5, 0)          // tap diagnostic arm: 0 active, 1 direction, 2 tap candle close, 3 window end, 4 session index
 var array<string> fbNames = array.from("replaced", "expired", "closed through", "bias flip", "inv: no window", "inv: bias/narrow", "inv: unresolved block", "impulse fail", "stop/risk fail", "coverage unknown", "obstacle", "window instance", "session limit", "unresolved setup", "bias at entry", "outranked")    // per-timeframe first-failed-gate / block counters (each candidate counted once)
@@ -1778,8 +1779,27 @@ f_confFail(int dir) =>
         f := 2
     f
 
+f_trendOk(int dir) =>
+    not na(em9) and not na(em21) and (dir > 0 ? em9 > em21 : em9 < em21)
+
+f_vwapOk(int dir) =>
+    not na(vwapNy) and (dir > 0 ? close > vwapNy : close < vwapNy)
+
+// One log line per trigger candidate (debug only): times in New York, the values behind each confluence variant.
+f_trigLog(int k, int asOf, int dirA) =>
+    if inDebug
+        log.info("H Ticks | TRIGGER CANDIDATE " + (k == 0 ? "1m" : "2m") + (dirA > 0 ? " bullish" : " bearish") + " inversion, source candle closed " + f_nyT(asOf) + " NY, tap candle closed " + f_nyT(armI.get(2)) + " NY | processed on the candle closing " + f_nyT(time_close) + " NY | close " + str.tostring(close, format.mintick) + " vs VWAP " + str.tostring(vwapNy, format.mintick) + " (" + (f_vwapOk(dirA) ? "ok" : "wrong side") + "), EMA9 " + str.tostring(em9, format.mintick) + " / EMA21 " + str.tostring(em21, format.mintick) + " (trend " + (f_trendOk(dirA) ? "ok" : "against") + ", strict " + (f_confFail(dirA) == 0 ? "ok" : "not ok") + ")")
+    true
+
+// One log line per HTF tap seen on the chart candle (debug only) with the first reason it did or did not arm.
+f_tapLog(Zone z, string why, int cf) =>
+    if inDebug
+        log.info("H Ticks | TAP " + z.tfTxt + (z.dir > 0 ? " bullish" : " bearish") + " gap " + str.tostring(z.bottom, format.mintick) + "-" + str.tostring(z.top, format.mintick) + " | candle closes " + f_nyT(time_close) + " NY | 15m bias " + (biasDir > 0 ? "bullish" : (biasDir < 0 ? "bearish" : "unknown")) + " | " + why + " | at the tap: close " + str.tostring(close, format.mintick) + " vs VWAP " + str.tostring(vwapNy, format.mintick) + ", EMA9 " + str.tostring(em9, format.mintick) + " / EMA21 " + str.tostring(em21, format.mintick) + " (strict test " + (cf == 0 ? "would pass" : (cf == 1 ? "would fail on VWAP" : (cf == 2 ? "would fail on EMA" : "n/a"))) + ")")
+    true
+
 // A 1m / 2m inversion in the bias direction while a tap is armed. Strictly after the tap = the source candle OPENED at/after the
 // tap candle closed; the same window instance is required; the first valid one is the trigger candidate and ends the arm.
+// The VWAP / EMA variants are evaluated HERE (price has bounced), not at the pullback tap.
 f_armInv(int k, int asOf, int tfMs) =>
     if armI.get(0) == 1
         [wnI, wsI, weI] = f_selectWindow(asOf)
@@ -1789,8 +1809,14 @@ f_armInv(int k, int asOf, int tfMs) =>
         else if na(wsI) or weI != armI.get(3)
             f_dg(wA, 66)
         else
+            int dirA = armI.get(1)
             f_dg(wA, 63 + k)
-            f_dg(wA, f_confFail(armI.get(1)) == 0 ? 67 : 68)
+            f_dg(wA, f_confFail(dirA) == 0 ? 67 : 68)
+            if f_trendOk(dirA)
+                f_dg(wA, 71)
+            if f_vwapOk(dirA)
+                f_dg(wA, 72)
+            f_trigLog(k, asOf, dirA)
             armI.set(0, 0)
     true
 
@@ -1801,25 +1827,34 @@ f_tapScan(array<Zone> a, int wT, bool inWin, int weT) =>
             Zone z = a.get(i)
             if z.tapped and z.tapTime == time and z.tapAvail == time_close
                 f_dg(wT, 56)
-                if biasDir != 0 and z.dir == biasDir
-                    f_dg(wT, 57)
-                    if inWin
-                        int cf = f_confFail(biasDir)
-                        if cf == 3
-                            f_dg(wT, 70)
-                        else if cf == 1
-                            f_dg(wT, 60)
-                        else if cf == 2
-                            f_dg(wT, 61)
-                        else if armI.get(0) == 1
-                            f_dg(wT, 62)
+                int cf = biasDir != 0 ? f_confFail(biasDir) : 3
+                string why = "not armed: 15m bias unknown"
+                if biasDir != 0
+                    if z.dir != biasDir
+                        why := "not armed: gap points against the bias"
+                    else
+                        f_dg(wT, 57)
+                        if not inWin
+                            why := "not armed: outside every entry window"
                         else
-                            f_dg(wT, 59)
-                            armI.set(0, 1)
-                            armI.set(1, biasDir)
-                            armI.set(2, time_close)
-                            armI.set(3, weT)
-                            armI.set(4, wT)
+                            if cf == 3
+                                f_dg(wT, 70)
+                            else if cf == 1
+                                f_dg(wT, 60)
+                            else if cf == 2
+                                f_dg(wT, 61)
+                            if armI.get(0) == 1
+                                f_dg(wT, 62)
+                                why := "not armed: an earlier tap is still armed"
+                            else
+                                f_dg(wT, 59)
+                                armI.set(0, 1)
+                                armI.set(1, biasDir)
+                                armI.set(2, time_close)
+                                armI.set(3, weT)
+                                armI.set(4, wT)
+                                why := "ARMED"
+                f_tapLog(z, why, cf)
     true
 
 f_armStep() =>
@@ -2675,7 +2710,7 @@ if barstate.islast
         int aEnt = f_dgSum(rdg, 0, 16) + f_dgSum(rdg, 1, 16) + f_dgSum(rdg, 2, 16) + f_dgSum(rdg, 0, 29) + f_dgSum(rdg, 1, 29) + f_dgSum(rdg, 2, 29)
         f_dl(dr, "ACCOUNTING CHECK: inversions " + str.tostring(aInv) + " = rejected + admitted " + str.tostring(aInvOut) + (aInv == aInvOut ? " OK" : " MISMATCH") + " | linked candidates " + str.tostring(aCand) + " = failed + passed " + str.tostring(aCandOut) + (aCand == aCandOut ? " OK" : " MISMATCH") + " | passed " + str.tostring(aAdm) + " = entries + outranked " + str.tostring(aEnt) + (aAdm == aEnt ? " OK" : " MISMATCH") + " | impulse fails " + str.tostring(aImp) + " = sub-check firsts " + str.tostring(aImpSub) + (aImp == aImpSub ? " OK" : " MISMATCH"), false)
         dr += 1
-        f_dl(dr, "TAP + BIAS CONFLUENCE DIAGNOSTIC (counting only, no entries): 15m/1H/4H gap tapped on the chart candle, in the bias direction, inside a window, VWAP (NY 09:30 anchor) and 1m EMA 9/21 agree; then 1m / 2m bias-direction inversions that open after the tap", true)
+        f_dl(dr, "TAP + BIAS DIAGNOSTIC (counting only, no entries): 15m/1H/4H gap tapped on the chart candle in the bias direction inside a window ARMS (no VWAP/EMA test at the tap); then 1m / 2m bias-direction inversions that open after the tap; VWAP / EMA are judged at the trigger", true)
         dr += 1
         int tB = 0
         int tA = 0
@@ -2683,10 +2718,12 @@ if barstate.islast
             int b57 = f_dgSum(rdg, w, 57)
             int arm = f_dgSum(rdg, w, 59)
             tB += b57
-            tA += arm + f_dgSum(rdg, w, 60) + f_dgSum(rdg, w, 61) + f_dgSum(rdg, w, 62) + f_dgSum(rdg, w, 70)
-            f_dl(dr, sn.get(w) + ": HTF taps " + str.tostring(f_dgSum(rdg, w, 56)) + " > in bias direction " + str.tostring(b57) + " > ARMED " + str.tostring(arm) + " (not armed: VWAP " + str.tostring(f_dgSum(rdg, w, 60)) + ", EMA " + str.tostring(f_dgSum(rdg, w, 61)) + ", n/a " + str.tostring(f_dgSum(rdg, w, 70)) + ", already armed " + str.tostring(f_dgSum(rdg, w, 62)) + ") | inversions after the tap 1m " + str.tostring(f_dgSum(rdg, w, 63)) + " / 2m " + str.tostring(f_dgSum(rdg, w, 64)) + " | TRIGGER CANDIDATES confluence ok " + str.tostring(f_dgSum(rdg, w, 67)) + " / not ok " + str.tostring(f_dgSum(rdg, w, 68)) + " | arms ended with no inversion " + str.tostring(f_dgSum(rdg, w, 69)) + " | straddled the tap " + str.tostring(f_dgSum(rdg, w, 65)) + ", other window " + str.tostring(f_dgSum(rdg, w, 66)), false)
+            tA += arm + f_dgSum(rdg, w, 62)
+            f_dl(dr, sn.get(w) + ": HTF taps " + str.tostring(f_dgSum(rdg, w, 56)) + " > in bias direction " + str.tostring(b57) + " > ARMED " + str.tostring(arm) + " (ignored, already armed " + str.tostring(f_dgSum(rdg, w, 62)) + ") | info, strict VWAP+EMA test AT THE TAP would have failed: VWAP " + str.tostring(f_dgSum(rdg, w, 60)) + ", EMA " + str.tostring(f_dgSum(rdg, w, 61)) + ", n/a " + str.tostring(f_dgSum(rdg, w, 70)), false)
             dr += 1
-        f_dl(dr, "Tap check: in-window bias-direction taps " + str.tostring(tB) + " = armed + not armed " + str.tostring(tA) + (tB == tA ? " OK" : " MISMATCH") + " | armed right now: " + (armI.get(0) == 1 ? "YES, since " + f_nyT(armI.get(2)) + " NY" : "no") + " | taps are counted only when the chart candle itself touches the gap", false)
+            f_dl(dr, "   inversions after the tap: 1m " + str.tostring(f_dgSum(rdg, w, 63)) + " / 2m " + str.tostring(f_dgSum(rdg, w, 64)) + " | TRIGGER CANDIDATES AT THE TRIGGER: strict VWAP+EMA ok " + str.tostring(f_dgSum(rdg, w, 67)) + " / not ok " + str.tostring(f_dgSum(rdg, w, 68)) + " | EMA 9/21 trend only ok " + str.tostring(f_dgSum(rdg, w, 71)) + " | price on bias side of VWAP " + str.tostring(f_dgSum(rdg, w, 72)) + " | arms ended with no inversion " + str.tostring(f_dgSum(rdg, w, 69)) + " | straddled the tap " + str.tostring(f_dgSum(rdg, w, 65)) + ", other window " + str.tostring(f_dgSum(rdg, w, 66)), false)
+            dr += 1
+        f_dl(dr, "Tap check: in-window bias-direction taps " + str.tostring(tB) + " = armed + ignored " + str.tostring(tA) + (tB == tA ? " OK" : " MISMATCH") + " | armed right now: " + (armI.get(0) == 1 ? "YES, since " + f_nyT(armI.get(2)) + " NY" : "no") + " | taps are counted only when the chart candle itself touches the gap | every tap and trigger candidate is also written to Pine Logs (TAP / TRIGGER CANDIDATE)", false)
         dr += 1
         f_dl(dr, "UNRESOLVED-SETUP LOCK HISTORY (reported dates): entry -> resolution = blocking interval", true)
         dr += 1

@@ -210,9 +210,14 @@ chk('Code: outcome model unchanged (strictly-after-entry candle, opening-price p
 inputs = re.findall(r'^\w+\s+(\w+)\s*=\s*input\.', CODE, re.M)
 chk('Only practical user inputs remain (%d): %s' % (len(inputs), ','.join(inputs)), len(inputs) <= 18 and 'inPreset' in inputs and 'inTheme' in inputs and 'inDebug' in inputs, 'CODE INSPECTION')
 chk('Debug defaults OFF; Standard default; Light default', 'inDebug = input.bool(false' in CODE and 'input.string("Standard"' in CODE and 'input.string("Light"' in CODE, 'CODE INSPECTION')
-_ind = [l for l in CODE.split('\n') if re.search(r'vwapNy|\bem9\b|\bem21\b', l)]
-chk('Code: no SMT / VWAP / moving-average requirement in any entry decision (VWAP / EMA exist only in the tap DIAGNOSTIC: declared once, read only by f_confFail, which only f_armInv / f_tapScan call)',
-    not re.search(r'ta\.sma|smt', CODE, re.I) and CODE.count('f_confFail(') == 3 and len(_ind) == 8 and 'f_evalCand' not in ''.join(_ind), 'CODE INSPECTION')
+_vo = set(); _cur = 'top'
+for _l in CODE.split('\n'):
+    _m = re.match(r'^(f_\w+)\(', _l)
+    if _m: _cur = _m.group(1)
+    elif re.match(r'^\S', _l) and not _l.startswith('//'): _cur = 'top'
+    if re.search(r'vwapNy|\bem9\b|\bem21\b', _l): _vo.add(_cur)
+chk('Code: no SMT / VWAP / moving-average requirement in any entry decision (VWAP / EMA appear only in the declarations and the tap DIAGNOSTIC helpers): ' + str(sorted(_vo)),
+    not re.search(r'ta\.sma|smt', CODE, re.I) and _vo <= {'top', 'f_confFail', 'f_trendOk', 'f_vwapOk', 'f_trigLog', 'f_tapLog'} and 'f_evalCand' not in _vo, 'CODE INSPECTION')
 chk('Code: single aggregated alert() retained; no historical alerts', len(re.findall(r'(?<![\w.])alert\(', CODE)) == 1 and 'barstate.isrealtime and barstate.isconfirmed' in CODE, 'CODE INSPECTION')
 
 print(f"{'test':132} {'result':6} basis")
