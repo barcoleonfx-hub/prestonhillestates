@@ -228,3 +228,6 @@ New setting "Days reported (stats box and debug counts)", default 20 (1-20), rep
 ## Bias source setting
 - New group "Directional bias": `inBiasSrc` = 15m structure (default, unchanged) | 4H structure (same swing-break engine on 240m) | VWAP (daily-session VWAP of the confirmed chart bar, bull above / bear below) | EMAs (5m EMA `inEmaF`/`inEmaS`, confirmed [1]: bull close>fast>slow, bear close<fast<slow, else no bias). Everything downstream (context creation, cancel on flip, entry re-check, counters) reads the same `biasDir`; only message/label text is dynamic (`biasTxt`).
 - Not compiled or replayed by me. 4H structure needs many days of loaded history, so expect "bias unknown" for a long time on short history.
+
+## TO-DO (user request, not built)
+- "Relaxed" tickbox for the entry windows: when ticked, allow ALL windows (entries/contexts accepted at any time of day, Mon-Fri), default OFF so current behaviour is unchanged. Open design points to settle when built: how window-instance / 3-per-window limits behave when there is no window (e.g. use the NY date or a rolling block as the instance), and whether Asia/NY labels in the stats still apply.
