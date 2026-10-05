@@ -219,12 +219,11 @@ chk('Code: alerts are built from state transitions (f_tryEntry / f_trackSetups) 
 
 # ---------- drawings ----------
 chk('Code: Entry black / Target green / Stop red, all solid, separate lines and separate labels with prices',
-    'Entry line colour' in PINE and '"Target · 1R "' in PINE and '"Stop "' in PINE and '"Entry "' in PINE and PINE.count('line.style_solid, width = 2') == 3, 'CODE INSPECTION')
-chk('Code: outcome text frozen on resolution (Target hit / Stop hit / Ambiguous); lines frozen at resolveTime',
-    all(x in PINE for x in ('" · Target hit"', '" · Stop hit"', '" · Ambiguous"', 's.state != 0 ? s.resolveTime')), 'CODE INSPECTION')
+    'darkTheme ? color.white : color.black' in PINE and 'inTgtCol = color.green' in PINE and 'inStopCol = color.red' in PINE and '"Target "' in PINE and '"Stop "' in PINE and '"Entry "' in PINE and PINE.count('line.style_solid)') >= 3, 'CODE INSPECTION')
+chk('Code: outcome text frozen on resolution (Target hit / Stop hit / Ambiguous); shading stops at resolveTime',
+    all(x in PINE for x in ('" · Target hit"', '" · Stop hit"', '"Ambiguous"', 's.state != 0 ? s.resolveTime')), 'CODE INSPECTION')
 chk('Code: drawing subset when object limits bind (unresolved first, newest resolved next, DRAW_MAX)', 'drawn < DRAW_MAX' in PINE and 'pass == 0' in PINE, 'CODE INSPECTION')
-chk('Code: persistent handles - setters used for existing boxes/lines/labels on every draw', all(x in PINE for x in ('line.set_xy2(s.lE', 'label.set_text(s.lbE', 'box.set_border_color(z.bx')), 'CODE INSPECTION')
-
+chk('Code: persistent handles - setters used for existing boxes/lines/labels on every draw', all(x in PINE for x in ('line.set_xy2(h', 'label.set_text(h', 'box.set_border_color(h', 'box.set_border_color(z.bx')), 'CODE INSPECTION')
 print(f"{'test':128} {'result':6} basis")
 for n, r, k in R: print(f"{n[:128]:128} {r:6} {k}")
 print(sum(r == 'PASS' for _, r, _ in R), '/', len(R), 'passed')
