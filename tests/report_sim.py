@@ -147,7 +147,7 @@ chk('Setup clear vs 15m and 1H obstacles is BLOCKED by an active 4H bearish gap,
 chk('Obstacle entirely beyond the 1R target does not block', scan([G('4H', -1, 20160.0, 20180.0)], True, E1, T1) is None)
 chk('Obstacle touching the target exactly (closed interval) blocks', scan([G('4H', -1, 20150.0, 20170.0)], True, E1, T1) is not None)
 chk('Hidden / tapped / size-filtered gaps still block (scan ignores display state)', 'f_scanObs' in PINE and 'inHtfMinT' not in PINE[PINE.index('f_scanObs(array<Zone>'):PINE.index('f_scanAll')], 'CODE INSPECTION')
-chk('Code: debug text format "Blocked: <tf> <dir> FVG, <bottom>–<top>."', '"Blocked: " + obsName + "."' in PINE and '" FVG, " + str.tostring(z.bottom, format.mintick) + "–"' in PINE, 'CODE INSPECTION')
+chk('Code: debug text format "Blocked: <tf> <dir> FVG, <bottom>–<top>."', '"Blocked: " + obsName + " intersects the entry-to-1R path "' in PINE and '" FVG, " + str.tostring(z.bottom, format.mintick) + "–"' in PINE, 'CODE INSPECTION')
 
 # ---------- time-based engine: capacity, readiness, live vs reload ----------
 H, SPAN = 100, 40            # horizon / span in "candles" (model unit = 1 candle = 1 time unit)

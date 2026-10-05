@@ -25,6 +25,10 @@
 //   never block passing ones. If several pass, 5m > 3m > 2m > 1m decides (a tie-break only). Exactly one entry is created;
 //   all pending contexts are then discarded. Gates: same window instance, < 3 entries per instance, one unresolved setup.
 // Timing: all state changes and drawings happen on confirmed 30s bars. Alerts only on confirmed realtime bars.
+// DIAGNOSTICS (Debug ON only; counting and logging, no trading rule depends on them): per NY date x session (Asia / NY morning /
+//   NY afternoon) counts of eligible bars, context inversions by 1m/2m/3m/5m, admitted contexts, retests, 30s candidates and the
+//   FIRST failed gate of every rejected candidate with measured value vs threshold (Pine Logs + label tooltips), unresolved-setup
+//   lock intervals, and an accounting check that must read OK. A date whose enabled window got no bar is NOT EVALUATED.
 // Verification: see H_Ticks_FVG_iFVG_NOTES.md (code review + Python model only; NOT compiled in TradingView, NOT Bar-Replay tested).
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 // INDICATOR (not a strategy). Outcomes: OPEN / TARGET_HIT / STOP_HIT / AMBIGUOUS on 30s candles strictly AFTER the entry
@@ -51,7 +55,8 @@ bool   inShowRR = input.bool(true, "Show risk/reward shading", group = GRP_APP)
 string inTheme = input.string("Light", "Theme (labels and tables)", options = ["Light", "Dark"], group = GRP_APP, tooltip = "Light: black entry line. Dark: white entry line (black would be invisible). Tables always use opaque backgrounds.")
 bool   inStats = input.bool(true, "Show the small stats box (top-right)", group = GRP_ST)
 bool   inDaily = input.bool(false, "Optional: daily breakdown under the stats box", group = GRP_ST)
-bool   inDebug = input.bool(false, "Debug panel: funnel, per-session counts, source readiness, rejection labels", group = GRP_DBG, tooltip = "Funnel: inversions, admitted contexts, retests, eligible 30s inversions, impulse / stop-risk / clear-path passes, entries; block counters list the FIRST failed gate of each candidate (counted once).")
+bool   inDebug = input.bool(false, "Debug panel: per-date / per-session funnel, first failed gate, lock intervals, source readiness, rejection records", group = GRP_DBG, tooltip = "Counts cover the 5 reported NY dates. Every rejected candidate is counted once at its FIRST failed gate and written to Pine Logs with timestamps, source timeframe and measured value vs threshold.")
+string inDbgLbl = input.string("NY windows only", "Debug: rejected-candidate labels (full record in the label tooltip and in Pine Logs)", options = ["Off", "NY windows only", "All sessions"], group = GRP_DBG, tooltip = "Only the latest 30 labels can exist at once. EVERY rejected candidate is also written to the Pine Logs pane while Debug is ON.")
 bool   alEntry = input.bool(true, "Alert on each new entry", group = GRP_AL)
 bool   alTarget = input.bool(true, "Alert when a setup hits its target", group = GRP_AL)
 bool   alStop = input.bool(true, "Alert when a setup hits its stop", group = GRP_AL)
@@ -68,7 +73,8 @@ const int IX_LVL = 8
 const int NCTX = 4
 const int FN = 8
 const int FB = 16
-const int FS = 24
+const int NSS = 4
+const int DGN = 56
 bool   alAmb = false
 bool   alCtx = false
 bool   alJson = false
@@ -248,6 +254,8 @@ type Setup
     int    trgInvT
     float  trgInvPx
     string tip = ""
+    int    blkCtx = 0
+    int    blkEnt = 0
     line   lE
     line   lS
     line   lT
@@ -287,6 +295,9 @@ type Cand
     string srcTxt = ""
     string nearTxt = "none within tracked history"
     bool   ok = false
+    int    sub = 0
+    int    impFirst = -1
+    int    impMask = 0
 
 // A confirmed 3m swing level (strength 2/2) tracked on the chart. consumed = a later candle reached it.
 type Lvl
@@ -739,7 +750,16 @@ float l2c = low[2]
 var array<Ctx>    cxs = array.from(Ctx.new(k = 0, tfTxt = "1m", tfSecs = 60), Ctx.new(k = 1, tfTxt = "2m", tfSecs = 120), Ctx.new(k = 2, tfTxt = "3m", tfSecs = 180), Ctx.new(k = 3, tfTxt = "5m", tfSecs = 300))
 var array<int>    fnl = array.new_int(NCTX * FN, 0)    // per-timeframe funnel: inversions, admitted, retests, eligible 30s inversions, impulse, stop/risk, clear path, entries
 var array<int>    fnb = array.new_int(NCTX * FB, 0)
-var array<int>    sdn = array.new_int(3 * FS, 0)          // per entry-window type: 0 bars, 1 bars fully covered, 2 bars with an open setup, 3 contexts, 4 retests, 5 eligible triggers, 6 entries, 8+code rejections
+// Diagnostic matrix: for each NY reporting date (same order as dKey) x session (0 Asia, 1 NY morning, 2 NY afternoon, 3 outside any
+// window) x DGN columns. Layout: 0 eligible bars, 1 bars fully covered, 2 bars with 15m bias UNKNOWN, 3-6 context inversions 1m/2m/3m/5m,
+// 7 contexts admitted, 8 retested, 9 candidates, 10 formed-after-context, 11 overlap, 12 impulse, 13 stop/risk, 14 clear path,
+// 15 admission, 16 entries, 17-29 first failed gate (17 formed-before, 18 no overlap, 19 impulse, 20 stop/risk, 21 HTF coverage,
+// 22 3m structure not ready, 23 HTF gap, 24 3m swing, 25 window instance, 26 session limit, 27 unresolved setup, 28 bias, 29 outranked),
+// 30 inversion before retest, 31 inversion on retest candle, 32-37 inversion rejected (32 bias unknown, 33 bias opposite, 34 narrow,
+// 35 other inversion chosen, 36 unresolved-setup lock, 37 no window), 38-42 context lost (38 replaced, 39 discarded at another entry,
+// 40 window expiry, 41 closed through, 42 bias flip), 43 informational (candle-1 before confirmation), 44-49 impulse FIRST failed
+// sub-check (dir, body/ATR, body/range, close position, extension, unavailable), 50-54 impulse sub-check failed at all, 55 bars with an open setup.
+var array<int>    dg = array.new_int(0)
 var array<string> fbNames = array.from("replaced", "expired", "closed through", "bias flip", "inv: no window", "inv: bias/narrow", "inv: unresolved block", "impulse fail", "stop/risk fail", "coverage unknown", "obstacle", "window instance", "session limit", "unresolved setup", "bias at entry", "outranked")    // per-timeframe first-failed-gate / block counters (each candidate counted once)
 var array<Zone>   pend = array.new<Zone>()            // 30s gaps that inverted on THIS bar (trigger candidates)
 var array<Setup>  setups = array.new<Setup>()
@@ -1564,9 +1584,19 @@ f_fn(int k, int col) =>
 f_winIdx(string nm) =>
     nm == "Asia -> London" ? 0 : (nm == "New York morning" ? 1 : 2)
 
-f_sd(int w, int col) =>
-    sdn.set(w * FS + col, sdn.get(w * FS + col) + 1)
+f_winIdxN(string nm, int ws) =>
+    na(ws) ? 3 : f_winIdx(nm)
+
+// Diagnostic counter for the CURRENT reporting date (last dKey entry). Counting only; never read by any trading decision.
+f_dgN(int w, int col, int n) =>
+    int nd = dKey.size()
+    if nd > 0 and n > 0 and w >= 0 and w < NSS
+        int ix = ((nd - 1) * NSS + w) * DGN + col
+        dg.set(ix, dg.get(ix) + n)
     true
+
+f_dg(int w, int col) =>
+    f_dgN(w, col, 1)
 
 f_fb(int k, int col) =>
     fnb.set(k * FB + col, fnb.get(k * FB + col) + 1)
@@ -1666,12 +1696,31 @@ f_dateCount(int k, int st) =>
                 c += 1
     c
 
-// 0 fully evaluated, 1 partial, 2 unavailable (qualification coverage never complete on that date)
+f_dgBars(int idx, int w, int col) =>
+    dg.get((idx * NSS + w) * DGN + col)
+
+// An enabled entry window that received NO eligible bar on a Mon-Fri date means that window was NOT EVALUATED on that date.
+f_dateWinZero(int idx) =>
+    bool z = false
+    bool wk = dDow.get(idx) >= dayofweek.monday and dDow.get(idx) <= dayofweek.friday
+    if wk
+        if inWinAsia and okWinAs and f_dgBars(idx, 0, 0) == 0
+            z := true
+        if inWinAm and okWinAm and f_dgBars(idx, 1, 0) == 0
+            z := true
+        if inWinPm and okWinPm and f_dgBars(idx, 2, 0) == 0
+            z := true
+    z
+
+// 0 fully evaluated (every eligible bar had every required source ready and a known 15m bias), 1 partial,
+// 2 unavailable (never complete), 3 unavailable (an enabled window received no eligible bar)
 f_dateStatus(int idx) =>
     int st = 0
     int wn = dWinN.get(idx)
     int bad = dWinBad.get(idx)
-    if wn > 0 and bad == wn
+    if f_dateWinZero(idx)
+        st := 3
+    else if wn > 0 and bad == wn
         st := 2
     else if bad > 0 or dKey.get(idx) == firstDateKey
         st := 1
@@ -1681,6 +1730,26 @@ f_dateTxt(int k) =>
     string t = str.tostring(k)
     str.substring(t, 4, 6) + "-" + str.substring(t, 6, 8)
 
+// Diagnostic: charges a blocked context / entry to the setup that holds the lock (the open one, else the latest resolved one
+// when a source candle that closed before that resolution is only now processed). Counting only.
+f_lockHit(bool ent) =>
+    Setup hit = na
+    int n = setups.size()
+    if n > 0
+        for i = 0 to n - 1
+            Setup q = setups.get(i)
+            if q.state == 0
+                if na(hit) or hit.state != 0
+                    hit := q
+            else if na(hit) and q.resolveTime == lastResolveAt
+                hit := q
+    if not na(hit)
+        if ent
+            hit.blkEnt += 1
+        else
+            hit.blkCtx += 1
+    true
+
 // Mandatory expiry at the originating window's end (end exclusive); optional maximum age. Never transferred.
 // Mandatory expiry at the originating window's end (end exclusive). Never transferred to another window.
 f_ctxExpire() =>
@@ -1689,6 +1758,7 @@ f_ctxExpire() =>
         if c.state != 0 and time_close >= c.winEnd
             c.lastReason := "context expired at window end"
             f_fb(k, 1)
+            f_dg(f_winIdxN(c.winName, c.winStart), 40)
             f_ctxClear(c)
     true
 
@@ -1702,19 +1772,33 @@ f_ctxUpdate(int k, array<float> snap, int asOf, float cCl) =>
         if inval
             c.lastReason := c.tfTxt + " context cancelled by a confirmed " + c.tfTxt + " close through the zone"
             f_fb(k, 2)
+            f_dg(f_winIdxN(c.winName, c.winStart), 41)
             f_ctxClear(c)
     int cnt = int((snap.size() - HDR) / ZS)
     int bestK = -1
     float bestW = 0.0
     int bestFt = 0
     int nFlag = 0
+    int nBU = 0
+    int nBX = 0
+    int nNW = 0
+    int nEl = 0
     if cnt > 0
         for kk = 0 to cnt - 1
             int base = HDR + kk * ZS
             if math.abs(snap.get(base + 1)) == 2.0
                 nFlag += 1
                 bool dirOk = (snap.get(base + 1) > 0 ? -1 : 1) == biasDir
-                if dirOk and f_tk(snap.get(base + 2)) - f_tk(snap.get(base + 3)) >= inCtxMinTicks
+                bool wideOk = f_tk(snap.get(base + 2)) - f_tk(snap.get(base + 3)) >= inCtxMinTicks
+                if biasDir == 0
+                    nBU += 1
+                else if not dirOk
+                    nBX += 1
+                else if not wideOk
+                    nNW += 1
+                else
+                    nEl += 1
+                if dirOk and wideOk
                     float w = snap.get(base + 2) - snap.get(base + 3)
                     int ft = int(snap.get(base))
                     if bestK < 0 or w < bestW or (w == bestW and ft >= bestFt)
@@ -1722,46 +1806,56 @@ f_ctxUpdate(int k, array<float> snap, int asOf, float cCl) =>
                         bestW := w
                         bestFt := ft
     if nFlag > 0
+        [wn, ws, we] = f_selectWindow(asOf)
+        int wI = f_winIdxN(wn, ws)
         fnl.set(k * FN, fnl.get(k * FN) + nFlag)
+        f_dgN(wI, 3 + k, nFlag)
+        f_dgN(wI, 32, nBU)
+        f_dgN(wI, 33, nBX)
+        f_dgN(wI, 34, nNW)
+        if nEl > 1
+            f_dgN(wI, 35, nEl - 1)
         if bestK < 0
             f_fb(k, 5)
-    if bestK >= 0
-        bool blocked = inOneActive and (f_openSetup() or asOf < lastResolveAt)
-        [wn, ws, we] = f_selectWindow(asOf)
-        if blocked
-            f_fb(k, 6)
-            if not na(ws)
-                f_sd(f_winIdx(wn), 14)
-        else if na(ws)
-            f_fb(k, 4)
         else
-            int b2 = HDR + bestK * ZS
-            float cd = snap.get(b2 + 1)
-            bool replacing = c.state != 0
-            f_ctxClear(c)
-            c.state := 1
-            c.dir := cd > 0 ? -1 : 1
-            c.top := snap.get(b2 + 2)
-            c.bottom := snap.get(b2 + 3)
-            c.formTime := int(snap.get(b2))
-            c.confAsOf := asOf
-            c.procTime := time_close
-            c.invPx := cCl
-            c.zid := c.tfTxt + "|" + str.tostring(c.formTime) + "|" + str.tostring(cd > 0 ? 1 : -1)
-            c.winId := wn + "|" + str.tostring(ws)
-            c.winName := wn
-            c.winStart := ws
-            c.winEnd := we
-            c.retestBar := -1
-            c.away := 0
-            c.legExt := na
-            c.retestPx := na
-            c.lastReason := ""
-            f_fn(k, 1)
-            f_sd(f_winIdx(wn), 3)
-            if replacing
-                f_fb(k, 0)
-            f_log("ctx created " + c.tfTxt + " " + (c.dir > 0 ? "long" : "short") + " " + c.winId)
+            bool blocked = inOneActive and (f_openSetup() or asOf < lastResolveAt)
+            if blocked
+                f_fb(k, 6)
+                f_dg(wI, 36)
+                f_lockHit(false)
+            else if na(ws)
+                f_fb(k, 4)
+                f_dg(wI, 37)
+            else
+                int b2 = HDR + bestK * ZS
+                float cd = snap.get(b2 + 1)
+                bool replacing = c.state != 0
+                int oldW = replacing ? f_winIdxN(c.winName, c.winStart) : 3
+                f_ctxClear(c)
+                c.state := 1
+                c.dir := cd > 0 ? -1 : 1
+                c.top := snap.get(b2 + 2)
+                c.bottom := snap.get(b2 + 3)
+                c.formTime := int(snap.get(b2))
+                c.confAsOf := asOf
+                c.procTime := time_close
+                c.invPx := cCl
+                c.zid := c.tfTxt + "|" + str.tostring(c.formTime) + "|" + str.tostring(cd > 0 ? 1 : -1)
+                c.winId := wn + "|" + str.tostring(ws)
+                c.winName := wn
+                c.winStart := ws
+                c.winEnd := we
+                c.retestBar := -1
+                c.away := 0
+                c.legExt := na
+                c.retestPx := na
+                c.lastReason := ""
+                f_fn(k, 1)
+                f_dg(wI, 7)
+                if replacing
+                    f_fb(k, 0)
+                    f_dg(oldW, 38)
+                f_log("ctx created " + c.tfTxt + " " + (c.dir > 0 ? "long" : "short") + " " + c.winId)
     true
 
 f_ctxSync(int k, array<float> snap, int asOf, float cCl) =>
@@ -1803,10 +1897,44 @@ f_pickTrigger(Ctx c) =>
                     best := z
     best
 
+// DIAGNOSTIC ONLY (changes no decision): of the 30s gaps that inverted on THIS bar in the context's direction, how many exist,
+// how many formed at/after the context confirmation, and how many of those also intersect the context gap.
+f_trigDiag(Ctx c) =>
+    int nS = 0
+    int nF = 0
+    int nO = 0
+    int n = pend.size()
+    if n > 0
+        int need = c.dir > 0 ? ST_BULL_IFVG : ST_BEAR_IFVG
+        for i = 0 to n - 1
+            Zone z = pend.get(i)
+            if z.state == need
+                nS += 1
+                if z.formTime >= c.confAsOf
+                    nF += 1
+                    if f_overlap(z.top, z.bottom, c.bottom, c.top)
+                        nO += 1
+    [nS, nF, nO]
+
+// Newest same-direction inverted 30s gap of this bar (optionally only those formed at/after the context confirmation); for records.
+f_newestSame(Ctx c, bool formedOnly) =>
+    Zone best = na
+    int n = pend.size()
+    if n > 0
+        int need = c.dir > 0 ? ST_BULL_IFVG : ST_BEAR_IFVG
+        for i = 0 to n - 1
+            Zone z = pend.get(i)
+            if z.state == need and (not formedOnly or z.formTime >= c.confAsOf)
+                if na(best) or z.formTime > best.formTime
+                    best := z
+    best
+
 f_decisive(Zone t, bool bull, float atrP) =>
     bool ok = true
     string why = ""
     float bodyAtr = na
+    int first = -1
+    int mask = 0
     bool strong = inPreset == "Strong"
     float mB = strong ? 1.0 : 0.8
     float mR = strong ? 0.70 : 0.65
@@ -1815,9 +1943,11 @@ f_decisive(Zone t, bool bull, float atrP) =>
     float body = close - open
     if na(atrP) or atrP <= 0
         ok := false
+        first := 5
         why := "Decisive candle: previous ATR unavailable"
     else if rng <= 0
         ok := false
+        first := 5
         why := "Decisive candle: zero-range candle"
     else
         float ab = math.abs(body)
@@ -1825,29 +1955,50 @@ f_decisive(Zone t, bool bull, float atrP) =>
         bool dirOk = bull ? body > 0 : body < 0
         if not dirOk
             ok := false
-            why := f_addWhy(why, "Weak/wrong inversion: body points against the setup")
+            mask += 1
+            first := first < 0 ? 0 : first
+            why := f_addWhy(why, "Weak/wrong inversion: body " + str.tostring(body / syminfo.mintick, "#.0") + " ticks points against the setup")
         if ab < mB * atrP - 0.000000001
             ok := false
+            mask += 2
+            first := first < 0 ? 1 : first
             why := f_addWhy(why, "Weak inversion: body " + str.tostring(bodyAtr, "#.00") + " x ATR < " + str.tostring(mB, "#.0"))
         if ab / rng < mR - 0.000000001
             ok := false
+            mask += 4
+            first := first < 0 ? 2 : first
             why := f_addWhy(why, "Weak inversion: body/range " + str.tostring(ab / rng, "#.00") + " < " + str.tostring(mR, "#.00"))
         bool posOk = bull ? close >= high - fr * rng - 0.000000001 : close <= low + fr * rng + 0.000000001
         if not posOk
             ok := false
-            why := f_addWhy(why, "Weak inversion: close not in the outer " + str.tostring(fr * 100, "#") + "% of the range")
+            mask += 8
+            first := first < 0 ? 3 : first
+            float inner = bull ? (high - close) / rng : (close - low) / rng
+            why := f_addWhy(why, "Weak inversion: close sits " + str.tostring(inner * 100, "#") + "% from the extreme, outer " + str.tostring(fr * 100, "#") + "% required")
         float ext = math.max(syminfo.mintick, 0.10 * atrP)
         float got = bull ? close - t.top : t.bottom - close
         if got < ext - 0.000000001
             ok := false
-            why := f_addWhy(why, "Weak inversion: close extends only " + str.tostring(got / syminfo.mintick, "#.0") + " ticks beyond the trigger gap")
-    [ok, why, bodyAtr]
+            mask += 16
+            first := first < 0 ? 4 : first
+            why := f_addWhy(why, "Weak inversion: close extends " + str.tostring(got / syminfo.mintick, "#.0") + " ticks beyond the trigger gap, " + str.tostring(ext / syminfo.mintick, "#.0") + " required")
+    [ok, why, bodyAtr, first, mask]
 
-f_dbg(string txt) =>
+f_dbg(string txt, string tip) =>
     if inDebug
-        dbgLbls.push(label.new(bar_index, high, "x " + txt, style = label.style_label_down, size = size.tiny, textcolor = color.gray, color = color.new(color.gray, 90)))
+        dbgLbls.push(label.new(bar_index, high, "x " + txt, style = label.style_label_down, size = size.tiny, textcolor = color.gray, color = color.new(color.gray, 90), tooltip = tip))
         while dbgLbls.size() > 30
             label.delete(dbgLbls.shift())
+    true
+
+// One rejected candidate: ONE record (first failed condition only), written to Pine Logs and, per the label setting, as a chart label
+// whose tooltip carries the same text. Times are New York. Debug only; no state is touched.
+f_candRej(Ctx c, string reason, string detail) =>
+    if inDebug
+        string head = "REJECT " + reason + " | " + c.tfTxt + " ctx " + (c.dir > 0 ? "LONG" : "SHORT") + " | " + c.winName + " | candle closes " + f_nyT(time_close) + " NY | ctx gap " + str.tostring(c.bottom, format.mintick) + "-" + str.tostring(c.top, format.mintick) + " confirmed " + f_nyT(c.confAsOf) + " | retest " + f_nyT(c.retestTime) + " | " + detail
+        log.info("H Ticks | " + head)
+        if inDbgLbl == "All sessions" or (inDbgLbl == "NY windows only" and c.winName != "Asia -> London")
+            f_dbg(c.tfTxt + " " + reason, head)
     true
 
 // Entry decision, taken ONCE for this trigger. Rejection keeps the context pending and is never revisited.
@@ -1858,8 +2009,10 @@ f_evalCand(Ctx c, Zone t) =>
     Cand r = Cand.new(k = c.k, trg = t)
     bool bull = c.dir > 0
     float atrP = chartAtr[1]
-    [decOk, decWhy, bodyAtr] = f_decisive(t, bull, atrP)
+    [decOk, decWhy, bodyAtr, decFirst, decMask] = f_decisive(t, bull, atrP)
     r.bodyAtr := bodyAtr
+    r.impFirst := decFirst
+    r.impMask := decMask
     if not decOk
         r.fail := 7
         r.why := decWhy
@@ -1903,6 +2056,7 @@ f_evalCand(Ctx c, Zone t) =>
             string pathWhy = ""
             if cov != 0
                 pathFail := 9
+                r.sub := 1
                 pathWhy := cov == 2 ? "No applicable HTF source" : "HTF coverage unknown (" + covWhy + ")"
             else
                 float lo = bull ? entry : target
@@ -1910,9 +2064,11 @@ f_evalCand(Ctx c, Zone t) =>
                 [obs, obsName] = f_scanAll(bull, lo, hi)
                 if obs > 0
                     pathFail := 10
-                    pathWhy := "Blocked: " + obsName + "."
+                    r.sub := 3
+                    pathWhy := "Blocked: " + obsName + " intersects the entry-to-1R path " + str.tostring(lo, format.mintick) + "-" + str.tostring(hi, format.mintick) + " (" + str.tostring(obs) + " opposing gap(s))"
                 else if not f_lvlReady()
                     pathFail := 9
+                    r.sub := 2
                     pathWhy := "3m structure coverage unknown (" + f_lvlWhy() + ")"
                 else
                     [stBlk, stNear] = f_structCheck(bull, f_tk(target))
@@ -1920,7 +2076,9 @@ f_evalCand(Ctx c, Zone t) =>
                         r.nearTxt := str.tostring(stNear, format.mintick) + (bull ? " (3m swing high)" : " (3m swing low)")
                     if stBlk
                         pathFail := 10
-                        pathWhy := "Blocked: 3m swing " + (bull ? "high " : "low ") + str.tostring(stNear, format.mintick) + " leaves less than one tick beyond the 1R target."
+                        r.sub := 4
+                        int room = bull ? f_tk(stNear) - f_tk(target) : f_tk(target) - f_tk(stNear)
+                        pathWhy := "Blocked: 3m swing " + (bull ? "high " : "low ") + str.tostring(stNear, format.mintick) + " is " + str.tostring(room) + " ticks beyond the 1R target " + str.tostring(target, format.mintick) + " (entry " + str.tostring(entry, format.mintick) + "); at least 1 required"
             if pathFail >= 0
                 r.fail := pathFail
                 r.why := pathWhy
@@ -1929,16 +2087,16 @@ f_evalCand(Ctx c, Zone t) =>
                 [wn, ws, we] = f_selectWindow(time_close)
                 if na(ws) or wn + "|" + str.tostring(ws) != c.winId
                     r.fail := 11
-                    r.why := "Entry outside the originating window instance"
+                    r.why := "Entry outside the originating window instance (context " + c.winId + ", now " + (na(ws) ? "no window" : wn + "|" + str.tostring(ws)) + ")"
                 else if f_winCount(c.winId) >= inMaxEntries
                     r.fail := 12
-                    r.why := "Window entry limit reached"
+                    r.why := "Window entry limit reached (" + str.tostring(f_winCount(c.winId)) + " of " + str.tostring(inMaxEntries) + ")"
                 else if inOneActive and f_openSetup()
                     r.fail := 13
                     r.why := "Another setup is unresolved"
                 else if biasDir != c.dir
                     r.fail := 14
-                    r.why := "15m bias does not agree"
+                    r.why := "15m bias " + (biasDir > 0 ? "bullish" : (biasDir < 0 ? "bearish" : "unknown")) + " vs context " + (c.dir > 0 ? "long" : "short")
                 else
                     r.stage := 4
                     r.ok := true
@@ -2041,6 +2199,8 @@ if supported and barstate.isconfirmed
         dWinN.push(0)
         dWinBad.push(0)
         dSetN.push(0)
+        for ii = 1 to NSS * DGN
+            dg.push(0)
         if na(firstDateKey)
             firstDateKey := dkNow
         while dKey.size() > 14
@@ -2049,6 +2209,8 @@ if supported and barstate.isconfirmed
             dWinN.shift()
             dWinBad.shift()
             dSetN.shift()
+            for ii = 1 to NSS * DGN
+                dg.shift()
         needPrune := true
 
     // 1) mechanical 30s gap lifecycle (unchanged rules). Inversions this bar become trigger candidates.
@@ -2108,6 +2270,7 @@ if supported and barstate.isconfirmed
             if cb.state != 0 and biasDir != cb.dir
                 cb.lastReason := "15m bias reversed against the pending " + cb.tfTxt + " context"
                 f_fb(k, 3)
+                f_dg(f_winIdxN(cb.winName, cb.winStart), 42)
                 f_ctxClear(cb)
     if actC0
         f_ctxSync(0, snapC0, asOfC0, clsC0)
@@ -2123,17 +2286,19 @@ if supported and barstate.isconfirmed
     // qualification coverage of THIS bar: every active context source ready, 3m structure ready AND every applicable obstacle
     // source complete. Counted per NY date, only for bars inside an enabled entry window.
     [cvQ, txQ, whQ] = f_coverage()
-    bool qualOk = f_ctxReadyAll() and f_lvlReady() and cvQ == 0
+    bool qualOk = f_ctxReadyAll() and f_lvlReady() and cvQ == 0 and biasDir != 0
     if qualOk and na(covStart)
         covStart := time_close
     [wnQ, wsQ, weQ] = f_selectWindow(time_close)
     if not na(wsQ)
         int wiQ = f_winIdx(wnQ)
-        f_sd(wiQ, 0)
+        f_dg(wiQ, 0)
         if qualOk
-            f_sd(wiQ, 1)
+            f_dg(wiQ, 1)
+        if biasDir == 0
+            f_dg(wiQ, 2)
         if f_openSetup()
-            f_sd(wiQ, 2)
+            f_dg(wiQ, 55)
         int dq = dKey.size() - 1
         dWinN.set(dq, dWinN.get(dq) + 1)
         if not qualOk
@@ -2151,23 +2316,53 @@ if supported and barstate.isconfirmed
                 cc.legExt := high
                 cc.legExtT := time
             Zone trg = f_pickTrigger(cc)
+            [nSm, nFm, nOv] = f_trigDiag(cc)
+            int wc = f_winIdx(cc.winName)
+            if nSm > 0
+                f_dg(wc, 9)
+                if nFm == 0
+                    f_dg(wc, 17)
+                    Zone zf = f_newestSame(cc, false)
+                    f_candRej(cc, "FORMED-BEFORE-CONTEXT", "newest same-direction 30s gap: confirming candle opened " + f_nyT(zf.formTime) + " (first candle " + f_nyT(zf.formTime - 2 * chartMs) + ") vs context confirmation " + f_nyT(cc.confAsOf) + " NY: " + str.tostring((zf.formTime - cc.confAsOf) / 1000) + " s, at/after required")
+                else
+                    f_dg(wc, 10)
+                    if nOv == 0
+                        f_dg(wc, 18)
+                        Zone zo = f_newestSame(cc, true)
+                        int sepT = math.max(f_tk(cc.bottom) - f_tk(zo.top), f_tk(zo.bottom) - f_tk(cc.top))
+                        f_candRej(cc, "NO-GAP-OVERLAP", "newest 30s gap " + str.tostring(zo.bottom, format.mintick) + "-" + str.tostring(zo.top, format.mintick) + " vs context gap " + str.tostring(cc.bottom, format.mintick) + "-" + str.tostring(cc.top, format.mintick) + ": separation " + str.tostring(sepT) + " ticks, 0 or less required")
+                    else
+                        f_dg(wc, 11)
             if not na(trg)
+                if trg.formTime - 2 * chartMs < cc.confAsOf
+                    f_dg(wc, 43)
                 Cand rc = f_evalCand(cc, trg)
                 f_fn(k, 3)
-                f_sd(f_winIdx(cc.winName), 5)
                 if rc.stage >= 1
                     f_fn(k, 4)
+                    f_dg(wc, 12)
                 if rc.stage >= 2
                     f_fn(k, 5)
+                    f_dg(wc, 13)
                 if rc.stage >= 3
                     f_fn(k, 6)
+                    f_dg(wc, 14)
+                if rc.ok
+                    f_dg(wc, 15)
                 if rc.fail >= 7
                     f_fb(k, rc.fail)
-                    f_sd(f_winIdx(cc.winName), 8 + rc.fail)
+                    int rcol = rc.fail == 7 ? 19 : (rc.fail == 8 ? 20 : (rc.fail == 9 ? (rc.sub == 1 ? 21 : 22) : (rc.fail == 10 ? (rc.sub == 3 ? 23 : 24) : rc.fail + 14)))
+                    f_dg(wc, rcol)
+                    if rc.fail == 7
+                        f_dg(wc, 44 + rc.impFirst)
+                        for ib = 0 to 4
+                            if int(math.floor(rc.impMask / math.pow(2, ib))) % 2 == 1
+                                f_dg(wc, 50 + ib)
+                    if rc.fail == 13
+                        f_lockHit(true)
                 if not rc.ok
                     cc.lastReason := rc.why
-                    f_dbg(cc.tfTxt + ": " + rc.why)
-                    f_log("trigger rejected " + cc.tfTxt + ": " + rc.why)
+                    f_candRej(cc, array.get(array.from("IMPULSE", "STOP/RISK", "COVERAGE", "OBSTACLE", "WINDOW-INSTANCE", "SESSION-LIMIT", "UNRESOLVED-SETUP", "BIAS"), rc.fail - 7), "trigger gap " + str.tostring(trg.bottom, format.mintick) + "-" + str.tostring(trg.top, format.mintick) + " (confirming candle " + f_nyT(trg.formTime) + "): " + rc.why)
                 cands.push(rc)
     // choose among PASSING candidates only: 5m > 3m > 2m > 1m (tie-break, not a confirmation requirement)
     Cand pick = na
@@ -2183,11 +2378,16 @@ if supported and barstate.isconfirmed
         if not f_setupExists(pick.trg.id, cp.zid)
             f_enter(pick, cp)
             f_fn(pick.k, 7)
-            f_sd(f_winIdx(cp.winName), 6)
+            f_dg(f_winIdx(cp.winName), 16)
             for ci = 0 to cands.size() - 1
                 Cand qo = cands.get(ci)
                 if qo.ok and qo.k != pick.k
                     f_fb(qo.k, 15)
+                    f_dg(f_winIdx(cxs.get(qo.k).winName), 29)
+            for dj = 0 to NCTX - 1
+                Ctx cdd = cxs.get(dj)
+                if cdd.state != 0 and dj != pick.k
+                    f_dg(f_winIdxN(cdd.winName, cdd.winStart), 39)
             f_ctxClearAll()
             needPrune := true
     // retests are evaluated AFTER the trigger step so a candle that both first retests and inverts a gap can never trigger
@@ -2195,7 +2395,11 @@ if supported and barstate.isconfirmed
         Ctx cr = cxs.get(k)
         if cr.state == 1 and time >= cr.confAsOf
             bool touch = f_overlap(high, low, cr.bottom, cr.top)
+            [nSr, nFr, nOr] = f_trigDiag(cr)
+            int wr = f_winIdx(cr.winName)
             if touch and cr.away >= inDeparture
+                if nSr > 0
+                    f_dg(wr, 31)
                 cr.state := 2
                 cr.retestBar := bar_index
                 cr.retestTime := time
@@ -2203,9 +2407,11 @@ if supported and barstate.isconfirmed
                 cr.legExtT := time
                 cr.retestPx := cr.legExt
                 f_fn(k, 2)
-                f_sd(f_winIdx(cr.winName), 4)
+                f_dg(wr, 8)
                 f_log("retest " + cr.tfTxt + " bar " + str.tostring(bar_index))
             else
+                if nSr > 0
+                    f_dg(wr, 30)
                 int aw = cr.dir > 0 ? f_tk(high) - f_tk(cr.top) : f_tk(cr.bottom) - f_tk(low)
                 if aw > cr.away
                     cr.away := aw
@@ -2218,7 +2424,7 @@ if supported and barstate.isconfirmed
         f_drawAll()
 
 var table stBox = table.new(position.top_right, 1, 11, bgcolor = na, border_width = 0)
-var table dbgTbl = table.new(position.bottom_left, 1, 40, bgcolor = na, border_width = 1, border_color = color.gray)
+var table dbgTbl = table.new(position.bottom_left, 1, 80, bgcolor = na, border_width = 1, border_color = color.gray)
 f_bx(int r, string txt, string tip) =>
     table.cell(stBox, 0, r, txt, text_color = color.black, text_size = size.small, text_halign = text.align_left, bgcolor = na, tooltip = tip)
     true
@@ -2235,13 +2441,25 @@ f_blockTxt(int k) =>
             r += (r == "" ? "" : " | ") + fbNames.get(j) + " " + str.tostring(v)
     cxs.get(k).tfTxt + ": " + (r == "" ? "none" : r)
 
-f_sessTxt(int w) =>
+// Sum of one diagnostic column over the reported dates for session w.
+f_dgSum(array<int> rd, int w, int col) =>
+    int sm = 0
+    int n = rd.size()
+    if n > 0
+        for i = 0 to n - 1
+            int di = f_dateIdx(rd.get(i))
+            if di >= 0
+                sm += dg.get((di * NSS + w) * DGN + col)
+    sm
+
+f_dgList(array<int> rd, int w, int c0, array<string> names) =>
     string r = ""
-    for j = 4 to FB - 1
-        int v = sdn.get(w * FS + 8 + j)
+    int n = names.size()
+    for j = 0 to n - 1
+        int v = f_dgSum(rd, w, c0 + j)
         if v > 0
-            r += (r == "" ? "" : " | ") + fbNames.get(j) + " " + str.tostring(v)
-    r == "" ? "no rejected candidates" : r
+            r += (r == "" ? "" : " | ") + names.get(j) + " " + str.tostring(v)
+    r == "" ? "none" : r
 
 f_srcLine(int idx, string nm, bool act) =>
     string r = nm + ": "
@@ -2275,7 +2493,7 @@ if barstate.islast
                 tO += f_dateCount(k, 0)
                 tA += f_dateCount(k, 3)
                 if stx != 0
-                    miss += f_dateTxt(k) + (stx == 2 ? " not evaluated; " : " partial; ")
+                    miss += f_dateTxt(k) + (stx >= 2 ? " not evaluated; " : " partial; ")
         int oldOpen = 0
         if nr > 0 and setups.size() > 0
             for i = 0 to setups.size() - 1
@@ -2296,7 +2514,7 @@ if barstate.islast
                     int k2 = rd.get(r)
                     int di2 = f_dateIdx(k2)
                     int st2 = di2 >= 0 ? f_dateStatus(di2) : 1
-                    string rowTxt = f_dateTxt(k2) + (st2 == 2 ? "  not evaluated" : "  S" + str.tostring(f_dateCount(k2, -1)) + " W" + str.tostring(f_dateCount(k2, 1)) + " L" + str.tostring(f_dateCount(k2, 2)) + " O" + str.tostring(f_dateCount(k2, 0)) + " A" + str.tostring(f_dateCount(k2, 3)) + (st2 == 1 ? "  partial" : ""))
+                    string rowTxt = f_dateTxt(k2) + (st2 >= 2 ? "  not evaluated" : "  S" + str.tostring(f_dateCount(k2, -1)) + " W" + str.tostring(f_dateCount(k2, 1)) + " L" + str.tostring(f_dateCount(k2, 2)) + " O" + str.tostring(f_dateCount(k2, 0)) + " A" + str.tostring(f_dateCount(k2, 3)) + (st2 == 1 ? "  partial" : ""))
                     f_bx(6 + r, rowTxt, "")
                 else
                     table.clear(stBox, 0, 6 + r, 0, 6 + r)
@@ -2306,29 +2524,89 @@ if barstate.islast
         table.clear(stBox, 0, 0, 0, 10)
     if supported and inDebug
         int dr = 0
-        f_dl(dr, "FUNNEL per context timeframe: inversions / admitted / retests / 30s inversions / impulse / stop-risk / clear path / entries", true)
+        array<int> rdg = f_reportDates()
+        int ndg = rdg.size()
+        f_dl(dr, "DIAGNOSTIC VIEW: the " + str.tostring(ndg) + " reported NY dates only. Evaluation = every confirmed bar inside an enabled window.", true)
+        dr += 1
+        f_dl(dr, "UNITS: inversion = one source gap closed through (once, session of its confirmation) | context = one admitted inversion | candidate = one (context, 30s bar) with >=1 same-direction 30s inversion after that context's retest bar | a rejected candidate is counted ONCE, at its FIRST failed gate | entry = one setup", false)
+        dr += 1
+        f_dl(dr, "DATES: eligible bars per window (a full NY morning holds 210, NY afternoon 120) and evaluation status", true)
+        dr += 1
+        if ndg > 0
+            for r = 0 to ndg - 1
+                int kd = rdg.get(r)
+                int dix = f_dateIdx(kd)
+                if dix >= 0
+                    int stD = f_dateStatus(dix)
+                    int bA = f_dgBars(dix, 0, 0)
+                    int bM = f_dgBars(dix, 1, 0)
+                    int bP = f_dgBars(dix, 2, 0)
+                    int cvD = f_dgBars(dix, 0, 1) + f_dgBars(dix, 1, 1) + f_dgBars(dix, 2, 1)
+                    string stT = stD == 0 ? (dSetN.get(dix) > 0 ? "EVALUATED" : "EVALUATED, no qualifying setup") : (stD == 1 ? "PARTIAL" : (stD == 2 ? "NOT EVALUATED (never fully covered)" : "NOT EVALUATED (an enabled window had no bars)"))
+                    f_dl(dr, f_dateTxt(kd) + "  Asia " + str.tostring(bA) + " | NY morning " + str.tostring(bM) + "/210 | NY afternoon " + str.tostring(bP) + "/120 | fully covered " + str.tostring(cvD) + " of " + str.tostring(bA + bM + bP) + " | entries " + str.tostring(dSetN.get(dix)) + " | " + stT, false)
+                    dr += 1
+        string[] sn = array.from("Asia -> London", "NY morning", "NY afternoon")
+        array<string> nmFail = array.from("formed-before-context", "no-overlap", "impulse", "stop/risk", "HTF-coverage", "3m-structure-not-ready", "HTF-gap", "3m-swing", "window-instance", "session-limit", "unresolved-setup", "bias", "outranked")
+        array<string> nmInv = array.from("bias unknown", "bias opposite", "too narrow", "other inversion chosen", "setup lock", "no window")
+        array<string> nmLost = array.from("replaced", "discarded at another entry", "window expiry", "closed through", "bias flip")
+        array<string> nmImp = array.from("direction", "body/ATR", "body/range", "close position", "extension", "ATR n/a")
+        for w = 0 to 2
+            f_dl(dr, sn.get(w) + ": eligible bars " + str.tostring(f_dgSum(rdg, w, 0)) + " (fully covered " + str.tostring(f_dgSum(rdg, w, 1)) + ", 15m bias unknown " + str.tostring(f_dgSum(rdg, w, 2)) + ", open-setup bars " + str.tostring(f_dgSum(rdg, w, 55)) + ") | context inversions 1m " + str.tostring(f_dgSum(rdg, w, 3)) + " / 2m " + str.tostring(f_dgSum(rdg, w, 4)) + " / 3m " + str.tostring(f_dgSum(rdg, w, 5)) + " / 5m " + str.tostring(f_dgSum(rdg, w, 6)), true)
+            dr += 1
+            f_dl(dr, "   admitted(session+bias) " + str.tostring(f_dgSum(rdg, w, 7)) + " > retested " + str.tostring(f_dgSum(rdg, w, 8)) + " > candidates " + str.tostring(f_dgSum(rdg, w, 9)) + " > formed after context " + str.tostring(f_dgSum(rdg, w, 10)) + " > gap overlap " + str.tostring(f_dgSum(rdg, w, 11)) + " > impulse " + str.tostring(f_dgSum(rdg, w, 12)) + " > stop/risk " + str.tostring(f_dgSum(rdg, w, 13)) + " > clear path " + str.tostring(f_dgSum(rdg, w, 14)) + " > admission " + str.tostring(f_dgSum(rdg, w, 15)) + " > ENTRIES " + str.tostring(f_dgSum(rdg, w, 16)), false)
+            dr += 1
+            f_dl(dr, "   first failed gate: " + f_dgList(rdg, w, 17, nmFail), false)
+            dr += 1
+            f_dl(dr, "   impulse sub-checks, first failed: " + f_dgList(rdg, w, 44, nmImp) + "  ||  failed at all: " + f_dgList(rdg, w, 50, array.from("direction", "body/ATR", "body/range", "close position", "extension")), false)
+            dr += 1
+            f_dl(dr, "   inversions rejected: " + f_dgList(rdg, w, 32, nmInv) + "  ||  contexts lost: " + f_dgList(rdg, w, 38, nmLost) + "  ||  30s inversion before retest " + str.tostring(f_dgSum(rdg, w, 30)) + ", on the retest candle " + str.tostring(f_dgSum(rdg, w, 31)) + "  ||  info: trigger first candle before ctx confirmation " + str.tostring(f_dgSum(rdg, w, 43)), false)
+            dr += 1
+        f_dl(dr, "Outside every window: inversions 1m " + str.tostring(f_dgSum(rdg, 3, 3)) + " / 2m " + str.tostring(f_dgSum(rdg, 3, 4)) + " / 3m " + str.tostring(f_dgSum(rdg, 3, 5)) + " / 5m " + str.tostring(f_dgSum(rdg, 3, 6)) + " | rejected: " + f_dgList(rdg, 3, 32, nmInv), false)
+        dr += 1
+        int aInv = 0
+        int aInvOut = 0
+        int aCand = 0
+        int aCandOut = 0
+        int aImp = 0
+        int aImpSub = 0
+        for w = 0 to 3
+            for cl = 3 to 6
+                aInv += f_dgSum(rdg, w, cl)
+            for cl = 32 to 37
+                aInvOut += f_dgSum(rdg, w, cl)
+            aInvOut += f_dgSum(rdg, w, 7)
+        for w = 0 to 2
+            aCand += f_dgSum(rdg, w, 11)
+            for cl = 19 to 28
+                aCandOut += f_dgSum(rdg, w, cl)
+            aCandOut += f_dgSum(rdg, w, 15)
+            aImp += f_dgSum(rdg, w, 19)
+            for cl = 44 to 49
+                aImpSub += f_dgSum(rdg, w, cl)
+        int aAdm = f_dgSum(rdg, 0, 15) + f_dgSum(rdg, 1, 15) + f_dgSum(rdg, 2, 15)
+        int aEnt = f_dgSum(rdg, 0, 16) + f_dgSum(rdg, 1, 16) + f_dgSum(rdg, 2, 16) + f_dgSum(rdg, 0, 29) + f_dgSum(rdg, 1, 29) + f_dgSum(rdg, 2, 29)
+        f_dl(dr, "ACCOUNTING CHECK: inversions " + str.tostring(aInv) + " = rejected + admitted " + str.tostring(aInvOut) + (aInv == aInvOut ? " OK" : " MISMATCH") + " | linked candidates " + str.tostring(aCand) + " = failed + passed " + str.tostring(aCandOut) + (aCand == aCandOut ? " OK" : " MISMATCH") + " | passed " + str.tostring(aAdm) + " = entries + outranked " + str.tostring(aEnt) + (aAdm == aEnt ? " OK" : " MISMATCH") + " | impulse fails " + str.tostring(aImp) + " = sub-check firsts " + str.tostring(aImpSub) + (aImp == aImpSub ? " OK" : " MISMATCH"), false)
+        dr += 1
+        f_dl(dr, "UNRESOLVED-SETUP LOCK HISTORY (reported dates): entry -> resolution = blocking interval", true)
+        dr += 1
+        int shown = 0
+        if ndg > 0 and setups.size() > 0
+            for i = setups.size() - 1 to 0
+                Setup sq = setups.get(i)
+                if shown < 6 and sq.dateKey >= rdg.first()
+                    f_dl(dr, sq.id + " (" + sq.winName + ", " + sq.ctxTf + "): " + f_nyT(sq.entryTime) + " -> " + (sq.state == 0 ? "STILL OPEN" : f_nyT(sq.resolveTime) + " (" + str.tostring(math.round((sq.resolveTime - sq.entryTime) / 60000.0)) + " min)") + " | context inversions blocked " + str.tostring(sq.blkCtx) + " | entries blocked " + str.tostring(sq.blkEnt), false)
+                    dr += 1
+                    shown += 1
+        if shown == 0
+            f_dl(dr, "no setups on the reported dates, so no lock interval exists", false)
+            dr += 1
+        f_dl(dr, "PER CONTEXT TIMEFRAME, SINCE LOAD (all loaded history, NOT only the 5 dates): inversions / admitted / retests / 30s candidates / impulse / stop-risk / clear path / entries", true)
         dr += 1
         for k = 0 to NCTX - 1
             string fl = cxs.get(k).tfTxt + (actCtxA.get(k) ? ": " : " (off): ")
             for j = 0 to FN - 1
                 fl += str.tostring(fnl.get(k * FN + j)) + (j < FN - 1 ? " / " : "")
-            f_dl(dr, fl, false)
-            dr += 1
-        f_dl(dr, "FIRST FAILED GATE / blocks (each candidate counted once)", true)
-        dr += 1
-        for k = 0 to NCTX - 1
-            f_dl(dr, f_blockTxt(k), false)
-            dr += 1
-        f_dl(dr, "SESSIONS: evaluated bars / bars fully covered / bars with an open setup / contexts / retests / triggers / entries", true)
-        dr += 1
-        string[] sn = array.from("Asia -> London", "NY morning", "NY afternoon")
-        for w = 0 to 2
-            string sl = sn.get(w) + ": "
-            for j = 0 to 6
-                sl += str.tostring(sdn.get(w * FS + j)) + (j < 6 ? " / " : "")
-            f_dl(dr, sl, false)
-            dr += 1
-            f_dl(dr, "   rejections: " + f_sessTxt(w), false)
+            f_dl(dr, fl + "   " + f_blockTxt(k), false)
             dr += 1
         f_dl(dr, "SOURCES: first data -> ready (readiness is anchored to the first candle the platform supplied, never the clock)", true)
         dr += 1
@@ -2373,9 +2651,9 @@ if barstate.islast
         if setups.size() > DRAW_MAX
             f_dl(dr, "Drawings limited to " + str.tostring(DRAW_MAX) + " setups; records and statistics are unaffected", false)
             dr += 1
-        table.clear(dbgTbl, 0, dr, 0, 39)
+        table.clear(dbgTbl, 0, dr, 0, 79)
     else
-        table.clear(dbgTbl, 0, 0, 0, 39)
+        table.clear(dbgTbl, 0, 0, 0, 79)
 
 // ═════════════════════════════════════════ ALERTS ═════════════════════════════════════════════
 // Only genuine events on a confirmed REALTIME bar; never from history / bootstrap. Every event of the bar is collected in

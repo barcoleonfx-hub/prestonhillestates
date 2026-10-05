@@ -49,7 +49,7 @@ chk('A pivot cannot break on the candle that confirms it (availability never bac
 chk('Code: bias break test runs BEFORE the new pivot is stored; availability = confirming candle close; one break per level',
     CODE.index('f_tk(c1) > f_tk(swH)') < CODE.index('swH := h3') and 'swHB := true' in CODE and 'swHA := float(tc1)' in CODE, 'CODE INSPECTION')
 chk('Code: context needs bias == direction at creation, cancels on opposite bias, entry re-checks bias',
-    '(snap.get(base + 1) > 0 ? -1 : 1) == biasDir' in CODE and 'biasDir != c.dir' in CODE and '15m bias does not agree' in CODE, 'CODE INSPECTION')
+    '(snap.get(base + 1) > 0 ? -1 : 1) == biasDir' in CODE and 'biasDir != c.dir' in CODE and '"15m bias " + (biasDir > 0' in CODE, 'CODE INSPECTION')
 
 # ---------- inversion rules ----------
 def inverts(code, c, top, bot):      # bearish FVG (code<0) inverts upward on close > top; bullish inverts down on close < bottom

@@ -134,9 +134,9 @@ trk = CODE[CODE.index('f_trackSetups() =>'):CODE.index('if supported and barstat
 chk('Code: outcome tracking runs on every confirmed bar regardless of session / window (no window condition inside f_trackSetups) so an Asia setup resolves during or after NY',
     'f_selectWindow' not in trk and 'winEnd' not in trk and 'if s.state == 0 and bar_index > s.entryBar' in trk, 'CODE INSPECTION')
 chk('Code: the lock is state==0 only; the debug panel names the open setup, its session and open-since time; unresolved-setup blocks are counted per session',
-    'if setups.get(i).state == 0' in CODE and '"UNRESOLVED-SETUP LOCK: "' in CODE and 'f_sd(f_winIdx(wn), 14)' in CODE and 'f_sd(f_winIdx(cc.winName), 8 + rc.fail)' in CODE, 'CODE INSPECTION')
+    'if setups.get(i).state == 0' in CODE and '"UNRESOLVED-SETUP LOCK: "' in CODE and 'f_lockHit(false)' in CODE and 'f_lockHit(true)' in CODE and 'f_dg(wI, 36)' in CODE and 'UNRESOLVED-SETUP LOCK HISTORY' in CODE, 'CODE INSPECTION')
 chk('Code: per-session diagnostics (evaluated bars, covered bars, lock-blocked bars, contexts, retests, triggers, entries, rejection reasons) exist and are shown only behind the Debug toggle',
-    all(x in CODE for x in ('f_sd(wiQ, 0)', 'f_sd(wiQ, 1)', 'f_sd(wiQ, 2)', 'f_sd(f_winIdx(wn), 3)', 'f_sd(f_winIdx(cr.winName), 4)', 'f_sd(f_winIdx(cc.winName), 5)', 'f_sd(f_winIdx(cp.winName), 6)', 'if supported and inDebug')) and 'inDebug = input.bool(false' in CODE, 'CODE INSPECTION')
+    all(x in CODE for x in ('f_dg(wiQ, 0)', 'f_dg(wiQ, 1)', 'f_dg(wiQ, 2)', 'f_dg(wI, 7)', 'f_dg(wr, 8)', 'f_dg(wc, 9)', 'f_dg(f_winIdx(cp.winName), 16)', 'if supported and inDebug')) and 'inDebug = input.bool(false' in CODE, 'CODE INSPECTION')
 
 # ================= 3. Replay / history audit =================
 rt_uses = [m.start() for m in re.finditer(r'barstate\.isrealtime', CODE)]
