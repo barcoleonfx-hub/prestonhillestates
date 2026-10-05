@@ -9,11 +9,13 @@ const string GRP_ST  = "Statistics"
 const string GRP_DBG = "Debug"
 const string GRP_AL  = "Alerts"
 string inCtxSel = input.string("Auto (1m, 2m, 3m, 5m)", "Context timeframe", options = ["Auto (1m, 2m, 3m, 5m)", "1m only", "2m only", "3m only", "5m only"], group = GRP_CTX, tooltip = "Auto: each of 1m, 2m, 3m and 5m is tracked independently and ANY ONE can supply a valid setup (no agreement required). If several pass on the same 30s trigger, 5m > 3m > 2m > 1m picks the one entry (tie-break only).")
+bool   inRelaxWin = input.bool(false, "Relaxed: allow ALL hours (ignore the windows above)", group = GRP_WIN, tooltip = "OFF = original windows. ON = contexts and entries are accepted at any time Mon-Fri; the whole New York trading day (18:00 to 18:00) is ONE window instance with the usual entry limit, so a context can live until 18:00 NY. Stats then count every bar under the 'outside any window' row.")
 bool   inWinAsia = input.bool(true, "Window A: Asia open -> London open", group = GRP_WIN)
 bool   inWinAm = input.bool(true, "Window B: New York morning 09:45-11:30", group = GRP_WIN, tooltip = "Start inclusive, end exclusive. BOTH the context inversion and the entry must belong to the same window instance (max 3 entries per instance, one unresolved setup at a time).")
 bool   inWinPm = input.bool(true, "Window C: New York afternoon 14:30-15:30", group = GRP_WIN)
 string inPreset = input.string("Standard", "Impulse preset (decisive 30s inversion candle)", options = ["Standard", "Strong"], group = GRP_Q, tooltip = "Standard: body >= 0.8 x prev ATR, body/range >= 0.65, close in the outer 20% of the range. Strong: 1.0 x, 0.70, outer 15%. Both: body points in the setup direction and the close extends beyond the trigger gap boundary by max(1 tick, 0.10 x prev ATR). Starting parameters, not optimised or proven.")
 int    inMinTick = input.int(1, "Minimum gap size (ticks, all gap sources)", minval = 1, group = GRP_Q, tooltip = "Gaps at least this wide are detected and may form contexts, triggers and obstacles.")
+bool   inNoBias = input.bool(false, "Relaxed: turn the directional bias OFF", group = GRP_BIAS, tooltip = "OFF = original behaviour. ON = contexts of either direction are accepted, a bias flip never cancels a context and the entry does not check the bias. The bias source below is then ignored and the stats show the bias as OFF.")
 string inBiasSrc = input.string("15m structure", "Bias source", options = ["15m structure", "4H structure", "VWAP", "EMAs"], group = GRP_BIAS, tooltip = "Which direction filter a context must agree with. 15m structure = the original swing-break bias (default). 4H structure = the same engine on 4H candles (slow; needs many days of loaded history). VWAP = daily-session VWAP: bullish above, bearish below. EMAs = on 5m: bullish when price > fast EMA > slow EMA, bearish when price < fast < slow, otherwise no bias. If the bias flips against a pending context, that context is cancelled.")
 int    inEmaF = input.int(21, "EMA fast length (5m, used by EMAs)", minval = 1, group = GRP_BIAS)
 int    inEmaS = input.int(50, "EMA slow length (5m, used by EMAs)", minval = 2, group = GRP_BIAS)
@@ -725,6 +727,7 @@ var int  covStart = na
 var bool needPrune = false
 var array<Lvl> lvStore = array.new<Lvl>()
 int   biasDir = na(bzR) ? 0 : int(bzR)
+bool  noBias = inNoBias
 bool okWinAs = not (inAsTz == inLoTz and inAsH == inLoH and inAsM == inLoM)
 bool okWinAm = not (inAmSH == inAmEH and inAmSM == inAmEM)
 bool okWinPm = not (inPmSH == inPmEH and inPmSM == inPmEM)
@@ -766,6 +769,17 @@ f_selectWindow(int T) =>
         bn := "Asia -> London"
         bs := sA
         be := eA
+    if inRelaxWin
+        bn := ""
+        bs := na
+        be := na
+        int dwR = dayofweek(T, TZ_NY)
+        if inWkd == "Every day" or (dwR >= dayofweek.monday and dwR <= dayofweek.friday)
+            int st0 = f_localTs(T, TZ_NY, 0, 18, 0)
+            int stR = T >= st0 ? st0 : f_localTs(T, TZ_NY, -1, 18, 0)
+            bn := "Relaxed (all hours)"
+            bs := stR
+            be := f_localTs(stR, TZ_NY, 1, 18, 0)
     [bn, bs, be]
 f_destroy(Zone z) =>
     if not na(z.bx)
@@ -1440,7 +1454,7 @@ f_fn(int k, int col) =>
     fnl.set(k * FN + col, fnl.get(k * FN + col) + 1)
     true
 f_winIdx(string nm) =>
-    nm == "Asia -> London" ? 0 : (nm == "New York morning" ? 1 : 2)
+    nm == "Relaxed (all hours)" ? 3 : (nm == "Asia -> London" ? 0 : (nm == "New York morning" ? 1 : 2))
 f_winIdxN(string nm, int ws) =>
     na(ws) ? 3 : f_winIdx(nm)
 f_dgN(int w, int col, int n) =>
@@ -1540,11 +1554,11 @@ f_dateWinZero(int idx) =>
     bool z = false
     bool wk = dDow.get(idx) >= dayofweek.monday and dDow.get(idx) <= dayofweek.friday
     if wk
-        if inWinAsia and okWinAs and f_dgBars(idx, 0, 0) == 0
+        if not inRelaxWin and inWinAsia and okWinAs and f_dgBars(idx, 0, 0) == 0
             z := true
-        if inWinAm and okWinAm and f_dgBars(idx, 1, 0) == 0
+        if not inRelaxWin and inWinAm and okWinAm and f_dgBars(idx, 1, 0) == 0
             z := true
-        if inWinPm and okWinPm and f_dgBars(idx, 2, 0) == 0
+        if not inRelaxWin and inWinPm and okWinPm and f_dgBars(idx, 2, 0) == 0
             z := true
     z
 f_dateStatus(int idx) =>
@@ -1610,9 +1624,9 @@ f_ctxUpdate(int k, array<float> snap, int asOf, float cCl) =>
             int base = HDR + kk * ZS
             if math.abs(snap.get(base + 1)) == 2.0
                 nFlag += 1
-                bool dirOk = (snap.get(base + 1) > 0 ? -1 : 1) == biasDir
+                bool dirOk = noBias or (snap.get(base + 1) > 0 ? -1 : 1) == biasDir
                 bool wideOk = f_tk(snap.get(base + 2)) - f_tk(snap.get(base + 3)) >= inCtxMinTicks
-                if biasDir == 0
+                if biasDir == 0 and not noBias
                     nBU += 1
                 else if not dirOk
                     nBX += 1
@@ -1896,7 +1910,7 @@ f_evalCand(Ctx c, Zone t) =>
                 else if inOneActive and f_openSetup()
                     r.fail := 13
                     r.why := "Another setup is unresolved"
-                else if biasDir != c.dir
+                else if not noBias and biasDir != c.dir
                     r.fail := 14
                     r.why := biasTxt + " bias " + (biasDir > 0 ? "bullish" : (biasDir < 0 ? "bearish" : "unknown")) + " vs context " + (c.dir > 0 ? "long" : "short")
                 else
@@ -1904,7 +1918,7 @@ f_evalCand(Ctx c, Zone t) =>
                     r.ok := true
     r
 f_biasTip(bool bull) =>
-    biasTxt + " bias: " + (biasStruct ? (bull ? "bullish (close above swing high " : "bearish (close below swing low ") + str.tostring(blR, format.mintick) + ", pivot " + f_nyT(int(btR)) + " NY, break confirmed " + f_nyT(int(baR)) + " NY)" : (bull ? "bullish (price above " : "bearish (price below ") + (inBiasSrc == "EMAs" ? "fast EMA " : "VWAP ") + str.tostring(blR, format.mintick) + ")")
+    noBias ? "Bias: OFF (relaxed)" : biasTxt + " bias: " + (biasStruct ? (bull ? "bullish (close above swing high " : "bearish (close below swing low ") + str.tostring(blR, format.mintick) + ", pivot " + f_nyT(int(btR)) + " NY, break confirmed " + f_nyT(int(baR)) + " NY)" : (bull ? "bullish (price above " : "bearish (price below ") + (inBiasSrc == "EMAs" ? "fast EMA " : "VWAP ") + str.tostring(blR, format.mintick) + ")")
 f_enter(Cand r, Ctx c) =>
     bool bull = c.dir > 0
     Zone t = r.trg
@@ -2099,7 +2113,7 @@ if supported and barstate.isconfirmed
         lastResolveAt := rt
         needPrune := true
     f_ctxExpire()
-    if biasDir != 0
+    if biasDir != 0 and not noBias
         for k = 0 to NCTX - 1
             Ctx cb = cxs.get(k)
             if cb.state != 0 and biasDir != cb.dir
@@ -2119,7 +2133,7 @@ if supported and barstate.isconfirmed
         f_lvlSync(snapL, asOfL)
     f_lvlConsume()
     [cvQ, txQ, whQ] = f_coverage()
-    bool qualOk = f_ctxReadyAll() and f_lvlReady() and cvQ == 0 and biasDir != 0
+    bool qualOk = f_ctxReadyAll() and f_lvlReady() and cvQ == 0 and (noBias or biasDir != 0)
     if qualOk and na(covStart)
         covStart := time_close
     [wnQ, wsQ, weQ] = f_selectWindow(time_close)
@@ -2128,7 +2142,7 @@ if supported and barstate.isconfirmed
         f_dg(wiQ, 0)
         if qualOk
             f_dg(wiQ, 1)
-        if biasDir == 0
+        if biasDir == 0 and not noBias
             f_dg(wiQ, 2)
         if f_openSetup()
             f_dg(wiQ, 55)
@@ -2444,7 +2458,7 @@ if barstate.islast
         dr += 1
         f_dl(dr, f_srcLine(2, f_tfText(sec3) + " obstacles", act3), false)
         dr += 1
-        f_dl(dr, biasTxt + " bias: " + (biasDir == 0 ? "UNKNOWN (no qualifying signal yet) - no contexts" : (biasDir > 0 ? "BULLISH above " : "BEARISH below ") + str.tostring(blR, format.mintick) + (biasStruct ? " (pivot " + f_nyT(int(btR)) + " NY)" : "")), false)
+        f_dl(dr, noBias ? "Bias: OFF (relaxed)" : biasTxt + " bias: " + (biasDir == 0 ? "UNKNOWN (no qualifying signal yet) - no contexts" : (biasDir > 0 ? "BULLISH above " : "BEARISH below ") + str.tostring(blR, format.mintick) + (biasStruct ? " (pivot " + f_nyT(int(btR)) + " NY)" : "")), false)
         dr += 1
         string lockTxt = "none"
         if setups.size() > 0

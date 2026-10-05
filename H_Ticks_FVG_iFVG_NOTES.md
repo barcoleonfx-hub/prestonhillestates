@@ -232,3 +232,8 @@ New setting "Days reported (stats box and debug counts)", default 20 (1-20), rep
 ## TO-DO (user request, not built)
 - "Relaxed" tickbox for the entry windows: when ticked, allow ALL windows (entries/contexts accepted at any time of day, Mon-Fri), default OFF so current behaviour is unchanged. Open design points to settle when built: how window-instance / 3-per-window limits behave when there is no window (e.g. use the NY date or a rolling block as the instance), and whether Asia/NY labels in the stats still apply.
 - "Relaxed" tickbox for the directional bias: when ticked, bias is OFF (contexts of either direction accepted; no bias cancel; no bias gate at entry), default OFF. Purpose: see the results with and without bias. Design points: the bias counters ("bias unknown", "bias opposite", gate 14, 42) should read 0 / n/a in that mode, and the stats should say which mode produced the numbers.
+
+## Relaxed tickboxes (built; both default OFF)
+- `inRelaxWin` (Entry windows group): ignores the A/B/C windows. Every Mon-Fri bar belongs to ONE instance per NY trading day (18:00 -> 18:00 NY), id "Relaxed (all hours)", mapped to the "outside any window" stats row (idx 3). Entry limit (3) therefore applies per trading day; a context lives until 18:00 NY.
+- `inNoBias` (Directional bias group): bias is not used. Context direction accepted either way, no bias-flip cancel, no entry bias gate, "bias unknown" counters stay 0, stats/tooltip say "Bias: OFF (relaxed)".
+- Not compiled or replayed by me.
