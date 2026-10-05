@@ -49,7 +49,7 @@ chk('A pivot cannot break on the candle that confirms it (availability never bac
 chk('Code: bias break test runs BEFORE the new pivot is stored; availability = confirming candle close; one break per level',
     CODE.index('f_tk(c1) > f_tk(swH)') < CODE.index('swH := h3') and 'swHB := true' in CODE and 'swHA := float(tc1)' in CODE, 'CODE INSPECTION')
 chk('Code: context needs bias == direction at creation, cancels on opposite bias, entry re-checks bias',
-    '(snap.get(base + 1) > 0 ? -1 : 1) == biasDir' in CODE and 'biasDir != cx.dir' in CODE and '15m bias does not agree' in CODE, 'CODE INSPECTION')
+    '(snap.get(base + 1) > 0 ? -1 : 1) == biasDir' in CODE and 'biasDir != c.dir' in CODE and '15m bias does not agree' in CODE, 'CODE INSPECTION')
 
 # ---------- inversion rules ----------
 def inverts(code, c, top, bot):      # bearish FVG (code<0) inverts upward on close > top; bullish inverts down on close < bottom
@@ -87,7 +87,7 @@ chk('Code: preset constants 0.8/0.65/0.20 and 1.0/0.70/0.15, ext = max(1 tick, 0
 pend_by_bar = {5: ['weak-inversion-gap']}      # inverted on bar 5 (weak) -> rejected
 def candidates(bar): return pend_by_bar.get(bar, [])
 chk('A weak inversion is never reconsidered: bar 6 has no candidates unless a FRESH inversion occurs', candidates(5) and not candidates(6))
-chk('Code: pend is cleared every confirmed bar and rejection never re-queues', 'pend.clear()' in CODE and 'cx.lastReason := why' in CODE and 'pend.push' in CODE and CODE.count('pend.push') == 1, 'CODE INSPECTION')
+chk('Code: pend is cleared every confirmed bar and rejection never re-queues', 'pend.clear()' in CODE and 'cc.lastReason := rc.why' in CODE and 'pend.push' in CODE and CODE.count('pend.push') == 1, 'CODE INSPECTION')
 
 # ---------- retest leg / structural stop / 1R geometry ----------
 def run_leg(bars, dirn):
@@ -119,10 +119,10 @@ chk('1R geometry holds for odd ATR values, both directions', True)
 exs, ts = run_leg([(99, 99.5, 98.5, 99), (99, 100.5, 98.75, 99.5), (99.5, 101.0, 99.25, 100.75)], -1)
 chk('Short: highest high through the trigger candle is the anchor; stop above it', exs == 101.0 and stop_ticks(exs, -1, 2.0) * TICK > 101.0)
 chk('Code: body-stop logic removed (no min(open, close) / max(open, close) stop, no inStopBuf, no risk-from-body test)',
-    'math.min(open, close)' not in CODE and 'math.max(open, close)' not in CODE and 'inStopBuf' not in CODE and 'inMinRiskT' not in CODE and 'inMaxRiskT' not in CODE and 'cx.legExt' in CODE, 'CODE INSPECTION')
+    'math.min(open, close)' not in CODE and 'math.max(open, close)' not in CODE and 'inStopBuf' not in CODE and 'inMinRiskT' not in CODE and 'inMaxRiskT' not in CODE and 'c.legExt' in CODE, 'CODE INSPECTION')
 chk('Code: stop/target/anchor are stored on the Setup at entry and never reassigned afterwards',
-    'stop = stop, target = target' in CODE and 'legExt = legX, stopAnchorT = cx.legExtT' in CODE and not re.search(r's\.(stop|target|entry|legExt)\s*:=', CODE), 'CODE INSPECTION')
-chk('Code: leg extreme is initialised at the first retest and updated before the trigger step', CODE.index('cx.legExt := low') < CODE.index('Zone trg = f_pickTrigger()') and 'cx.legExt := cx.dir > 0 ? low : high' in CODE, 'CODE INSPECTION')
+    'stop = r.stop, target = r.target' in CODE and 'legExt = r.legX, stopAnchorT = r.legT' in CODE and not re.search(r's\.(stop|target|entry|legExt)\s*:=', CODE), 'CODE INSPECTION')
+chk('Code: leg extreme is initialised at the first retest and updated before the trigger step', CODE.index('cc.legExt := low') < CODE.index('Zone trg = f_pickTrigger(cc)') and 'cr.legExt := cr.dir > 0 ? low : high' in CODE, 'CODE INSPECTION')
 
 # ---------- trigger selection ----------
 class G:
@@ -138,7 +138,7 @@ chk('Unrelated gap (does not intersect the 3m zone) cannot trigger', pick([g_far
 chk('Gap formed before the 3m confirmation cannot trigger', pick([g_old], 1000, 102.0, 100.5) is None)
 chk('Newest eligible gap wins (not the smallest)', pick([g_before, g_new], 1000, 102.0, 100.5) is g_new)
 chk('Code: linked-gap conditions (formTime >= confAsOf, closed-interval overlap with the 3m zone, retest bar strictly earlier)',
-    'z.formTime >= cx.confAsOf and f_overlap(z.top, z.bottom, cx.bottom, cx.top)' in CODE and 'cx.retestBar < bar_index' in CODE, 'CODE INSPECTION')
+    'z.formTime >= c.confAsOf and f_overlap(z.top, z.bottom, c.bottom, c.top)' in CODE and 'cc.retestBar < bar_index' in CODE, 'CODE INSPECTION')
 
 # ---------- 3m structural levels (mirror of f_lvlEngine + f_structCheck) ----------
 def levels(cs3):
@@ -180,7 +180,7 @@ chk('Short mirror: nearest unconsumed 3m swing low above the target blocks; targ
     struct_check([dict(p=98.0, d=-1, conf=0, x=False)], False, tk(98.0), now, 101, 99)[0] and not struct_check([dict(p=98.0, d=-1, conf=0, x=False)], False, tk(98.25), now, 101, 99)[0])
 chk('Code: levels need conf <= candle open, consumed by high>=level / low<=level, target <= nearest - 1 tick (short: >= +1), missing coverage blocks',
     all(x in CODE for x in ('q.confT <= time', 'f_tk(high) >= f_tk(q.price)', 'f_tk(low) <= f_tk(q.price)', 'tT > f_tk(near) - 1', 'tT < f_tk(near) + 1', '3m structure coverage unknown')), 'CODE INSPECTION')
-chk('Code: consumption runs every confirmed bar BEFORE the trigger step', CODE.index('f_lvlConsume()\n') < CODE.index('Zone trg = f_pickTrigger()'), 'CODE INSPECTION')
+chk('Code: consumption runs every confirmed bar BEFORE the trigger step', CODE.index('f_lvlConsume()\n') < CODE.index('Zone trg = f_pickTrigger(cc)'), 'CODE INSPECTION')
 
 # ---------- HTF gaps still block (hidden / tapped) ----------
 chk('Code: obstacle scan ignores display state (visibility, size filter, tapped) for 15m/1H/4H', 'f_scanAll(bull, lo, hi)' in CODE and 'inHtfMinT' not in CODE[CODE.index('f_scanObs(array<Zone>'):CODE.index('f_scanAll')] and 'bool   en3 = true' in CODE, 'CODE INSPECTION')
@@ -198,7 +198,7 @@ chk('Recorded resolution time stays distinct from the minimum drawing width (sta
 chk('Code: display width uses math.max(actualR, entryTime + 20 * chartMs); resolution marker line at s.resolveTime; guide width labelled display-only',
     'math.max(actualR + inExt * chartMs, s.entryTime + 20 * chartMs)' in CODE and 'f_lineUp(s.lR, s.resolveTime' in CODE and 'display-only' in CODE and 's.resolveTime := time_close' in CODE, 'CODE INSPECTION')
 chk('Code: both original gap boxes retained with shared ID ("3m CONTEXT · id" / "30s TRIGGER · id"), tooltip with NY timestamps, retest marker, stop anchor',
-    all(x in CODE for x in ('"3m CONTEXT · " + s.id', '"30s TRIGGER · " + s.id', '"retest"', '"stop anchor"', 'f_nyT(cx.confAsOf)', '15m bias:', 'Nearest 3m structural obstacle')), 'CODE INSPECTION')
+    all(x in CODE for x in ('" CONTEXT · " + dirW', '"30s TRIGGER · " + dirW', '"retest"', '"stop anchor"', 'f_nyT(c.confAsOf)', '15m bias:', 'Nearest 3m structural obstacle')), 'CODE INSPECTION')
 
 # ---------- counts reconcile after recalculation ----------
 rng = random.Random(5); recs = [dict(day=rng.choice([1, 2, 3, 4, 5]), st=rng.choice([0, 1, 2, 3])) for _ in range(60)]
@@ -208,7 +208,7 @@ chk('Code: outcome model unchanged (strictly-after-entry candle, opening-price p
 
 # ---------- simple settings ----------
 inputs = re.findall(r'^\w+\s+(\w+)\s*=\s*input\.', CODE, re.M)
-chk('Only practical user inputs remain (%d): %s' % (len(inputs), ','.join(inputs)), len(inputs) <= 16 and 'inPreset' in inputs and 'inTheme' in inputs and 'inDebug' in inputs, 'CODE INSPECTION')
+chk('Only practical user inputs remain (%d): %s' % (len(inputs), ','.join(inputs)), len(inputs) <= 18 and 'inPreset' in inputs and 'inTheme' in inputs and 'inDebug' in inputs, 'CODE INSPECTION')
 chk('Debug defaults OFF; Standard default; Light default', 'inDebug = input.bool(false' in CODE and 'input.string("Standard"' in CODE and 'input.string("Light"' in CODE, 'CODE INSPECTION')
 chk('Code: no SMT / VWAP / moving-average requirement', not re.search(r'ta\.vwap|ta\.sma|ta\.ema|smt', CODE, re.I), 'CODE INSPECTION')
 chk('Code: single aggregated alert() retained; no historical alerts', len(re.findall(r'(?<![\w.])alert\(', CODE)) == 1 and 'barstate.isrealtime and barstate.isconfirmed' in CODE, 'CODE INSPECTION')

@@ -214,14 +214,14 @@ a = bar_alerts([('entry', 'E1'), ('target', 'T1'), ('stop', 'S1'), ('amb', 'A1')
 chk('Several events on one bar -> ONE aggregated alert; ambiguous OFF by default', a == 'E1\nT1\nS1')
 chk('No events -> no alert', bar_alerts([('amb', 'A1')], tog) is None)
 chk('Code: one alert() call, realtime+confirmed only, once-per-bar-close, ids/direction/session in text',
-    len(re.findall(r'(?<![\w.])alert\(', CODE)) == 1 and 'barstate.isrealtime and barstate.isconfirmed' in PINE and '"H Ticks ENTRY "' in PINE and '| ID " + sid' in PINE and '| ID " + s.id' in PINE and 'Session " + cx.winName' in PINE and 'Session " + s.winName' in PINE, 'CODE INSPECTION')
+    len(re.findall(r'(?<![\w.])alert\(', CODE)) == 1 and 'barstate.isrealtime and barstate.isconfirmed' in PINE and '"H Ticks ENTRY "' in PINE and '| ID " + sid' in PINE and '| ID " + s.id' in PINE and 'Session " + c.winName' in PINE and 'Session " + s.winName' in PINE, 'CODE INSPECTION')
 chk('Code: alerts are built from state transitions (f_tryEntry / f_trackSetups) and never from drawing code', 'aMsgs.push' not in PINE[PINE.index('f_syncSetupDraw'):PINE.index('f_drawAll')], 'CODE INSPECTION')
 
 # ---------- drawings ----------
 chk('Code: Entry black / Target green / Stop red, all solid, separate lines and separate labels with prices',
-    'darkTheme ? color.white : color.black' in PINE and 'inTgtCol = color.green' in PINE and 'inStopCol = color.red' in PINE and '"Target "' in PINE and '"Stop "' in PINE and '"Entry "' in PINE and PINE.count('line.style_solid)') >= 3, 'CODE INSPECTION')
+    'darkTheme ? color.white : color.black' in PINE and 'inTgtCol = color.green' in PINE and 'inStopCol = color.red' in PINE and '"Target 1R "' in PINE and '"Stop "' in PINE and '"Entry "' in PINE and PINE.count('line.style_solid)') >= 3, 'CODE INSPECTION')
 chk('Code: outcome text frozen on resolution (Target hit / Stop hit / Ambiguous); shading stops at resolveTime',
-    all(x in PINE for x in ('" · Target hit"', '" · Stop hit"', '"Ambiguous"', 's.state != 0 ? s.resolveTime')), 'CODE INSPECTION')
+    all(x in PINE for x in ('"Target hit"', '"Stop hit"', '"Ambiguous"', 's.state != 0 ? s.resolveTime')), 'CODE INSPECTION')
 chk('Code: drawing subset when object limits bind (unresolved first, newest resolved next, DRAW_MAX)', 'drawn < DRAW_MAX' in PINE and 'pass == 0' in PINE, 'CODE INSPECTION')
 chk('Code: persistent handles - setters used for existing boxes/lines/labels on every draw', all(x in PINE for x in ('line.set_xy2(h', 'label.set_text(h', 'box.set_border_color(h', 'box.set_border_color(z.bx')), 'CODE INSPECTION')
 print(f"{'test':128} {'result':6} basis")
