@@ -127,6 +127,8 @@ bool inAlSetup = input.bool(true, "Alert: setup ready (reversal confirmed)", gro
 bool inAlArm = input.bool(true, "Alert: order armed (simulated limit, NOT a fill)", group = G8)
 bool inAlFill = input.bool(true, "Alert: simulated fill", group = G8)
 bool inAlInv = input.bool(true, "Alert: invalidation / cancellation", group = G8)
+bool inInfo = input.bool(true, "Show the info panel (left)", group = G7)
+bool inVisOR = input.bool(true, "Draw the opening-range box", group = G7)
 
 // ───────────────────────────────────────── TIME AND CHART ─────────────────────────────────────────
 f_mins(string s, int off) =>
@@ -1319,7 +1321,7 @@ f_drawDay(Day dy) =>
     if not na(dy.O)
         f_ln(dy.oT, dy.O, xEnd, dy.O, color.blue, line.style_dashed, 2)
         f_lb(dy.oT, dy.O, "10am open " + str.tostring(dy.O, format.mintick), color.blue, label.style_label_right, f_dt(dy.key) + ": exact open of the 10:00 candle, usable once that candle closed")
-        if not na(dy.orH)
+        if inVisOR and not na(dy.orH)
             f_bx(f_ts(dy.key, orS), dy.orH, dy.oT, dy.orL, color.new(color.gray, 88), color.new(color.gray, 40))
     if dy.st >= 2 and not na(dy.mExt) and dy.st != 7
         f_ln(dy.mExtT, dy.mExt, xCut, dy.mExt, color.orange, line.style_solid, 2)
@@ -1511,6 +1513,8 @@ f_drawTables() =>
                     f_cell(tbLed, c, r + 1, "", blk, bgN)
     else
         table.clear(tbLed, 0, 0, 11, 11)
+    if not inInfo
+        table.clear(tbInfo, 0, 0, 0, 15)
     true
 
 bool drawNow = barstate.islastconfirmedhistory or (barstate.isrealtime and barstate.isconfirmed)
