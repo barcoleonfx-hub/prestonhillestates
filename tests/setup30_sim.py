@@ -17,8 +17,9 @@ def zstep(z, h, l, c, bi):
         if overlap(h, l, z.bot, z.top): return 2
     return 0
 class M:
-    def __init__(s, owner, max_entries=3, one_active=True, max_age=None, htf_cov=0, stop_buf=1):
+    def __init__(s, owner, max_entries=3, one_active=True, max_age=None, htf_cov=0, stop_buf=1, dep=0, min_risk=1, max_risk=0, ctx_min=1):
         s.owner, s.maxE, s.one, s.age, s.cov, s.buf = owner, max_entries, one_active, max_age, htf_cov, stop_buf
+        s.dep, s.min_risk, s.max_risk, s.ctx_min = dep, min_risk, max_risk, ctx_min
         s.bars, s.zones, s.ctx, s.setups, s.cnt, s.resolved_at = [], [], None, [], {}, 0
         s.htf = []; s.log = []; s.entries = []
     def open_setup(s): return any(x['state'] == 0 for x in s.setups)
@@ -48,32 +49,40 @@ class M:
             for z in cand:
                 if best is None or z.width < best.width or (z.width == best.width and z.ft >= best.ft): best = z
             if best: s.try_entry(best, ot, ct, o, h, l, c, i)
-        if s.ctx and s.ctx['state'] == 1 and ot >= s.ctx['conf'] and overlap(h, l, s.ctx['bot'], s.ctx['top']):
-            s.ctx['state'] = 2; s.ctx['retestBar'] = i
+        if s.ctx and s.ctx['state'] == 1 and ot >= s.ctx['conf']:
+            if overlap(h, l, s.ctx['bot'], s.ctx['top']) and s.ctx['away'] >= s.dep:
+                s.ctx['state'] = 2; s.ctx['retestBar'] = i
+            else:
+                aw = tk(h) - tk(s.ctx['top']) if s.ctx['dir'] > 0 else tk(s.ctx['bot']) - tk(l)
+                if aw > s.ctx['away']: s.ctx['away'] = aw
     def ctx_update(s, u, ct):
         if s.ctx and u['asOf'] > s.ctx['conf']:
             bad = tk(u['close']) < tk(s.ctx['bot']) if s.ctx['dir'] > 0 else tk(u['close']) > tk(s.ctx['top'])
             if bad: s.ctx = None; s.log.append('ctx cancelled')
         best = None
         for z in u.get('inv', []):          # dict(orig=±1, top, bot, ft)
+            if tk(z['top']) - tk(z['bot']) < s.ctx_min: continue
             w = z['top'] - z['bot']
             if best is None or w < best['top'] - best['bot'] or (w == best['top'] - best['bot'] and z['ft'] >= best['ft']): best = z
         if best:
             if s.one and (s.open_setup() or u['asOf'] < s.resolved_at): s.log.append('ctx discarded (open setup)'); return
             w = s.owner(u['asOf'])
             if not w: s.log.append('3m inversion outside window'); return
-            s.ctx = dict(state=1, dir=-best['orig'], top=best['top'], bot=best['bot'], conf=u['asOf'], proc=ct, win=w[0], winEnd=w[2], retestBar=-1, ft=best['ft'])
+            s.ctx = dict(state=1, dir=-best['orig'], top=best['top'], bot=best['bot'], conf=u['asOf'], proc=ct, win=w[0], winEnd=w[2], retestBar=-1, ft=best['ft'], away=0)
     def try_entry(s, t, ot, ct, o, h, l, c, i):
         cx = s.ctx; bull = cx['dir'] > 0; why = []
         w = s.owner(ct)
         if not w or w[0] != cx['win']: why.append('window')
         if s.cnt.get(cx['win'], 0) >= s.maxE: why.append('limit')
-        if s.one and s.open_setup(): why.append('open setup')
+        if s.open_setup(): why.append('position already open')
         E = round(c / TICK) * TICK; body = min(o, c) if bull else max(o, c)
         stop = (math.floor((body - s.buf * TICK) / TICK + 1e-6) if bull else math.ceil((body + s.buf * TICK) / TICK - 1e-6)) * TICK
         eT, sT = tk(E), tk(stop); rT = eT - sT if bull else sT - eT
         if rT < 1: why.append('risk'); target = None
-        else: target = (eT + rT if bull else eT - rT) * TICK
+        else:
+            target = (eT + rT if bull else eT - rT) * TICK
+            if rT < s.min_risk: why.append('min risk')
+            if s.max_risk and rT > s.max_risk: why.append('max risk')
         if s.cov != 0: why.append('coverage')
         elif rT >= 1:
             lo, hi = (E, target) if bull else (target, E)
@@ -261,6 +270,27 @@ m = M(owner, max_age=120_000); warm(m, T0 - 5 * BAR); m.bar(T0, 103, 103.25, 102
 for k in range(1, 6): m.bar(T0 + k * BAR, 103, 103.25, 102.75, 103)
 chk('Max age (optional): the context expires once its age reaches the limit (default OFF)', m.ctx is None and M(owner).age is None)
 
+
+# ---- refinements (all OFF / spec-default unless stated) ----
+mdep = M(owner, dep=4); warm(mdep, T0 - 5 * BAR); mdep.bar(T0, 102.5, 102.75, 101.75, 102.0, ctx_long())
+chk('Departure (optional): an immediate touch does NOT count as the retest until price has departed by the required ticks', mdep.ctx['state'] == 1)
+mdep.bar(T0 + BAR, 103.0, 103.25, 102.75, 103.0)
+mdep.bar(T0 + 2 * BAR, 102.5, 102.75, 101.75, 102.0)
+chk('Departure (optional): after an EARLIER candle departed >= 4 ticks, a later touch counts', mdep.ctx['state'] == 2)
+mdef = M(owner, dep=0); warm(mdef, T0 - 5 * BAR); mdef.bar(T0, 102.5, 102.75, 101.75, 102.0, ctx_long())
+chk('Departure default 0 keeps the specified behaviour (first touch counts)', mdef.ctx['state'] == 2)
+mmin = M(owner, ctx_min=4); warm(mmin, T0 - 5 * BAR); mmin.bar(T0, 100, 100.25, 99.75, 100, dict(asOf=T0, close=103, inv=[dict(orig=-1, top=101.25, bot=101.0, ft=1)]))
+chk('Min 3m context width (optional): a 1-tick 3m gap no longer creates a context when the minimum is 4 ticks', mmin.ctx is None)
+mr1 = M(owner, min_risk=8); warm(mr1, T0 - 5 * BAR); t = long_setup(mr1); mr1.bar(t, 102.75, 103.5, 102.5, 103.25)
+chk('Min risk (optional): a 3-tick body-stop risk is rejected when the minimum is 8 ticks (context stays pending)', not mr1.entries and mr1.ctx is not None)
+mr2 = M(owner, max_risk=2); warm(mr2, T0 - 5 * BAR); t = long_setup(mr2); mr2.bar(t, 102.75, 103.5, 102.5, 103.25)
+chk('Max risk (optional): a 3-tick risk is rejected when the maximum is 2 ticks', not mr2.entries)
+mo = M(owner, one_active=False); warm(mo, T0 - 5 * BAR); t = long_setup(mo); mo.bar(t, 102.75, 103.5, 102.5, 103.25)
+mo.ctx = dict(state=2, dir=1, top=102.0, bot=101.0, conf=T0, proc=T0, win='W1', winEnd=10_000_000, retestBar=0, ft=1, away=0)
+tq = t + BAR
+mo.bar(tq, 103.8, 103.9, 103.75, 103.8); mo.bar(tq + BAR, 103.7, 103.8, 103.5, 103.6); mo.bar(tq + 2 * BAR, 103.5, 103.5, 103.25, 103.4)   # gap [103.5,103.75] inside the open trade's stop/target range
+mo.bar(tq + 3 * BAR, 103.5, 103.85, 103.4, 103.8)                                                              # fresh inversion while the first trade is still open
+chk('Strategy guard: even with the one-active input OFF, a second entry is rejected while a position is open (no reversal/pyramiding)', len(mo.entries) == 1)
 print(f"{'test':122} {'result':6} basis")
 for n, r, k in R: print(f"{n:122} {r:6} {k}")
 print(sum(r == 'PASS' for _, r, _ in R), '/', len(R), 'passed')
