@@ -198,12 +198,12 @@ chk('Reload reproduces live: identical snapshot sequence for the same history/no
 reload2 = run_engine(cs[:], now, 500, H, H + SPAN)
 later = {p[0]: p for p in reload2}
 chk('Live and reload agree on zone sets at every candle where both are ready', all(later[p[0]][3] == p[3] for p in live if p[2] and later[p[0]][2]))
-chk('Code: engine gate is time-based (timenow - histMs), no last_bar_index suppression, no relevance radius', 't1 >= timenow - histMs' in PINE and 'last_bar_index' not in PINE and 'relAtr' not in PINE, 'CODE INSPECTION')
+chk('Code: no wall-clock (timenow) gate, no last_bar_index suppression, no relevance radius', 'timenow' not in CODE and 'last_bar_index' not in PINE and 'relAtr' not in PINE, 'CODE INSPECTION')
 chk('Code: HTF capacity pruning on the chart store removed (no silent drop)', 'store.shift()' not in PINE, 'CODE INSPECTION')
 # coverage start tracking
 chk('Code: qualification coverage start tracked and shown; per-date window bars counted (dWinN/dWinBad)', 'covStart := time_close' in PINE and 'dWinBad.set(dq' in PINE, 'CODE INSPECTION')
 chk('Code: history separation - 3m context horizon/capacity, obstacle horizon, 30s chart window, reporting span are distinct inputs/constants',
-    all(x in PINE for x in ('inCtxHorizon', 'inHorizon', 'inChWin', 'SPAN_MS')), 'CODE INSPECTION')
+    all(x in PINE for x in ('inCtxHorizon', 'inHorizon', 'inChWin', 'firstProcT')), 'CODE INSPECTION')
 
 # ---------- alerts ----------
 def bar_alerts(events, tog):

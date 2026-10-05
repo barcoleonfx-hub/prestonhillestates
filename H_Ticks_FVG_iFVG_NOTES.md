@@ -144,3 +144,24 @@ This **replaces** the earlier Qualified-iFVG system (momentum routes, ATR-size g
 * **Statistics panel:** every cell has an explicit opaque background and text colour (Light/Dark), normal text size, headers Date | Setups | Wins | Losses | Open | Ambiguous, totals row, resolved win rate Wins/(Wins+Losses).
 * **Debug (one toggle):** per-timeframe funnel (inversions, admitted, retests, eligible 30s inversions, impulse, stop/risk, clear path, entries) and block counters (replaced, expired, closed through, bias flip, no window, bias/narrow, unresolved, impulse fail, stop/risk fail, coverage unknown, obstacle, window instance, session limit, unresolved setup, bias at entry, outranked). Each candidate is counted once at its single evaluation.
 * **Limits / risks:** eight extra `request.security` calls (4 contexts x 2); 1m history with a 7-day span means many snapshots — memory and runtime on TradingView are UNMEASURED (lower capacity or pick a single timeframe if limits are hit). Gate order for the funnel is impulse -> stop/risk -> clear path -> admission so the bottleneck is visible; every gate is still mandatory. The 3m swing-level room check stays on 3m structure regardless of the selected context timeframe.
+
+## Audit: late coverage, session ownership, Replay, compact stats box (SUPERSEDES the history-span / table statements above)
+
+**Not verified in TradingView:** NOT compiled, NOT run on a chart, NOT run in Bar Replay. `tests/audit_sim.py` and the other suites are Python models plus text checks.
+
+**Why qualification started late (code audit):**
+1. `f_engine / f_lvlEngine / f_bias15` processed a source candle only if `t1 >= timenow - histMs` and flagged READY only after one full horizon of *that* window. `timenow` is the computer's clock, so READY could never happen earlier than (load time - span): with the 7-day context span, "coverage complete since 09-29 11:45 NY" is exactly (load time - 7 days) if the chart was loaded on 10-06 ~11:45 NY. Every earlier reporting date was therefore NOT EVALUATED (n/a), not zero-trade.
+2. In Bar Replay `timenow` stays the real clock, so replay positions older than the span had no processed source candles at all -> "no source data" / n/a.
+3. `srcBad` disabled a source FOREVER after a single chart-candle/source-boundary straddle. Removed: a straddle now skips that one update (`srcSkip` counted).
+4. Obstacle (15m/1H/4H) sources required `firstTime <= asOf` (chart history covering the source period) although obstacle zones come from source candles only and chart taps are display-only. Removed for obstacles (kept for contexts and 3m levels, which really need chart candles after the confirmation).
+5. Capacity truncation (HTF 250 / levels 120 / ctx 40) can mark a source UNKNOWN for up to one horizon; capacities raised to 300 / 200 / 60 (not a trading change); truncation is shown in the debug panel.
+
+**Fix:** no clock input anywhere. Every source candle the platform supplies is processed oldest-first; READY = first supplied candle + horizon; the engines publish the first-candle time so the debug panel can show "data from ... ready since ...". Readiness is monotonic, so an incomplete early period never blocks later entries. 15m bias likewise processes all supplied history.
+
+**NY sessions:** the audit found NO bug that excludes NY: the Asia -> London window never overlaps the NY windows (checked over 2026-2027 incl. DST), per-instance counters are keyed `name|start`, contexts expire at `time_close >= winEnd`, outcome tracking is session-independent, and the global lock is `state == 0` only. Two designed blockers remain and are now reported: (a) ANY one unavailable required source blocks entries in every session (never "clear"), (b) a genuinely UNRESOLVED setup (e.g. Asia) blocks new contexts/entries until it resolves; the debug panel names it, counts the blocks per session, and the script never closes it silently. Entry rules are unchanged.
+
+**Replay:** `barstate.isrealtime` is used only for alerts and the drawing gate; reporting dates come from processed bar timestamps; HTF requests are unchanged (`[1]` + lookahead_on).
+
+**Stats box:** one transparent top-right table, black small text: Last 5 days / Setups / Wins | Losses / Open | Ambiguous / Win rate / Coverage (Full | Partial; tooltip lists dates not fully evaluated). Optional daily rows (OFF). Everything else is in the Debug panel (OFF): funnel, per-session counts and rejection reasons, source readiness, bias, lock, current blockers.
+
+**Clutter:** HTF gap boxes, pending-context boxes and detail markers are OFF by default (obstacle checks still use every tracked gap). Objects created by this script: `f_syncDraw` (HTF/30s zone boxes), `f_drawCtx` (pending context boxes), `f_boxUp/f_lineUp/f_lblUp` (setup evidence + position), `f_dbg` (rejection labels), plus the two tables. Anything else on the chart belongs to other indicators.

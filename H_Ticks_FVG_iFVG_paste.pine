@@ -14,28 +14,28 @@ bool   inWinPm = input.bool(true, "Window C: New York afternoon 14:30-15:30", gr
 string inPreset = input.string("Standard", "Impulse preset (decisive 30s inversion candle)", options = ["Standard", "Strong"], group = GRP_Q, tooltip = "Standard: body >= 0.8 x prev ATR, body/range >= 0.65, close in the outer 20% of the range. Strong: 1.0 x, 0.70, outer 15%. Both: body points in the setup direction and the close extends beyond the trigger gap boundary by max(1 tick, 0.10 x prev ATR). Starting parameters, not optimised or proven.")
 int    inMinTick = input.int(1, "Minimum gap size (ticks, all gap sources)", minval = 1, group = GRP_Q, tooltip = "Gaps at least this wide are detected and may form contexts, triggers and obstacles.")
 bool   inShowPair = input.bool(true, "Show the context gap + 30s trigger gap of every setup", group = GRP_APP)
-bool   inShowHtf = input.bool(true, "Show nearby HTF gaps", group = GRP_APP, tooltip = "Display only. Obstacle checks always use ALL tracked 15m/1H/4H gaps, hidden or not.")
+bool   inShowHtf = input.bool(false, "Show nearby HTF gap boxes (clutter; OFF by default)", group = GRP_APP, tooltip = "Display only. Obstacle checks ALWAYS use all tracked 15m/1H/4H gaps, shown or hidden.")
+bool   inShowMarkers = input.bool(false, "Show detail markers (retest, stop anchor, inversion candles)", group = GRP_APP, tooltip = "Small labels that explain how a setup formed. The same facts are always in the label tooltips.")
 bool   inShowRR = input.bool(true, "Show risk/reward shading", group = GRP_APP)
 string inTheme = input.string("Light", "Theme (labels and tables)", options = ["Light", "Dark"], group = GRP_APP, tooltip = "Light: black entry line. Dark: white entry line (black would be invisible). Tables always use opaque backgrounds.")
-bool   inStats = input.bool(true, "Show the five-day results table", group = GRP_ST)
-bool   inStatus = input.bool(true, "Show compact status", group = GRP_ST)
-bool   inDebug = input.bool(false, "Show the per-context funnel and label rejected triggers", group = GRP_DBG, tooltip = "Funnel: inversions, admitted contexts, retests, eligible 30s inversions, impulse / stop-risk / clear-path passes, entries; block counters list the FIRST failed gate of each candidate (counted once).")
+bool   inStats = input.bool(true, "Show the small stats box (top-right)", group = GRP_ST)
+bool   inDaily = input.bool(false, "Optional: daily breakdown under the stats box", group = GRP_ST)
+bool   inDebug = input.bool(false, "Debug panel: funnel, per-session counts, source readiness, rejection labels", group = GRP_DBG, tooltip = "Funnel: inversions, admitted contexts, retests, eligible 30s inversions, impulse / stop-risk / clear-path passes, entries; block counters list the FIRST failed gate of each candidate (counted once).")
 bool   alEntry = input.bool(true, "Alert on each new entry", group = GRP_AL)
 bool   alTarget = input.bool(true, "Alert when a setup hits its target", group = GRP_AL)
 bool   alStop = input.bool(true, "Alert when a setup hits its stop", group = GRP_AL)
 const string TZ_NY = "America/New_York"
 const int REP_DATES = 5
 const int DRAW_MAX = 40
-const int SPAN_MS = 864000000
-const int SPAN_CTX_MS = 604800000
 const int MAX_ENTRIES = 3
 const int LS = 4
-const int LVL_CAP = 120
+const int LVL_CAP = 200
 const int IX_CTX = 4
 const int IX_LVL = 8
 const int NCTX = 4
 const int FN = 8
 const int FB = 16
+const int FS = 24
 bool   alAmb = false
 bool   alCtx = false
 bool   alJson = false
@@ -49,9 +49,9 @@ int    inMaxEntries = MAX_ENTRIES
 bool   inOneActive = true
 bool   inUseMaxAge = false
 int    inMaxAgeMin = 30
-bool   inShowCtx = inShowPair
+bool   inShowCtx = inDebug
 int    inCtxHorizon = 500
-int    inCtxCap = 40
+int    inCtxCap = 60
 int    inCtxMinTicks = inMinTick
 int    inDeparture = 0
 int    inAsH  = 9
@@ -85,7 +85,7 @@ int    inHtfBelow = 1
 int    inHtfCont  = 1
 float  inHtfAtr   = 0.10
 int    inHtfMinT  = 4
-int    inHtfCap   = 250
+int    inHtfCap   = 300
 int    inHtfT     = 92
 int    inHtfTapT  = 95
 int    inHorizon  = 500
@@ -114,7 +114,7 @@ color  cCtxLine = color.blue
 color  cTrgFill = color.new(color.orange, 75)
 color  cTrgLine = color.rgb(230, 81, 0)
 const int ZS = 8
-const int HDR = 2
+const int HDR = 3
 const int ST_BULL_FVG  = 1
 const int ST_BEAR_FVG  = 2
 const int ST_BULL_IFVG = 3
@@ -279,9 +279,9 @@ f_push(array<float> z, int ft, int dir, float tp, float bt, int conf, int fidx, 
     z.push(float(fidx))
     z.push(na(atr) ? -1.0 : atr)
     true
-f_engine(int cap, int minTicks, int horizonMs, int histMs) =>
+f_engine(int cap, int minTicks, int horizonMs) =>
     var array<float> Z = array.new_float(0)
-    var array<float> pub = array.from(0.0, 0.0)
+    var array<float> pub = array.from(0.0, 0.0, 0.0)
     var float maxPruned = -1.0
     var bool lastTrunc = false
     var bool lastReady = false
@@ -301,7 +301,7 @@ f_engine(int cap, int minTicks, int horizonMs, int histMs) =>
     int   tc1 = time_close[1]
     int   cidx = bar_index - 1
     bool  valid = not na(h1) and not na(l1) and not na(c1) and not na(t1) and not na(tc1)
-    bool  active = valid and t1 >= timenow - histMs
+    bool  active = valid
     if active
         if t1 > lastProc
             lastProc := t1
@@ -374,15 +374,15 @@ f_engine(int cap, int minTicks, int horizonMs, int histMs) =>
                 lastReady := nowReady
                 dirty := true
             if dirty
-                array<float> tmp = array.from(truncNow ? 1.0 : 0.0, nowReady ? float(tc1) : 0.0)
+                array<float> tmp = array.from(truncNow ? 1.0 : 0.0, nowReady ? float(tc1) : 0.0, float(firstProcT))
                 if nowReady
                     tmp.concat(Z)
                 pub := tmp
         out := pub
     out
-f_lvlEngine(int cap, int horizonMs, int histMs) =>
+f_lvlEngine(int cap, int horizonMs) =>
     var array<float> L = array.new_float(0)
-    var array<float> pub = array.from(0.0, 0.0)
+    var array<float> pub = array.from(0.0, 0.0, 0.0)
     var float maxPruned = -1.0
     var bool lastTrunc = false
     var bool lastReady = false
@@ -403,7 +403,7 @@ f_lvlEngine(int cap, int horizonMs, int histMs) =>
     int   tc1 = time_close[1]
     int   t3 = time[3]
     bool  valid = not na(h1) and not na(l1) and not na(t1) and not na(tc1)
-    bool  active = valid and t1 >= timenow - histMs
+    bool  active = valid
     if active
         if t1 > lastProc
             lastProc := t1
@@ -453,13 +453,13 @@ f_lvlEngine(int cap, int horizonMs, int histMs) =>
                 lastReady := nowReady
                 dirty := true
             if dirty
-                array<float> tmp = array.from(truncNow ? 1.0 : 0.0, nowReady ? float(tc1) : 0.0)
+                array<float> tmp = array.from(truncNow ? 1.0 : 0.0, nowReady ? float(tc1) : 0.0, float(firstProcT))
                 if nowReady
                     tmp.concat(L)
                 pub := tmp
         out := pub
     out
-f_bias15(int histMs) =>
+f_bias15() =>
     var float swH = na
     var float swHT = na
     var float swHA = na
@@ -487,7 +487,7 @@ f_bias15(int histMs) =>
     int   t1 = time[1]
     int   tc1 = time_close[1]
     int   t3 = time[3]
-    bool  valid = not na(c1) and not na(t1) and not na(tc1) and t1 >= timenow - histMs
+    bool  valid = not na(c1) and not na(t1) and not na(tc1)
     if valid
         if t1 > lastProc
             lastProc := t1
@@ -582,45 +582,45 @@ int asOf2 = na
 int asOf3 = na
 int asOf4 = na
 if actC0
-    snapC0 := request.security(syminfo.tickerid, "1", f_engine(inCtxCap, inMinTick, hrzC0, hrzC0 + SPAN_CTX_MS), lookahead = barmerge.lookahead_on)
+    snapC0 := request.security(syminfo.tickerid, "1", f_engine(inCtxCap, inMinTick, hrzC0), lookahead = barmerge.lookahead_on)
     [aC0_, cC0_] = request.security(syminfo.tickerid, "1", [time_close[1], close[1]], lookahead = barmerge.lookahead_on)
     asOfC0 := aC0_
     clsC0 := cC0_
 if actC1
-    snapC1 := request.security(syminfo.tickerid, "2", f_engine(inCtxCap, inMinTick, hrzC1, hrzC1 + SPAN_CTX_MS), lookahead = barmerge.lookahead_on)
+    snapC1 := request.security(syminfo.tickerid, "2", f_engine(inCtxCap, inMinTick, hrzC1), lookahead = barmerge.lookahead_on)
     [aC1_, cC1_] = request.security(syminfo.tickerid, "2", [time_close[1], close[1]], lookahead = barmerge.lookahead_on)
     asOfC1 := aC1_
     clsC1 := cC1_
 if actC2
-    snapC2 := request.security(syminfo.tickerid, "3", f_engine(inCtxCap, inMinTick, hrzC2, hrzC2 + SPAN_CTX_MS), lookahead = barmerge.lookahead_on)
+    snapC2 := request.security(syminfo.tickerid, "3", f_engine(inCtxCap, inMinTick, hrzC2), lookahead = barmerge.lookahead_on)
     [aC2_, cC2_] = request.security(syminfo.tickerid, "3", [time_close[1], close[1]], lookahead = barmerge.lookahead_on)
     asOfC2 := aC2_
     clsC2 := cC2_
 if actC3
-    snapC3 := request.security(syminfo.tickerid, "5", f_engine(inCtxCap, inMinTick, hrzC3, hrzC3 + SPAN_CTX_MS), lookahead = barmerge.lookahead_on)
+    snapC3 := request.security(syminfo.tickerid, "5", f_engine(inCtxCap, inMinTick, hrzC3), lookahead = barmerge.lookahead_on)
     [aC3_, cC3_] = request.security(syminfo.tickerid, "5", [time_close[1], close[1]], lookahead = barmerge.lookahead_on)
     asOfC3 := aC3_
     clsC3 := cC3_
 if actL
-    snapL := request.security(syminfo.tickerid, "3", f_lvlEngine(LVL_CAP, hrzL, hrzL + SPAN_MS), lookahead = barmerge.lookahead_on)
+    snapL := request.security(syminfo.tickerid, "3", f_lvlEngine(LVL_CAP, hrzL), lookahead = barmerge.lookahead_on)
     asOfL := request.security(syminfo.tickerid, "3", time_close[1], lookahead = barmerge.lookahead_on)
 if supported
-    [bz_, bl_, bt_, ba_] = request.security(syminfo.tickerid, "15", f_bias15(2 * SPAN_MS), lookahead = barmerge.lookahead_on)
+    [bz_, bl_, bt_, ba_] = request.security(syminfo.tickerid, "15", f_bias15(), lookahead = barmerge.lookahead_on)
     bzR := bz_
     blR := bl_
     btR := bt_
     baR := ba_
 if act1
-    snap1 := request.security(syminfo.tickerid, tf1, f_engine(inHtfCap, inMinTick, hrz1, hrz1 + SPAN_MS), lookahead = barmerge.lookahead_on)
+    snap1 := request.security(syminfo.tickerid, tf1, f_engine(inHtfCap, inMinTick, hrz1), lookahead = barmerge.lookahead_on)
     asOf1 := request.security(syminfo.tickerid, tf1, time_close[1], lookahead = barmerge.lookahead_on)
 if act2
-    snap2 := request.security(syminfo.tickerid, tf2, f_engine(inHtfCap, inMinTick, hrz2, hrz2 + SPAN_MS), lookahead = barmerge.lookahead_on)
+    snap2 := request.security(syminfo.tickerid, tf2, f_engine(inHtfCap, inMinTick, hrz2), lookahead = barmerge.lookahead_on)
     asOf2 := request.security(syminfo.tickerid, tf2, time_close[1], lookahead = barmerge.lookahead_on)
 if act3
-    snap3 := request.security(syminfo.tickerid, tf3, f_engine(inHtfCap, inMinTick, hrz3, hrz3 + SPAN_MS), lookahead = barmerge.lookahead_on)
+    snap3 := request.security(syminfo.tickerid, tf3, f_engine(inHtfCap, inMinTick, hrz3), lookahead = barmerge.lookahead_on)
     asOf3 := request.security(syminfo.tickerid, tf3, time_close[1], lookahead = barmerge.lookahead_on)
 if act4
-    snap4 := request.security(syminfo.tickerid, tf4, f_engine(inHtfCap, inMinTick, hrz4, hrz4 + SPAN_MS), lookahead = barmerge.lookahead_on)
+    snap4 := request.security(syminfo.tickerid, tf4, f_engine(inHtfCap, inMinTick, hrz4), lookahead = barmerge.lookahead_on)
     asOf4 := request.security(syminfo.tickerid, tf4, time_close[1], lookahead = barmerge.lookahead_on)
 var array<Zone>   chartZ = array.new<Zone>()
 var array<Zone>   hz1 = array.new<Zone>()
@@ -629,7 +629,9 @@ var array<Zone>   hz3 = array.new<Zone>()
 var array<Zone>   hz4 = array.new<Zone>()
 var array<int>    lastAsOf = array.new_int(10, 0)
 var array<int>    wm       = array.new_int(10, 0)
-var array<bool>   srcBad   = array.new_bool(10, false)
+var array<int>    srcRT    = array.new_int(10, 0)
+var array<int>    srcFT    = array.new_int(10, 0)
+var array<int>    srcSkip  = array.new_int(10, 0)
 var array<bool>   srcSeen  = array.new_bool(10, false)
 var array<bool>   srcInit  = array.new_bool(10, false)
 var array<bool>   srcTrunc = array.new_bool(10, false)
@@ -648,6 +650,8 @@ float l2c = low[2]
 var array<Ctx>    cxs = array.from(Ctx.new(k = 0, tfTxt = "1m", tfSecs = 60), Ctx.new(k = 1, tfTxt = "2m", tfSecs = 120), Ctx.new(k = 2, tfTxt = "3m", tfSecs = 180), Ctx.new(k = 3, tfTxt = "5m", tfSecs = 300))
 var array<int>    fnl = array.new_int(NCTX * FN, 0)
 var array<int>    fnb = array.new_int(NCTX * FB, 0)
+var array<int>    sdn = array.new_int(3 * FS, 0)
+var array<string> fbNames = array.from("replaced", "expired", "closed through", "bias flip", "inv: no window", "inv: bias/narrow", "inv: unresolved block", "impulse fail", "stop/risk fail", "coverage unknown", "obstacle", "window instance", "session limit", "unresolved setup", "bias at entry", "outranked")
 var array<Zone>   pend = array.new<Zone>()
 var array<Setup>  setups = array.new<Setup>()
 var array<string> wKeys = array.new_string(0)
@@ -711,13 +715,6 @@ f_destroy(Zone z) =>
         box.delete(z.bx)
         z.bx := na
     true
-f_clearStore(array<Zone> a) =>
-    int n = a.size()
-    if n > 0
-        for i = n - 1 to 0
-            f_destroy(a.get(i))
-            a.remove(i)
-    true
 f_evInc(int i, string tf) =>
     ev.set(i, ev.get(i) + 1)
     if tf != ""
@@ -760,6 +757,8 @@ f_reconcile(array<Zone> store, int idx, string tfTxt, array<float> snap, int asO
     bool gen = srcInit.get(idx)
     srcTrunc.set(idx, snap.get(0) == 1.0)
     srcReady.set(idx, snap.get(1) > 0.0)
+    srcRT.set(idx, int(snap.get(1)))
+    srcFT.set(idx, int(snap.get(2)))
     int cnt = int((snap.size() - HDR) / ZS)
     int m = store.size()
     if m > 0
@@ -829,15 +828,12 @@ f_reconcile(array<Zone> store, int idx, string tfTxt, array<float> snap, int asO
 f_sync(array<Zone> store, int idx, string tfTxt, array<float> snap, int asOf) =>
     if not na(snap) and not na(asOf)
         srcSeen.set(idx, true)
-        if asOf > lastAsOf.get(idx) and not srcBad.get(idx)
+        if asOf > lastAsOf.get(idx)
             lastAsOf.set(idx, asOf)
-            if firstTime <= asOf
-                if not na(prevCloseT) and prevCloseT > asOf
-                    srcBad.set(idx, true)
-                    warnArr.push(tfTxt + " disabled: chart candles do not align with " + tfTxt + " boundaries (session/timeframe alignment)")
-                    f_clearStore(store)
-                else
-                    f_reconcile(store, idx, tfTxt, snap, asOf)
+            if not na(prevCloseT) and prevCloseT > asOf
+                srcSkip.set(idx, srcSkip.get(idx) + 1)
+            else
+                f_reconcile(store, idx, tfTxt, snap, asOf)
     true
 f_tapStore(array<Zone> a) =>
     int n = a.size()
@@ -876,7 +872,7 @@ f_scanAll(bool bull, float lo, float hi) =>
 f_slotState(bool en, bool okS, bool actS, int idx) =>
     int st = 0
     if en and okS
-        st := actS and srcSeen.get(idx) and srcInit.get(idx) and srcReady.get(idx) and not srcBad.get(idx) and not srcTrunc.get(idx) ? 1 : 2
+        st := actS and srcSeen.get(idx) and srcInit.get(idx) and srcReady.get(idx) and not srcTrunc.get(idx) ? 1 : 2
     st
 f_slotWhy(bool en, bool okS, bool actS, int idx, string nm) =>
     string r = ""
@@ -885,8 +881,6 @@ f_slotWhy(bool en, bool okS, bool actS, int idx, string nm) =>
             r := nm + ": inactive (not an integer multiple of the chart timeframe)"
         else if not srcSeen.get(idx)
             r := nm + ": no source data returned"
-        else if srcBad.get(idx)
-            r := nm + ": chart candles do not align with source boundaries"
         else if not srcInit.get(idx)
             r := nm + ": chart history does not yet cover the source period"
         else if srcTrunc.get(idx)
@@ -921,7 +915,7 @@ f_ctxReadyK(int k) =>
     bool r = false
     if actCtxA.get(k)
         int ix = IX_CTX + k
-        r := srcSeen.get(ix) and srcInit.get(ix) and srcReady.get(ix) and not srcBad.get(ix)
+        r := srcSeen.get(ix) and srcInit.get(ix) and srcReady.get(ix)
     r
 f_ctxReadyAll() =>
     bool r = true
@@ -930,14 +924,12 @@ f_ctxReadyAll() =>
             r := false
     r
 f_lvlReady() =>
-    actL and srcSeen.get(IX_LVL) and srcInit.get(IX_LVL) and srcReady.get(IX_LVL) and not srcBad.get(IX_LVL) and not srcTrunc.get(IX_LVL)
+    actL and srcSeen.get(IX_LVL) and srcInit.get(IX_LVL) and srcReady.get(IX_LVL) and not srcTrunc.get(IX_LVL)
 f_lvlWhy() =>
     string r = ""
     if supported and actL
         if not srcSeen.get(IX_LVL)
             r := "3m structure: no source data returned"
-        else if srcBad.get(IX_LVL)
-            r := "3m structure: chart candles do not align with 3m boundaries"
         else if not srcInit.get(IX_LVL)
             r := "3m structure: chart history does not yet cover the source period"
         else if srcTrunc.get(IX_LVL)
@@ -952,8 +944,6 @@ f_ctxWhyK(int k) =>
     if supported and actCtxA.get(k)
         if not srcSeen.get(ix)
             r := nm + ": no source data returned"
-        else if srcBad.get(ix)
-            r := nm + ": chart candles do not align with source boundaries"
         else if not srcInit.get(ix)
             r := nm + ": chart history does not yet cover the source period"
         else if not srcReady.get(ix)
@@ -1237,13 +1227,29 @@ f_syncSetupDraw(Setup s, bool want) =>
         s.lbE := f_lblUp(s.lbE, rv, s.entry, "Entry " + str.tostring(s.entry, format.mintick), inEntryCol, label.style_label_left, tipTxt)
         s.lbS := f_lblUp(s.lbS, rv, s.stop, "Stop " + str.tostring(s.stop, format.mintick), inStopCol, label.style_label_left, tipTxt)
         s.lbT := f_lblUp(s.lbT, rv, s.target, "Target 1R " + str.tostring(s.target, format.mintick), inTgtCol, label.style_label_left, tipTxt)
-        s.lbRt := f_lblUp(s.lbRt, s.retestT, s.retestPx, "retest", cLblTx, bull ? label.style_label_up : label.style_label_down, tipTxt)
-        s.lbAn := f_lblUp(s.lbAn, s.stopAnchorT, s.legExt, "stop anchor", inStopCol, bull ? label.style_label_up : label.style_label_down, tipTxt)
+        if inShowMarkers
+            s.lbRt := f_lblUp(s.lbRt, s.retestT, s.retestPx, "retest", cLblTx, bull ? label.style_label_up : label.style_label_down, tipTxt)
+            s.lbAn := f_lblUp(s.lbAn, s.stopAnchorT, s.legExt, "stop anchor", inStopCol, bull ? label.style_label_up : label.style_label_down, tipTxt)
+        else
+            if not na(s.lbRt)
+                label.delete(s.lbRt)
+                s.lbRt := na
+            if not na(s.lbAn)
+                label.delete(s.lbAn)
+                s.lbAn := na
         if inShowPair
             s.lbCx := f_lblUp(s.lbCx, s.ctxFormT, s.ctxTop, s.ctxTf + " CONTEXT · " + dirW + " · " + s.id, cCtxLine, label.style_label_right, tipCtx)
             s.lbTg := f_lblUp(s.lbTg, s.trgFormT, s.trgBot, "30s TRIGGER · " + dirW + " · " + s.id, cTrgLine, label.style_label_right, tipTrg)
-            s.lbCm := f_lblUp(s.lbCm, s.ctxInvT, s.ctxInvPx, s.ctxTf + " inv", cCtxLine, bull ? label.style_label_up : label.style_label_down, tipCtx)
-            s.lbTm := f_lblUp(s.lbTm, s.trgInvT, s.trgInvPx, "30s inv", cTrgLine, bull ? label.style_label_up : label.style_label_down, tipTrg)
+            if inShowMarkers
+                s.lbCm := f_lblUp(s.lbCm, s.ctxInvT, s.ctxInvPx, s.ctxTf + " inv", cCtxLine, bull ? label.style_label_up : label.style_label_down, tipCtx)
+                s.lbTm := f_lblUp(s.lbTm, s.trgInvT, s.trgInvPx, "30s inv", cTrgLine, bull ? label.style_label_up : label.style_label_down, tipTrg)
+            else
+                if not na(s.lbCm)
+                    label.delete(s.lbCm)
+                    s.lbCm := na
+                if not na(s.lbTm)
+                    label.delete(s.lbTm)
+                    s.lbTm := na
         else
             if not na(s.lbCx)
                 label.delete(s.lbCx)
@@ -1322,16 +1328,17 @@ f_lvlReconcile(array<float> snap) =>
 f_lvlSync(array<float> snap, int asOf) =>
     if not na(snap) and not na(asOf)
         srcSeen.set(IX_LVL, true)
-        if asOf > lastAsOf.get(IX_LVL) and not srcBad.get(IX_LVL)
+        if asOf > lastAsOf.get(IX_LVL)
             lastAsOf.set(IX_LVL, asOf)
             if firstTime <= asOf
                 if not na(prevCloseT) and prevCloseT > asOf
-                    srcBad.set(IX_LVL, true)
-                    warnArr.push("3m structure source disabled: chart candles do not align with 3m boundaries")
+                    srcSkip.set(IX_LVL, srcSkip.get(IX_LVL) + 1)
                 else
                     srcInit.set(IX_LVL, true)
                     srcTrunc.set(IX_LVL, snap.get(0) == 1.0)
                     srcReady.set(IX_LVL, snap.get(1) > 0.0)
+                    srcRT.set(IX_LVL, int(snap.get(1)))
+                    srcFT.set(IX_LVL, int(snap.get(2)))
                     f_lvlReconcile(snap)
     true
 f_lvlConsume() =>
@@ -1372,6 +1379,11 @@ f_ctxClearAll() =>
     true
 f_fn(int k, int col) =>
     fnl.set(k * FN + col, fnl.get(k * FN + col) + 1)
+    true
+f_winIdx(string nm) =>
+    nm == "Asia -> London" ? 0 : (nm == "New York morning" ? 1 : 2)
+f_sd(int w, int col) =>
+    sdn.set(w * FS + col, sdn.get(w * FS + col) + 1)
     true
 f_fb(int k, int col) =>
     fnb.set(k * FB + col, fnb.get(k * FB + col) + 1)
@@ -1511,6 +1523,8 @@ f_ctxUpdate(int k, array<float> snap, int asOf, float cCl) =>
         [wn, ws, we] = f_selectWindow(asOf)
         if blocked
             f_fb(k, 6)
+            if not na(ws)
+                f_sd(f_winIdx(wn), 14)
         else if na(ws)
             f_fb(k, 4)
         else
@@ -1537,6 +1551,7 @@ f_ctxUpdate(int k, array<float> snap, int asOf, float cCl) =>
             c.retestPx := na
             c.lastReason := ""
             f_fn(k, 1)
+            f_sd(f_winIdx(wn), 3)
             if replacing
                 f_fb(k, 0)
             f_log("ctx created " + c.tfTxt + " " + (c.dir > 0 ? "long" : "short") + " " + c.winId)
@@ -1545,17 +1560,17 @@ f_ctxSync(int k, array<float> snap, int asOf, float cCl) =>
     int ix = IX_CTX + k
     if not na(snap) and not na(asOf) and not na(cCl)
         srcSeen.set(ix, true)
-        if asOf > lastAsOf.get(ix) and not srcBad.get(ix)
+        if asOf > lastAsOf.get(ix)
             lastAsOf.set(ix, asOf)
             if firstTime <= asOf
                 if not na(prevCloseT) and prevCloseT > asOf
-                    srcBad.set(ix, true)
-                    warnArr.push(cxs.get(k).tfTxt + " context source disabled: chart candles do not align with its boundaries")
-                    f_ctxClear(cxs.get(k))
+                    srcSkip.set(ix, srcSkip.get(ix) + 1)
                 else
                     srcInit.set(ix, true)
                     srcTrunc.set(ix, snap.get(0) == 1.0)
                     srcReady.set(ix, snap.get(1) > 0.0)
+                    srcRT.set(ix, int(snap.get(1)))
+                    srcFT.set(ix, int(snap.get(2)))
                     if srcReady.get(ix)
                         f_ctxUpdate(k, snap, asOf, cCl)
     true
@@ -1874,6 +1889,12 @@ if supported and barstate.isconfirmed
         covStart := time_close
     [wnQ, wsQ, weQ] = f_selectWindow(time_close)
     if not na(wsQ)
+        int wiQ = f_winIdx(wnQ)
+        f_sd(wiQ, 0)
+        if qualOk
+            f_sd(wiQ, 1)
+        if f_openSetup()
+            f_sd(wiQ, 2)
         int dq = dKey.size() - 1
         dWinN.set(dq, dWinN.get(dq) + 1)
         if not qualOk
@@ -1892,6 +1913,7 @@ if supported and barstate.isconfirmed
             if not na(trg)
                 Cand rc = f_evalCand(cc, trg)
                 f_fn(k, 3)
+                f_sd(f_winIdx(cc.winName), 5)
                 if rc.stage >= 1
                     f_fn(k, 4)
                 if rc.stage >= 2
@@ -1900,6 +1922,7 @@ if supported and barstate.isconfirmed
                     f_fn(k, 6)
                 if rc.fail >= 7
                     f_fb(k, rc.fail)
+                    f_sd(f_winIdx(cc.winName), 8 + rc.fail)
                 if not rc.ok
                     cc.lastReason := rc.why
                     f_dbg(cc.tfTxt + ": " + rc.why)
@@ -1918,6 +1941,7 @@ if supported and barstate.isconfirmed
         if not f_setupExists(pick.trg.id, cp.zid)
             f_enter(pick, cp)
             f_fn(pick.k, 7)
+            f_sd(f_winIdx(cp.winName), 6)
             for ci = 0 to cands.size() - 1
                 Cand qo = cands.get(ci)
                 if qo.ok and qo.k != pick.k
@@ -1936,6 +1960,7 @@ if supported and barstate.isconfirmed
                 cr.legExtT := time
                 cr.retestPx := cr.legExt
                 f_fn(k, 2)
+                f_sd(f_winIdx(cr.winName), 4)
                 f_log("retest " + cr.tfTxt + " bar " + str.tostring(bar_index))
             else
                 int aw = cr.dir > 0 ? f_tk(high) - f_tk(cr.top) : f_tk(cr.bottom) - f_tk(low)
@@ -1945,137 +1970,160 @@ if supported and barstate.isconfirmed
         f_pruneSetups()
     if drawNow
         f_drawAll()
-var table warnTbl = table.new(position.top_right, 1, 1, border_width = 1, border_color = color.gray)
-var table stTbl = table.new(position.bottom_right, 6, 9, border_width = 1, border_color = color.gray)
-var table staTbl = table.new(position.top_left, 1, 4, border_width = 1, border_color = color.gray)
-var table fnTbl = table.new(position.bottom_left, 9, 11, border_width = 1, border_color = color.gray)
-f_cell(table t, int c, int r, string txt, color bg, color tc, string al) =>
-    table.cell(t, c, r, txt, text_color = tc, text_size = size.normal, text_halign = al == "l" ? text.align_left : text.align_center, bgcolor = bg)
+var table stBox = table.new(position.top_right, 1, 11, bgcolor = na, border_width = 0)
+var table dbgTbl = table.new(position.bottom_left, 1, 40, bgcolor = na, border_width = 1, border_color = color.gray)
+f_bx(int r, string txt, string tip) =>
+    table.cell(stBox, 0, r, txt, text_color = color.black, text_size = size.small, text_halign = text.align_left, bgcolor = na, tooltip = tip)
+    true
+f_dl(int r, string txt, bool hdr) =>
+    table.cell(dbgTbl, 0, r, txt, text_color = hdr ? cHdrTx : cRowTx, text_size = size.small, text_halign = text.align_left, bgcolor = hdr ? cHdrBg : cRowBg)
     true
 f_blockTxt(int k) =>
-    string[] nm = array.from("replaced", "expired", "closed through", "bias flip", "inv: no window", "inv: bias/narrow", "inv: unresolved block", "impulse fail", "stop/risk fail", "coverage unknown", "obstacle", "window instance", "session limit", "unresolved setup", "bias at entry", "outranked")
     string r = ""
     for j = 0 to FB - 1
         int v = fnb.get(k * FB + j)
         if v > 0
-            r += (r == "" ? "" : " | ") + nm.get(j) + " " + str.tostring(v)
+            r += (r == "" ? "" : " | ") + fbNames.get(j) + " " + str.tostring(v)
     cxs.get(k).tfTxt + ": " + (r == "" ? "none" : r)
-if barstate.islast
-    string w = supported ? array.join(warnArr, "\n") : "Switch to a standard 30-second chart"
-    if supported
-        string wx = ""
-        wx := f_addWhy(wx, f_ctxWhy())
-        wx := f_addWhy(wx, f_lvlWhy())
-        wx := f_addWhy(wx, f_slotWhy(en1, ok1, act1, 0, f_tfText(sec1)))
-        wx := f_addWhy(wx, f_slotWhy(en2, ok2, act2, 1, f_tfText(sec2)))
-        wx := f_addWhy(wx, f_slotWhy(en3, ok3, act3, 2, f_tfText(sec3)))
-        wx := f_addWhy(wx, f_slotWhy(en4, ok4, act4, 3, f_tfText(sec4)))
-        if setups.size() > DRAW_MAX
-            wx := f_addWhy(wx, "Drawings limited to " + str.tostring(DRAW_MAX) + " setups (unresolved first, then newest); records and statistics are unaffected")
-        w += wx == "" ? "" : (w == "" ? "" : "\n") + str.replace_all(wx, "; ", "\n")
-    if w == ""
-        table.cell(warnTbl, 0, 0, "", bgcolor = na)
+f_sessTxt(int w) =>
+    string r = ""
+    for j = 4 to FB - 1
+        int v = sdn.get(w * FS + 8 + j)
+        if v > 0
+            r += (r == "" ? "" : " | ") + fbNames.get(j) + " " + str.tostring(v)
+    r == "" ? "no rejected candidates" : r
+f_srcLine(int idx, string nm, bool act) =>
+    string r = nm + ": "
+    if not act
+        r += "off"
+    else if not srcSeen.get(idx)
+        r += "no data returned"
     else
-        f_cell(warnTbl, 0, 0, w, cWarnBg, color.white, "l")
-    if supported and inStatus
-        string a1 = "Contexts: "
-        for k = 0 to NCTX - 1
-            Ctx cs = cxs.get(k)
-            string st1 = not actCtxA.get(k) ? "off" : (cs.state == 0 ? "none" : (cs.dir > 0 ? "LONG " : "SHORT ") + (cs.state == 1 ? "awaiting retest" : "awaiting trigger"))
-            a1 += cs.tfTxt + " " + st1 + (k < NCTX - 1 ? " | " : "")
-        string a2 = (f_openSetup() ? "Setup OPEN" : "No open setup") + " | entries are counted per window instance (max " + str.tostring(inMaxEntries) + ")"
-        [cvS, txS, whS] = f_coverage()
-        bool qS = f_ctxReadyAll() and f_lvlReady() and cvS == 0
-        string a3 = qS ? "Qualification coverage: complete (" + txS + ")" + (na(covStart) ? "" : " since " + str.format_time(covStart, "MM-dd HH:mm", TZ_NY) + " NY") : "Qualification coverage: INCOMPLETE - entries blocked" + (na(covStart) ? " (not yet established)" : " (complete earlier since " + str.format_time(covStart, "MM-dd HH:mm", TZ_NY) + " NY)")
-        string a4 = biasDir == 0 ? "15m bias: UNKNOWN (no qualifying break yet) - no contexts" : "15m bias: " + (biasDir > 0 ? "BULLISH" : "BEARISH") + " - " + (biasDir > 0 ? "close above swing high " : "close below swing low ") + str.tostring(blR, format.mintick) + " (pivot " + f_nyT(int(btR)) + " NY)"
-        f_cell(staTbl, 0, 0, a1, cRowBg, cRowTx, "l")
-        f_cell(staTbl, 0, 1, a2, cRowBg, cRowTx, "l")
-        f_cell(staTbl, 0, 2, a3, qS ? cRowBg : cWarnBg, qS ? cRowTx : color.white, "l")
-        f_cell(staTbl, 0, 3, a4, biasDir == 0 ? cWarnBg : cRowBg, biasDir == 0 ? color.white : cRowTx, "l")
-    if supported and inStats
+        r += (srcFT.get(idx) > 0 ? "data from " + f_nyT(srcFT.get(idx)) + " NY" : "data start n/a") + ", " + (srcReady.get(idx) ? "ready since " + f_nyT(srcRT.get(idx)) + " NY" : "WARMING UP") + (srcTrunc.get(idx) ? ", CAPACITY-TRUNCATED" : "") + (srcSkip.get(idx) > 0 ? ", skipped updates " + str.tostring(srcSkip.get(idx)) : "")
+    r
+if barstate.islast
+    if not supported
+        f_bx(0, "Switch to a standard 30-second chart", "")
+        table.clear(stBox, 0, 1, 0, 10)
+    else if inStats
         array<int> rd = f_reportDates()
         int nr = rd.size()
-        string[] hd = array.from("Date (NY)", "Setups", "Wins", "Losses", "Open", "Ambiguous")
-        for c = 0 to 5
-            f_cell(stTbl, c, 0, hd.get(c), cHdrBg, cHdrTx, c == 0 ? "l" : "c")
         int tW = 0
         int tL = 0
         int tO = 0
         int tA = 0
-        bool anyP = false
-        bool anyU = false
-        for r = 0 to REP_DATES - 1
-            if r < nr
+        string miss = ""
+        if nr > 0
+            for r = 0 to nr - 1
                 int k = rd.get(r)
                 int di = f_dateIdx(k)
                 int stx = di >= 0 ? f_dateStatus(di) : 1
-                int cW = f_dateCount(k, 1)
-                int cL = f_dateCount(k, 2)
-                int cO = f_dateCount(k, 0)
-                int cA = f_dateCount(k, 3)
-                if stx == 1
-                    anyP := true
-                if stx == 2
-                    anyU := true
-                tW += cW
-                tL += cL
-                tO += cO
-                tA += cA
-                string dt = f_dateTxt(k) + (stx == 1 ? " †" : (stx == 2 ? " ‡" : ""))
-                f_cell(stTbl, 0, r + 1, dt, cRowBg, cRowTx, "l")
-                f_cell(stTbl, 1, r + 1, stx == 2 ? "n/a" : str.tostring(cW + cL + cO + cA), cRowBg, cRowTx, "c")
-                f_cell(stTbl, 2, r + 1, stx == 2 ? "n/a" : str.tostring(cW), cRowBg, cRowTx, "c")
-                f_cell(stTbl, 3, r + 1, stx == 2 ? "n/a" : str.tostring(cL), cRowBg, cRowTx, "c")
-                f_cell(stTbl, 4, r + 1, stx == 2 ? "n/a" : str.tostring(cO), cRowBg, cRowTx, "c")
-                f_cell(stTbl, 5, r + 1, stx == 2 ? "n/a" : str.tostring(cA), cRowBg, cRowTx, "c")
-            else
-                for c = 0 to 5
-                    f_cell(stTbl, c, r + 1, c == 0 ? "-" : "", cRowBg, cRowTx, c == 0 ? "l" : "c")
-        f_cell(stTbl, 0, 6, "Total", cTotBg, cRowTx, "l")
-        f_cell(stTbl, 1, 6, str.tostring(tW + tL + tO + tA), cTotBg, cRowTx, "c")
-        f_cell(stTbl, 2, 6, str.tostring(tW), cTotBg, cRowTx, "c")
-        f_cell(stTbl, 3, 6, str.tostring(tL), cTotBg, cRowTx, "c")
-        f_cell(stTbl, 4, 6, str.tostring(tO), cTotBg, cRowTx, "c")
-        f_cell(stTbl, 5, 6, str.tostring(tA), cTotBg, cRowTx, "c")
+                tW += f_dateCount(k, 1)
+                tL += f_dateCount(k, 2)
+                tO += f_dateCount(k, 0)
+                tA += f_dateCount(k, 3)
+                if stx != 0
+                    miss += f_dateTxt(k) + (stx == 2 ? " not evaluated; " : " partial; ")
         int oldOpen = 0
         if nr > 0 and setups.size() > 0
             for i = 0 to setups.size() - 1
                 Setup so = setups.get(i)
                 if so.state == 0 and so.dateKey < rd.first()
                     oldOpen += 1
-        string wr = (tW + tL) > 0 ? "Resolved win rate = Wins / (Wins + Losses) = " + str.tostring(100.0 * tW / (tW + tL), "#") + "% (" + str.tostring(tW) + "/" + str.tostring(tW + tL) + "); Open and Ambiguous excluded" : "Resolved win rate: - (no resolved setups)"
-        string notes = ""
-        if anyP
-            notes += "† partial history: some qualification bars lacked coverage or the chart history begins that date. "
-        if anyU
-            notes += "‡ unavailable: no qualification coverage on that date. "
-        if oldOpen > 0
-            notes += str.tostring(oldOpen) + " older unresolved setup(s) retained, not in table. "
-        f_cell(stTbl, 0, 7, wr, cRowBg, cRowTx, "l")
-        table.merge_cells(stTbl, 0, 7, 5, 7)
-        f_cell(stTbl, 0, 8, notes == "" ? "Entry date = New York date of the entry candle close. Outcomes follow the entry date." : notes, cRowBg, cRowTx, "l")
-        table.merge_cells(stTbl, 0, 8, 5, 8)
-    if supported and inDebug
-        string[] fh = array.from("Context", "Inversions", "Admitted", "Retests", "30s inv", "Impulse", "Stop/risk", "Clear path", "Entries")
-        for c = 0 to 8
-            f_cell(fnTbl, c, 0, fh.get(c), cHdrBg, cHdrTx, c == 0 ? "l" : "c")
-        int[] tot = array.new_int(FN, 0)
-        for k = 0 to NCTX - 1
-            f_cell(fnTbl, 0, k + 1, cxs.get(k).tfTxt + (actCtxA.get(k) ? "" : " (off)"), cRowBg, cRowTx, "l")
-            for j = 0 to FN - 1
-                int v = fnl.get(k * FN + j)
-                tot.set(j, tot.get(j) + v)
-                f_cell(fnTbl, j + 1, k + 1, str.tostring(v), cRowBg, cRowTx, "c")
-        f_cell(fnTbl, 0, 5, "All", cTotBg, cRowTx, "l")
-        for j = 0 to FN - 1
-            f_cell(fnTbl, j + 1, 5, str.tostring(tot.get(j)), cTotBg, cRowTx, "c")
-        f_cell(fnTbl, 0, 6, "First failed gate / blocks (each candidate counted once)", cHdrBg, cHdrTx, "l")
-        table.merge_cells(fnTbl, 0, 6, 8, 6)
-        for k = 0 to NCTX - 1
-            f_cell(fnTbl, 0, 7 + k, f_blockTxt(k), cRowBg, cRowTx, "l")
-            table.merge_cells(fnTbl, 0, 7 + k, 8, 7 + k)
+        bool covFull = nr == REP_DATES and miss == ""
+        string covTip = covFull ? "Every one of the last 5 dates was fully evaluated." : "Only RECORDED setups are counted. " + (nr < REP_DATES ? "Only " + str.tostring(nr) + " date(s) of chart data. " : "") + (miss == "" ? "" : "Not fully evaluated: " + miss) + "Zero setups on such a date is NOT proof that none qualified."
+        f_bx(0, "Last 5 days", "NY entry dates; outcomes follow the entry date")
+        f_bx(1, "Setups: " + str.tostring(tW + tL + tO + tA), oldOpen > 0 ? str.tostring(oldOpen) + " older unresolved setup(s) are retained but not in this count" : "")
+        f_bx(2, "Wins: " + str.tostring(tW) + " | Losses: " + str.tostring(tL), "")
+        f_bx(3, "Open: " + str.tostring(tO) + " | Ambiguous: " + str.tostring(tA), "Ambiguous = target and stop both reachable in one candle with the order unknown")
+        f_bx(4, "Win rate: " + ((tW + tL) > 0 ? str.tostring(100.0 * tW / (tW + tL), "#") + "%" : "—"), "Wins / (Wins + Losses); Open and Ambiguous excluded")
+        f_bx(5, "Coverage: " + (covFull ? "Full" : "Partial"), covTip)
+        if inDaily
+            for r = 0 to REP_DATES - 1
+                if r < nr
+                    int k2 = rd.get(r)
+                    int di2 = f_dateIdx(k2)
+                    int st2 = di2 >= 0 ? f_dateStatus(di2) : 1
+                    string rowTxt = f_dateTxt(k2) + (st2 == 2 ? "  not evaluated" : "  S" + str.tostring(f_dateCount(k2, -1)) + " W" + str.tostring(f_dateCount(k2, 1)) + " L" + str.tostring(f_dateCount(k2, 2)) + " O" + str.tostring(f_dateCount(k2, 0)) + " A" + str.tostring(f_dateCount(k2, 3)) + (st2 == 1 ? "  partial" : ""))
+                    f_bx(6 + r, rowTxt, "")
+                else
+                    table.clear(stBox, 0, 6 + r, 0, 6 + r)
+        else
+            table.clear(stBox, 0, 6, 0, 10)
     else
-        table.clear(fnTbl, 0, 0, 8, 10)
+        table.clear(stBox, 0, 0, 0, 10)
+    if supported and inDebug
+        int dr = 0
+        f_dl(dr, "FUNNEL per context timeframe: inversions / admitted / retests / 30s inversions / impulse / stop-risk / clear path / entries", true)
+        dr += 1
+        for k = 0 to NCTX - 1
+            string fl = cxs.get(k).tfTxt + (actCtxA.get(k) ? ": " : " (off): ")
+            for j = 0 to FN - 1
+                fl += str.tostring(fnl.get(k * FN + j)) + (j < FN - 1 ? " / " : "")
+            f_dl(dr, fl, false)
+            dr += 1
+        f_dl(dr, "FIRST FAILED GATE / blocks (each candidate counted once)", true)
+        dr += 1
+        for k = 0 to NCTX - 1
+            f_dl(dr, f_blockTxt(k), false)
+            dr += 1
+        f_dl(dr, "SESSIONS: evaluated bars / bars fully covered / bars with an open setup / contexts / retests / triggers / entries", true)
+        dr += 1
+        string[] sn = array.from("Asia -> London", "NY morning", "NY afternoon")
+        for w = 0 to 2
+            string sl = sn.get(w) + ": "
+            for j = 0 to 6
+                sl += str.tostring(sdn.get(w * FS + j)) + (j < 6 ? " / " : "")
+            f_dl(dr, sl, false)
+            dr += 1
+            f_dl(dr, "   rejections: " + f_sessTxt(w), false)
+            dr += 1
+        f_dl(dr, "SOURCES: first data -> ready (readiness is anchored to the first candle the platform supplied, never the clock)", true)
+        dr += 1
+        f_dl(dr, f_srcLine(IX_CTX, "1m ctx", actCtxA.get(0)), false)
+        dr += 1
+        f_dl(dr, f_srcLine(IX_CTX + 1, "2m ctx", actCtxA.get(1)), false)
+        dr += 1
+        f_dl(dr, f_srcLine(IX_CTX + 2, "3m ctx", actCtxA.get(2)), false)
+        dr += 1
+        f_dl(dr, f_srcLine(IX_CTX + 3, "5m ctx", actCtxA.get(3)), false)
+        dr += 1
+        f_dl(dr, f_srcLine(IX_LVL, "3m swing levels", actL), false)
+        dr += 1
+        f_dl(dr, f_srcLine(0, f_tfText(sec1) + " obstacles", act1), false)
+        dr += 1
+        f_dl(dr, f_srcLine(1, f_tfText(sec2) + " obstacles", act2), false)
+        dr += 1
+        f_dl(dr, f_srcLine(2, f_tfText(sec3) + " obstacles", act3), false)
+        dr += 1
+        f_dl(dr, "15m bias: " + (biasDir == 0 ? "UNKNOWN (no qualifying break yet) - no contexts" : (biasDir > 0 ? "BULLISH above " : "BEARISH below ") + str.tostring(blR, format.mintick) + " (pivot " + f_nyT(int(btR)) + " NY)"), false)
+        dr += 1
+        string lockTxt = "none"
+        if setups.size() > 0
+            for i = 0 to setups.size() - 1
+                Setup sl2 = setups.get(i)
+                if sl2.state == 0 and lockTxt == "none"
+                    lockTxt := sl2.id + " (" + sl2.winName + ") OPEN since " + f_nyT(sl2.entryTime) + " NY - blocks new entries and new contexts until it resolves"
+        f_dl(dr, "UNRESOLVED-SETUP LOCK: " + lockTxt, true)
+        dr += 1
+        string nowWhy = ""
+        nowWhy := f_addWhy(nowWhy, f_ctxWhy())
+        nowWhy := f_addWhy(nowWhy, f_lvlWhy())
+        nowWhy := f_addWhy(nowWhy, f_slotWhy(en1, ok1, act1, 0, f_tfText(sec1)))
+        nowWhy := f_addWhy(nowWhy, f_slotWhy(en2, ok2, act2, 1, f_tfText(sec2)))
+        nowWhy := f_addWhy(nowWhy, f_slotWhy(en3, ok3, act3, 2, f_tfText(sec3)))
+        nowWhy := f_addWhy(nowWhy, f_slotWhy(en4, ok4, act4, 3, f_tfText(sec4)))
+        f_dl(dr, "BLOCKING NOW: " + (nowWhy == "" ? "none" : nowWhy), false)
+        dr += 1
+        if warnArr.size() > 0
+            f_dl(dr, "CONFIG: " + array.join(warnArr, " | "), false)
+            dr += 1
+        if setups.size() > DRAW_MAX
+            f_dl(dr, "Drawings limited to " + str.tostring(DRAW_MAX) + " setups; records and statistics are unaffected", false)
+            dr += 1
+        table.clear(dbgTbl, 0, dr, 0, 39)
+    else
+        table.clear(dbgTbl, 0, 0, 0, 39)
 bool evNow = supported and barstate.isrealtime and barstate.isconfirmed
 if evNow and aMsgs.size() > 0
     alert(array.join(aMsgs, "\n"), alert.freq_once_per_bar_close)

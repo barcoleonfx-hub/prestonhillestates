@@ -166,11 +166,6 @@ chk('Code: inversion markers on the actual confirming candles (source candle ope
 chk('Code: true exit marker (dotted line + label at resolveTime) separate from the display-only minimum width', 'f_lblUp(s.lbX, s.resolveTime' in CODE and 'color.gray, line.style_dotted' in CODE, 'CODE INSPECTION')
 chk('Code: label count per setup (10) x DRAW_MAX (40) + debug labels stays under the 500-label limit; boxes 4 x 40; lines 4 x 40', 10 * 40 + 30 < 500 and 4 * 40 + 20 < 500 and 4 * 40 < 500)
 
-# ---------- statistics panel ----------
-cells = re.findall(r'f_cell\(stTbl, [^\n]*', CODE)
-chk('Code: EVERY stats cell passes an explicit background AND text colour (header, rows, totals, footers)', len(cells) >= 14 and all(re.search(r'c(HdrBg|RowBg|TotBg)', x) and re.search(r'c(HdrTx|RowTx)', x) for x in cells), 'CODE INSPECTION')
-chk('Code: table text is normal size (no tiny/faint), Light/Dark theme colours defined, headers Wins/Losses', 'text_size = size.normal' in CODE and 'cHdrBg' in CODE and '"Wins", "Losses"' in CODE, 'CODE INSPECTION')
-chk('Code: win rate = Wins / (Wins + Losses) with Open and Ambiguous excluded', '100.0 * tW / (tW + tL)' in CODE and 'Open and Ambiguous excluded' in CODE, 'CODE INSPECTION')
 chk('Code: unresolved setups are never pruned or counted as losses; pruning only removes resolved ones outside the reporting dates', 'if s.state != 0 and s.dateKey < cut' in CODE, 'CODE INSPECTION')
 
 print(f"{'test':132} {'result':6} basis")
