@@ -100,7 +100,7 @@ int altDraw = inShowBoth ? (selVar == 1 ? stdSel : 4) : -1
 bool stdOn = selVar == 0 or inCmpVar
 bool precOn = selVar == 1 or inCmpVar
 var array<bool> slotOn = array.from(stdOn and (inCompare or stdSel == 0), stdOn and (inCompare or stdSel == 1), stdOn and (inCompare or stdSel == 2), stdOn and (inCompare or stdSel == 3), precOn)
-var array<string> slotNm = array.from("STD A plain retest", "STD B retest+iFVG", "STD C Fib+rejection", "STD C wick-stop (exp.)", "PRECISION rej/sweep")
+var array<string> slotNm = array.from("STD-A", "STD-B", "STD-C", "STD-C wick", "PREC")
 type Trade
     int slot
     int dir
@@ -1205,10 +1205,10 @@ f_drawDay(Day dy) =>
             if slotOn.get(altDraw)
                 f_drawPlan(dy, altDraw)
     true
-var table tbInfo = table.new(position.middle_left, 1, 19, bgcolor = color.new(color.white, 8), border_width = 1, border_color = color.gray)
-var table tbFun = table.new(position.top_right, 6, 17, bgcolor = color.new(color.white, 8), border_width = 1, border_color = color.gray)
-var table tbPerf = table.new(position.bottom_right, 6, 29, bgcolor = color.new(color.white, 8), border_width = 1, border_color = color.gray)
-var table tbLed = table.new(position.bottom_left, 13, 13, bgcolor = color.new(color.white, 8), border_width = 1, border_color = color.gray)
+var table tbInfo = table.new(position.middle_left, 1, 16, bgcolor = color.new(color.white, 8), border_width = 1, border_color = color.gray)
+var table tbFun = table.new(position.top_right, 6, 16, bgcolor = color.new(color.white, 8), border_width = 1, border_color = color.gray)
+var table tbPerf = table.new(position.bottom_right, 6, 19, bgcolor = color.new(color.white, 8), border_width = 1, border_color = color.gray)
+var table tbLed = table.new(position.bottom_left, 12, 12, bgcolor = color.new(color.white, 8), border_width = 1, border_color = color.gray)
 f_cell(table t, int c, int r, string txt, color tcol, color bg) =>
     table.cell(t, c, r, txt, text_color = tcol, text_size = size.tiny, text_halign = text.align_left, bgcolor = bg)
     true
@@ -1228,38 +1228,36 @@ f_drawTables() =>
     int wk = not na(firstKey) and not na(lastKey) ? f_weekdays(firstKey, lastKey) : 0
     int evald = cv.get(0)
     string rngTxt = not na(firstKey) ? f_dt(firstKey) + " to " + f_dt(lastKey) : "no weekday evaluated yet"
-    f_cell(tbInfo, 0, 0, "H Ticks C - 10AM Precision (RESEARCH MODEL - profitability UNPROVEN)", color.white, color.new(color.maroon, 10))
-    f_cell(tbInfo, 0, 1, "Our custom rules, not Powell's official rules. Simulation on completed 1m candles; no tick data.", blk, bgN)
-    f_cell(tbInfo, 0, 2, "Coverage (loaded history only): " + rngTxt, blk, bgN)
-    f_cell(tbInfo, 0, 3, "Finished weekdays: " + str.tostring(evald) + " | complete " + str.tostring(cv.get(1)) + " | partial " + str.tostring(cv.get(2)) + " | no 10am candle " + str.tostring(cv.get(3)) + " | ATR n/a " + str.tostring(cv.get(4)) + " | levels n/a " + str.tostring(cv.get(5)), blk, bgN)
-    f_cell(tbInfo, 0, 4, "Weekdays in range with NO bars at all (holiday / missing data): " + str.tostring(math.max(0, wk - evald)) + "  - missing data is NOT counted as 'no setup'", blk, bgN)
-    f_cell(tbInfo, 0, 5, "Ambiguous first candles skipped: " + str.tostring(cv.get(6)), blk, bgN)
     string dstate = ""
+    string mWhy = ""
     if not na(cur)
         string[] nm = array.from("WAITING", "OPEN_CAPTURED", "MANIPULATION_QUALIFIED", "REVERSAL_CONFIRMED", "", "", "COMPLETE", "EXPIRED", "INVALIDATED", "INELIGIBLE")
         dstate := f_dt(cur.key) + ": " + (cur.active ? nm.get(cur.st) : "weekend") + (cur.why == "" ? "" : " - " + cur.why)
-    f_cell(tbInfo, 0, 6, "Latest day: " + dstate, blk, bgN)
-    string mWhy = ""
-    if not na(cur)
         for k = 0 to NS - 1
             if slotOn.get(k)
                 Mdl mm = cur.ms.get(k)
-                string tx = mm.st == 0 ? "no setup" : (mm.st == 1 ? "waiting for its conditions" : (mm.st == 2 ? "order armed" : (mm.st == 3 ? "position open" : (mm.why == "" ? "done" : mm.why))))
-                mWhy += slotNm.get(k) + ": " + tx + "   "
-    f_cell(tbInfo, 0, 17, "Latest day per model: " + mWhy, blk, bgN)
-    f_cell(tbInfo, 0, 7, "Variant: " + inVariant + (inCmpVar ? " (comparing both)" : "") + " | STANDARD: " + inModel + (inModel == "C: Fib overlap + rejection" ? " / stop: " + inCStop : "") + " | target " + inTgt + " | stop cap " + str.tostring(inMaxStop) + " ticks | buffer " + str.tostring(inBuf), blk, bgN)
-    f_cell(tbInfo, 0, 8, "Costs: " + (inComm == 0.0 and inSlip == 0 ? "ZERO (net = gross)" : str.tostring(inComm, "#.00") + " USD/side, " + str.tostring(inSlip) + " tick slippage") + " | contracts " + (inSizeMode == "Fixed cash risk" ? "cash risk " + str.tostring(inCashRisk, "#") + " USD, whole contracts" : str.tostring(inQty) + " fixed") + " | fills: " + (inStrict ? "trade-through required" : "touch assumed"), blk, bgN)
-    f_cell(tbInfo, 0, 9, maxN < 100 ? "SAMPLE TOO SMALL: " + str.tostring(maxN) + " trades in the largest column. About 16 days cannot establish an edge." : "Sample: " + str.tostring(maxN) + " trades in the largest column (still not proof).", maxN < 100 ? color.red : blk, bgN)
-    f_cell(tbInfo, 0, 10, "Limits: OHLC order within a candle is unknowable (ambiguous trades flagged); a touched limit is an assumption, not guaranteed execution.", blk, bgN)
-    f_cell(tbInfo, 0, 11, "Asia/London levels are not implemented. One filled trade per model per day (structural).", blk, bgN)
-    f_cell(tbInfo, 0, 12, "Drawdown shown is CLOSED-trade equity only. No guarantee of any outcome.", blk, bgN)
-    f_cell(tbInfo, 0, 14, "PRECISION: trigger " + inPTrig + (inPFib ? " + Fib overlap" : "") + (inPIfvg ? " + iFVG" : "") + " | band +/-" + str.tostring(inBand, "#.#") + " ticks | wick >= " + str.tostring(inWick * 100, "#") + "% | stop cap " + str.tostring(inPStopCap) + " ticks | buffer " + str.tostring(inPBuf) + " | min " + str.tostring(inMinR, "#.0") + "R | expiry " + str.tostring(inPExp) + " candles | target " + (inPTgt == "Fixed R" ? "fixed " + str.tostring(inPFixR, "#.0") + "R" : "nearest unswept liquidity"), blk, bgN)
-    f_cell(tbInfo, 0, 15, "Precision retries are NOT implemented (one candidate per day). Defaults are research starting points, not optimised.", blk, bgN)
-    f_cell(tbInfo, 0, 16, "A small stop with a large planned R is not evidence of an edge or of low drawdown; count every loss, cost and missed fill.", blk, bgN)
-    f_cell(tbInfo, 0, 13, syminfo.root == "NQ" or syminfo.root == "MNQ" ? "Instrument: " + syminfo.ticker : "NOTE: tuned for NQ/MNQ; this symbol is " + syminfo.ticker, syminfo.root == "NQ" or syminfo.root == "MNQ" ? blk : color.red, bgN)
+                string tx = mm.st == 0 ? "no setup" : (mm.st == 1 ? "waiting" : (mm.st == 2 ? "order armed" : (mm.st == 3 ? "position open" : (mm.why == "" ? "done" : mm.why))))
+                mWhy += slotNm.get(k) + ": " + tx + "  "
+    bool nqOk = syminfo.root == "NQ" or syminfo.root == "MNQ"
+    f_cell(tbInfo, 0, 0, "H Ticks C - 10AM Precision | RESEARCH MODEL, profitability UNPROVEN | " + syminfo.ticker, color.white, color.new(color.maroon, 10))
+    f_cell(tbInfo, 0, 1, "Our own rules, not Powell's. Simulated on completed 1m candles; no tick data." + (nqOk ? "" : " NOTE: tuned for NQ/MNQ."), nqOk ? blk : color.red, bgN)
+    f_cell(tbInfo, 0, 2, "Data (loaded history only): " + rngTxt, blk, bgN)
+    f_cell(tbInfo, 0, 3, "Weekdays: " + str.tostring(evald) + " done | " + str.tostring(cv.get(1)) + " complete | " + str.tostring(cv.get(2)) + " partial | " + str.tostring(cv.get(3)) + " no 10am | " + str.tostring(cv.get(4)) + " ATR n/a | " + str.tostring(cv.get(5)) + " levels n/a", blk, bgN)
+    f_cell(tbInfo, 0, 4, "No-bar weekdays: " + str.tostring(math.max(0, wk - evald)) + " (holiday/missing; never counted as 'no setup') | ambiguous 1st candles skipped: " + str.tostring(cv.get(6)), blk, bgN)
+    f_cell(tbInfo, 0, 5, "Latest day: " + dstate, blk, bgN)
+    f_cell(tbInfo, 0, 6, "Latest day per model: " + mWhy, blk, bgN)
+    f_cell(tbInfo, 0, 7, "Variant: " + inVariant + (inCmpVar ? " (comparing both)" : "") + " | STD model " + inModel + " | tgt " + inTgt + " | stop cap " + str.tostring(inMaxStop) + "t buf " + str.tostring(inBuf), blk, bgN)
+    f_cell(tbInfo, 0, 8, "PRECISION: " + inPTrig + (inPFib ? "+Fib" : "") + (inPIfvg ? "+iFVG" : "") + " | band +/-" + str.tostring(inBand, "#.#") + "t | wick " + str.tostring(inWick * 100, "#") + "% | cap " + str.tostring(inPStopCap) + "t buf " + str.tostring(inPBuf) + " | min " + str.tostring(inMinR, "#.0") + "R | expiry " + str.tostring(inPExp) + " | " + (inPTgt == "Fixed R" ? "fixed " + str.tostring(inPFixR, "#.0") + "R" : "unswept liquidity"), blk, bgN)
+    f_cell(tbInfo, 0, 9, "Costs: " + (inComm == 0.0 and inSlip == 0 ? "ZERO (net = gross)" : str.tostring(inComm, "#.00") + " USD/side, " + str.tostring(inSlip) + "t slip") + " | size: " + (inSizeMode == "Fixed cash risk" ? str.tostring(inCashRisk, "#") + " USD risk, whole contracts" : str.tostring(inQty) + " contract(s)") + " | fills: " + (inStrict ? "trade-through" : "touch assumed"), blk, bgN)
+    f_cell(tbInfo, 0, 10, maxN < 100 ? "SAMPLE TOO SMALL: " + str.tostring(maxN) + " trade(s) in the largest column. ~16 days cannot show an edge." : "Sample: " + str.tostring(maxN) + " trades in the largest column (still not proof).", maxN < 100 ? color.red : blk, bgN)
+    f_cell(tbInfo, 0, 11, "Limits: OHLC order inside a candle is unknowable (ambiguous trades flagged); a touched limit is an assumption.", blk, bgN)
+    f_cell(tbInfo, 0, 12, "Precision retries are NOT implemented (one candidate per day). Asia/London levels not implemented.", blk, bgN)
+    f_cell(tbInfo, 0, 13, "A small stop with a big planned R is not an edge or low drawdown. Drawdown = closed trades only.", blk, bgN)
+    f_cell(tbInfo, 0, 14, "Unfilled/expired orders create no trade and are excluded from every rate. Ledger times = candle opens (NY).", blk, bgN)
+    f_cell(tbInfo, 0, 15, "Defaults are research starting points, not optimised. No guarantee of any outcome.", blk, bgN)
     if inFunnel
-        string[] rows = array.from("Eligible days", "Qualified manipulations", "Sweep-qualified" + (inSweep ? "" : " (filter off)"), "Confirmed reversals (eligible setups)", "Entry conditions met / precision triggers", "Orders armed", "Filled trades", "Unfilled / expired / cancelled", "Stop-cap rejections", "Invalidated", "Ambiguous trades", "No-target rejections", "Skipped / conditions unmet", "Minimum-R rejections", "Sizing rejections (<1 contract)")
-        f_cell(tbFun, 0, 0, "FUNNEL (independent shadow sims)", blk, bgH)
+        string[] rows = array.from("Eligible days", "Qualified manipulations", "Sweep-qualified" + (inSweep ? "" : " (off)"), "Confirmed reversals", "Entry conds / triggers", "Orders armed", "Filled trades", "Unfilled/expired/cancel", "Stop-cap rejections", "Invalidated", "Ambiguous trades", "No-target rejections", "Skipped / unmet", "Min-R rejections", "Sizing rejections")
+        f_cell(tbFun, 0, 0, "FUNNEL (shadow sims)", blk, bgH)
         for k = 0 to NS - 1
             f_cell(tbFun, k + 1, 0, slotNm.get(k), blk, bgH)
         for r = 0 to NF - 1
@@ -1267,62 +1265,61 @@ f_drawTables() =>
             for k = 0 to NS - 1
                 f_cell(tbFun, k + 1, r + 1, slotOn.get(k) ? str.tostring(fnl.get(k * NF + r)) : "off", blk, bgN)
     else
-        table.clear(tbFun, 0, 0, 5, 16)
-    f_cell(tbInfo, 0, 18, "Draw progress: funnel " + (inFunnel ? "written" : "off") + " ...", blk, bgN)
+        table.clear(tbFun, 0, 0, 5, 15)
     if inPerf
         matrix<float> pf = matrix.new<float>(NS, 32, 0.0)
         for k = 0 to NS - 1
             array<float> pa = f_perf(k)
             for j = 0 to 31
                 pf.set(k, j, pa.get(j))
-        string[] pr = array.from("Closed trades", "Wins (target)", "Losses (stop + ambiguous)", "Time exits", "Ambiguous", "Net win rate % (filled trades only)", "Expectancy gross R / net R", "Profit factor (net)", "Avg winner (R)", "Avg loser (R)", "Max losing streak", "Max closed DD (R)", "Max closed DD (USD)", "Net R total", "Avg MAE pts / R", "Median MAE pts / R (all)", "Median MAE pts / R (winners)", "Winners with MAE <= 0.25R %", "Avg MFE pts / R", "Uncertain-excursion trades", "Open trades", "Net USD total", "Avg stop (ticks)", "Avg planned R / realised net R", "Avg actual risk USD (whole contracts)")
-        f_cell(tbPerf, 0, 0, "PERFORMANCE (closed trades only; MAE/MFE are conservative bounds)", blk, bgH)
+        string[] pr = array.from("Closed trades", "W / L / time / ambig", "Net win rate % (filled)", "Expectancy gross / net R", "Profit factor (net)", "Avg win / avg loss R", "Max losing streak", "Closed DD  R / USD", "Net total  R / USD", "Avg MAE pts / R", "Median MAE all  pts / R", "Median MAE wins  pts / R", "Wins with MAE <= 0.25R %", "Avg MFE pts / R", "Uncertain / open trades", "Avg stop (ticks)", "Avg plan R / real net R", "Avg actual risk USD")
+        f_cell(tbPerf, 0, 0, "PERFORMANCE (MAE/MFE = bounds)", blk, bgH)
         for k = 0 to NS - 1
             f_cell(tbPerf, k + 1, 0, slotNm.get(k), blk, bgH)
-        for r = 0 to 24
+        for r = 0 to 17
             f_cell(tbPerf, 0, r + 1, pr.get(r), blk, bgN)
             for k = 0 to NS - 1
                 string v = "off"
                 if slotOn.get(k)
                     if r == 0
                         v := str.tostring(pf.get(k, 0), "#") + (pf.get(k, 26) > 0 ? " (+" + str.tostring(pf.get(k, 26), "#") + " excl.)" : "")
-                    else if r == 5
+                    else if r == 1
+                        v := str.tostring(pf.get(k, 1), "#") + " / " + str.tostring(pf.get(k, 2), "#") + " / " + str.tostring(pf.get(k, 3), "#") + " / " + str.tostring(pf.get(k, 4), "#")
+                    else if r == 2
                         v := f_fmt(pf.get(k, 5), "#.0")
-                    else if r == 6
+                    else if r == 3
                         v := f_fmt(pf.get(k, 27), "#.00") + " / " + f_fmt(pf.get(k, 6), "#.00")
-                    else if r == 7 or r == 8 or r == 9 or r == 11 or r == 13
-                        v := f_fmt(pf.get(k, r), "#.00")
-                    else if r == 12 or r == 17
-                        v := f_fmt(pf.get(k, r == 12 ? 12 : 20), "#")
-                    else if r == 14
+                    else if r == 4
+                        v := f_fmt(pf.get(k, 7), "#.00")
+                    else if r == 5
+                        v := f_fmt(pf.get(k, 8), "#.00") + " / " + f_fmt(pf.get(k, 9), "#.00")
+                    else if r == 6
+                        v := str.tostring(pf.get(k, 10), "#")
+                    else if r == 7
+                        v := f_fmt(pf.get(k, 11), "#.00") + " / " + f_fmt(pf.get(k, 12), "#")
+                    else if r == 8
+                        v := f_fmt(pf.get(k, 13), "#.00") + " / " + f_fmt(pf.get(k, 25), "#")
+                    else if r == 9
                         v := f_fmt(pf.get(k, 14), "#.0") + " / " + f_fmt(pf.get(k, 15), "#.00")
-                    else if r == 15
+                    else if r == 10
                         v := f_fmt(pf.get(k, 16), "#.0") + " / " + f_fmt(pf.get(k, 17), "#.00")
-                    else if r == 16
+                    else if r == 11
                         v := f_fmt(pf.get(k, 18), "#.0") + " / " + f_fmt(pf.get(k, 19), "#.00")
-                    else if r == 18
+                    else if r == 12
+                        v := f_fmt(pf.get(k, 20), "#")
+                    else if r == 13
                         v := f_fmt(pf.get(k, 21), "#.0") + " / " + f_fmt(pf.get(k, 22), "#.00")
-                    else if r == 19
-                        v := str.tostring(pf.get(k, 23), "#")
-                    else if r == 20
-                        v := str.tostring(pf.get(k, 24), "#")
-                    else if r == 21
-                        v := f_fmt(pf.get(k, 25), "#")
-                    else if r == 22
+                    else if r == 14
+                        v := str.tostring(pf.get(k, 23), "#") + " / " + str.tostring(pf.get(k, 24), "#")
+                    else if r == 15
                         v := f_fmt(pf.get(k, 28), "#.0")
-                    else if r == 23
+                    else if r == 16
                         v := f_fmt(pf.get(k, 29), "#.0") + " / " + f_fmt(pf.get(k, 6), "#.00")
-                    else if r == 24
-                        v := f_fmt(pf.get(k, 30), "#")
                     else
-                        v := str.tostring(pf.get(k, r), "#")
+                        v := f_fmt(pf.get(k, 30), "#")
                 f_cell(tbPerf, k + 1, r + 1, v, blk, bgN)
-        f_cell(tbPerf, 0, 26, inComm == 0.0 and inSlip == 0 ? "Costs are ZERO: net = gross. Same cash risk for every trade: use Fixed cash risk sizing." : "Net of the configured costs.", blk, bgN)
-        f_cell(tbPerf, 0, 27, "Expired / unfilled orders create no trade and are excluded from every rate. Tiny stops do not mean low drawdown.", blk, bgN)
-        f_cell(tbPerf, 0, 28, "Wins/losses by outcome; win rate = filled trades with net R > 0.", blk, bgN)
     else
-        table.clear(tbPerf, 0, 0, 5, 28)
-    f_cell(tbInfo, 0, 18, "Draw progress: funnel " + (inFunnel ? "written" : "off") + " | performance " + (inPerf ? "written" : "off") + " ...", blk, bgN)
+        table.clear(tbPerf, 0, 0, 5, 18)
     if inLedger
         int perPage = 10
         int sel = inLedModel == "All" ? -1 : (inLedModel == "A" ? 0 : (inLedModel == "B" ? 1 : (inLedModel == "C" ? 2 : (inLedModel == "C-wick" ? 3 : 4))))
@@ -1333,25 +1330,23 @@ f_drawTables() =>
                     idx.push(i)
         int pages = math.max(1, int(math.ceil(idx.size() / 10.0)))
         int pg = math.min(inLedPage, pages)
-        string[] hd = array.from("Date", "Dir", "Model", "10am open", "Entry", "Stop", "Target", "Fill", "Exit", "Outcome", "Net R", "Cost $", "Reason")
-        for c = 0 to 12
-            f_cell(tbLed, c, 0, (c == 0 ? "LEDGER p" + str.tostring(pg) + "/" + str.tostring(pages) + " - " : "") + hd.get(c), blk, bgH)
+        string[] hd = array.from("Date", "Dir", "Model", "Open", "Entry", "Stop", "Target", "Fill", "Exit", "Outcome", "Net R", "Reason")
+        for c = 0 to 11
+            f_cell(tbLed, c, 0, (c == 0 ? "LEDGER " + str.tostring(pg) + "/" + str.tostring(pages) + " " : "") + hd.get(c), blk, bgH)
         for r = 0 to perPage - 1
             int pos = (pg - 1) * perPage + r
             if pos < idx.size()
                 Trade t = trades.get(idx.get(pos))
                 string oc = t.isOpen ? "OPEN" : (t.outcome == 1 ? "TARGET" : (t.outcome == 2 ? "STOP" : (t.outcome == 3 ? "TIME EXIT" : "AMBIGUOUS")))
-                string[] cells = array.from(f_dt(t.dayKey), t.dir > 0 ? "LONG" : "SHORT", slotNm.get(t.slot), str.tostring(t.lvl, format.mintick), str.tostring(t.entryPx, format.mintick), str.tostring(t.stopPx, format.mintick), str.tostring(t.tgtPx, format.mintick), f_hms(t.fillT), t.isOpen ? "-" : f_hms(t.exitT), oc, f_fmt(t.netR, "#.00"), t.isOpen ? "-" : str.tostring(t.costUsd, "#.00"), t.note + (t.entryAmb ? " [entry-candle ambiguity]" : ""))
-                for c = 0 to 12
+                string why = t.note + (t.entryAmb ? " [entry-candle ambiguity]" : "")
+                string[] cells = array.from(f_dt(t.dayKey), t.dir > 0 ? "LONG" : "SHORT", slotNm.get(t.slot), str.tostring(t.lvl, format.mintick), str.tostring(t.entryPx, format.mintick), str.tostring(t.stopPx, format.mintick), str.tostring(t.tgtPx, format.mintick), f_hms(t.fillT), t.isOpen ? "-" : f_hms(t.exitT), oc, f_fmt(t.netR, "#.00"), str.length(why) > 44 ? str.substring(why, 0, 44) : why)
+                for c = 0 to 11
                     f_cell(tbLed, c, r + 1, cells.get(c), blk, bgN)
             else
-                for c = 0 to 12
+                for c = 0 to 11
                     f_cell(tbLed, c, r + 1, "", blk, bgN)
-        f_cell(tbLed, 0, 11, "Fill/exit times are candle open times (NY). Exits at 11:00 use that candle's open.", blk, bgN)
-        f_cell(tbLed, 0, 12, "Net R includes the configured costs; zero costs = gross.", blk, bgN)
     else
-        table.clear(tbLed, 0, 0, 12, 12)
-    f_cell(tbInfo, 0, 18, "Draw progress: funnel " + (inFunnel ? "written" : "off") + " | performance " + (inPerf ? "written" : "off") + " | ledger " + (inLedger ? "written" : "off") + " (tables sit top-right, bottom-right, bottom-left)", blk, bgN)
+        table.clear(tbLed, 0, 0, 11, 11)
     true
 bool drawNow = barstate.islastconfirmedhistory or (barstate.isrealtime and barstate.isconfirmed)
 if not supported
