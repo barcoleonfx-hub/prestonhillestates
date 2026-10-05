@@ -19,26 +19,36 @@ bool   inUseMaxAge = input.bool(false, "Optional: expire a pending context after
 int    inMaxAgeMin = input.int(30, "Maximum context age (minutes)", minval = 1, group = GRP_SET)
 bool   inShowCtx = input.bool(true, "Show the pending 3-minute context box", group = GRP_SET)
 bool   inDebug   = input.bool(false, "Debug: label rejected triggers with the failed gate", group = GRP_SET)
+bool   inLog = input.bool(false, "Log state changes to Pine Logs (for validation)", group = GRP_SET)
+int    inCtxMinTicks = input.int(1, "OPTIONAL: minimum 3m context gap width (ticks)", minval = 1, group = GRP_SET, tooltip = "1 = spec default (any detected gap). Raising it excludes tiny 3m gaps from creating a context.")
+int    inDeparture = input.int(0, "OPTIONAL: required departure before a retest counts (ticks)", minval = 0, group = GRP_SET, tooltip = "0 = spec default. Otherwise price must first move this many ticks beyond the context boundary (in the trade direction) on an EARLIER candle before a touch counts as the retest.")
+int    inMinRiskT = input.int(1, "Minimum risk (ticks)", minval = 1, group = GRP_SET, tooltip = "1 = spec default. A larger value rejects triggers whose body-stop risk is too small for spread/slippage/commission.")
+int    inMaxRiskT = input.int(0, "OPTIONAL: maximum risk (ticks, 0 = off)", minval = 0, group = GRP_SET)
+int    inTimeStopMin = input.int(0, "OPTIONAL: outcome model closes an open setup after N minutes (0 = off)", minval = 0, group = GRP_SET, tooltip = "Failsafe so a stranded setup cannot block later setups forever. The outcome model exits at that bar's close.")
+int    inSlipTicks = input.int(1, "Outcome model: assumed slippage (ticks, on entry and on stop exits)", minval = 0, group = GRP_SET, tooltip = "ASSUMPTION used only for the results table / outcome labels. Entry fills this many ticks worse than the signal close; stops fill this many ticks worse than the stop (or at the open if the candle gaps through it).")
+int    inCostTicks = input.int(0, "Outcome model: assumed round-turn cost (ticks)", minval = 0, group = GRP_SET, tooltip = "ASSUMPTION: commission/fees expressed in ticks of price, deducted from every outcome.")
+bool   inStats = input.bool(true, "Show per-window results table (outcome model, after assumed costs)", group = GRP_SET)
+bool   inStatus = input.bool(true, "Show state table (context / window / entries)", group = GRP_SET)
 const string TF_CTX = "3"
 int    inAsH  = input.int(9, "Asia open hour", minval = 0, maxval = 23, group = GRP_WIN)
 bool   inWinAsia = input.bool(true, "Window A: Asia open -> London open", group = GRP_WIN, tooltip = "Configured reference times, not a universal definition of the Asian session. Each endpoint uses its own IANA timezone (DST handled automatically). Start inclusive, end exclusive. BOTH the 3m context confirmation and the 30s entry confirmation must belong to the same window instance.")
 int    inAsM  = input.int(0, "Asia open minute", minval = 0, maxval = 59, group = GRP_WIN)
-string inAsTz = input.string("Asia/Tokyo", "Asia open timezone (IANA)", group = GRP_WIN)
+string inAsTz = input.string("Asia/Tokyo", "Asia open timezone (IANA)", options = ["Asia/Tokyo", "Asia/Hong_Kong", "Asia/Singapore", "Australia/Sydney", "Europe/London", "Europe/Berlin", "America/New_York", "America/Chicago", "UTC"], group = GRP_WIN)
 int    inLoH  = input.int(8, "London open hour (window end)", minval = 0, maxval = 23, group = GRP_WIN)
 int    inLoM  = input.int(0, "London open minute (window end)", minval = 0, maxval = 59, group = GRP_WIN)
-string inLoTz = input.string("Europe/London", "London open timezone (IANA)", group = GRP_WIN, tooltip = "The window ends at the first London opening strictly after the Asia start.")
+string inLoTz = input.string("Europe/London", "London open timezone (IANA)", options = ["Asia/Tokyo", "Asia/Hong_Kong", "Asia/Singapore", "Australia/Sydney", "Europe/London", "Europe/Berlin", "America/New_York", "America/Chicago", "UTC"], group = GRP_WIN, tooltip = "The window ends at the first London opening strictly after the Asia start.")
 bool   inWinAm = input.bool(true, "Window B: New York morning", group = GRP_WIN)
 int    inAmSH = input.int(9, "NY morning start hour", minval = 0, maxval = 23, group = GRP_WIN)
 int    inAmSM = input.int(45, "NY morning start minute", minval = 0, maxval = 59, group = GRP_WIN)
 int    inAmEH = input.int(11, "NY morning end hour", minval = 0, maxval = 23, group = GRP_WIN)
 int    inAmEM = input.int(30, "NY morning end minute", minval = 0, maxval = 59, group = GRP_WIN)
-string inAmTz = input.string("America/New_York", "NY morning timezone (IANA)", group = GRP_WIN)
+string inAmTz = input.string("America/New_York", "NY morning timezone (IANA)", options = ["Asia/Tokyo", "Asia/Hong_Kong", "Asia/Singapore", "Australia/Sydney", "Europe/London", "Europe/Berlin", "America/New_York", "America/Chicago", "UTC"], group = GRP_WIN)
 bool   inWinPm = input.bool(true, "Window C: New York afternoon", group = GRP_WIN)
 int    inPmSH = input.int(14, "NY afternoon start hour", minval = 0, maxval = 23, group = GRP_WIN)
 int    inPmSM = input.int(30, "NY afternoon start minute", minval = 0, maxval = 59, group = GRP_WIN)
 int    inPmEH = input.int(15, "NY afternoon end hour", minval = 0, maxval = 23, group = GRP_WIN)
 int    inPmEM = input.int(30, "NY afternoon end minute", minval = 0, maxval = 59, group = GRP_WIN)
-string inPmTz = input.string("America/New_York", "NY afternoon timezone (IANA)", group = GRP_WIN, tooltip = "An end earlier than the start is treated as overnight (ends the next local date). Identical start/end in one timezone is rejected. Overlapping windows: the latest start owns a timestamp; equal starts: NY morning, NY afternoon, Asia -> London.")
+string inPmTz = input.string("America/New_York", "NY afternoon timezone (IANA)", options = ["Asia/Tokyo", "Asia/Hong_Kong", "Asia/Singapore", "Australia/Sydney", "Europe/London", "Europe/Berlin", "America/New_York", "America/Chicago", "UTC"], group = GRP_WIN, tooltip = "An end earlier than the start is treated as overnight (ends the next local date). Identical start/end in one timezone is rejected. Overlapping windows: the latest start owns a timestamp; equal starts: NY morning, NY afternoon, Asia -> London.")
 string inWkd  = input.string("Mon-Fri", "Eligible start days (weekday of the START in its timezone)", options = ["Mon-Fri", "Every day"], group = GRP_WIN)
 bool   inShow30  = input.bool(false, "Show routine 30-second FVG / iFVG boxes", group = GRP_CH)
 int    inMax30Fvg = input.int(3, "Max visible 30s FVGs", minval = 0, maxval = 20, group = GRP_CH)
@@ -56,10 +66,11 @@ int    inHtfBelow = input.int(1, "Max zones BELOW price (per source)", minval = 
 int    inHtfCont  = input.int(1, "Max zones CONTAINING price (per source)", minval = 0, maxval = 10, group = GRP_HTF)
 float  inHtfAtr   = input.float(0.10, "HTF display size filter: ATR multiple (0 = off)", minval = 0.0, step = 0.05, group = GRP_HTF)
 int    inHtfMinT  = input.int(4, "HTF display size filter: min ticks", minval = 1, group = GRP_HTF)
-int    inHtfCap   = input.int(100, "Tracking capacity per source", minval = 10, maxval = 200, group = GRP_HTF)
+int    inHtfCap   = input.int(200, "Tracking capacity per source", minval = 10, maxval = 300, group = GRP_HTF)
 int    inHtfT     = input.int(92, "Untapped fill transparency", minval = 0, maxval = 100, group = GRP_HTF)
 int    inHtfTapT  = input.int(95, "Tapped fill transparency", minval = 0, maxval = 100, group = GRP_HTF)
-int    inBudget   = input.int(1000, "Source-history budget (source candles per source; may be clamped for memory)", minval = 100, maxval = 4000, group = GRP_HTF)
+int    inBudget   = input.int(500, "Source-history budget (source candles per source; may be clamped for memory)", minval = 100, maxval = 4000, group = GRP_HTF)
+float  inRelAtr   = input.float(5.0, "Obstacle relevance radius (x source ATR)", minval = 1.0, step = 0.5, group = GRP_HTF, tooltip = "When a source tracks more live gaps than its capacity, the gap FARTHEST from price is dropped first. Coverage is only flagged UNKNOWN if a dropped gap lay within this many source ATRs of price (so strong trends do not block every entry). Gaps pruned beyond the radius are outside coverage by definition.")
 bool   en1 = input.bool(true,  "Obstacle source 1", inline = "s1", group = GRP_HTF)
 string tf1 = input.timeframe("15",  "", inline = "s1", group = GRP_HTF)
 bool   en2 = input.bool(true,  "Obstacle source 2", inline = "s2", group = GRP_HTF)
@@ -69,6 +80,9 @@ string tf3 = input.timeframe("240", "", inline = "s3", group = GRP_HTF)
 bool   en4 = input.bool(false, "Obstacle source 4", inline = "s4", group = GRP_HTF)
 string tf4 = input.timeframe("1D",  "", inline = "s4", group = GRP_HTF)
 bool   alEntry = input.bool(true, "Alert on each new entry", group = GRP_AL)
+bool   alCtx = input.bool(false, "Alert when a 3m context is created / retested", group = GRP_AL)
+bool   alOutcome = input.bool(false, "Alert when a setup resolves (outcome model)", group = GRP_AL)
+bool   alJson = input.bool(false, "Entry alert text as JSON (webhook-friendly)", group = GRP_AL)
 const int ZS = 8
 const int HDR = 2
 const int ST_BULL_FVG  = 1
@@ -121,6 +135,7 @@ type Ctx
     int    winEnd
     int    retestBar = -1
     int    retestTime
+    int    away = 0
     string lastReason = ""
     box    bx
 type Setup
@@ -130,6 +145,7 @@ type Setup
     float  stop
     float  target
     int    riskT
+    float  rMult = 0.0
     int    entryTime
     int    entryBar
     string winId
@@ -169,7 +185,7 @@ f_push(array<float> z, int ft, int dir, float tp, float bt, int conf, int fidx, 
     z.push(float(fidx))
     z.push(na(atr) ? -1.0 : atr)
     true
-f_engine(int cap, int minTicks, int budget) =>
+f_engine(int cap, int minTicks, int budget, float relAtr) =>
     var array<float> Z = array.new_float(0)
     var array<float> pub = array.from(0.0, 0.0)
     var float maxPruned = -1.0
@@ -239,16 +255,26 @@ f_engine(int cap, int minTicks, int budget) =>
                     if math.abs(Z.get(i * ZS + 1)) == 2.0
                         nFlag += 1
             int over = n3 - nFlag - cap
-            int p = 0
-            while over > 0 and p < int(Z.size() / ZS)
-                if math.abs(Z.get(p * ZS + 1)) == 1.0
-                    maxPruned := math.max(maxPruned, Z.get(p * ZS + 6))
+            while over > 0
+                int pIdx = -1
+                float pd = -1.0
+                int nn = int(Z.size() / ZS)
+                for i = 0 to nn - 1
+                    if math.abs(Z.get(i * ZS + 1)) == 1.0
+                        float pzt = Z.get(i * ZS + 2)
+                        float pzb = Z.get(i * ZS + 3)
+                        float dd = c1 < pzb ? pzb - c1 : (c1 > pzt ? c1 - pzt : 0.0)
+                        if dd > pd
+                            pd := dd
+                            pIdx := i
+                if pIdx >= 0
+                    bool relevant = na(fatr1) or fatr1 <= 0 or pd <= relAtr * fatr1
+                    if relevant
+                        maxPruned := math.max(maxPruned, Z.get(pIdx * ZS + 6))
                     for k = 1 to ZS
-                        Z.remove(p * ZS)
-                    over -= 1
+                        Z.remove(pIdx * ZS)
                     dirty := true
-                else
-                    p += 1
+                over -= 1
             bool truncNow = maxPruned >= 0 and cidx - maxPruned < budget
             if truncNow != lastTrunc
                 lastTrunc := truncNow
@@ -296,21 +322,21 @@ int asOf2 = na
 int asOf3 = na
 int asOf4 = na
 if act0
-    snap0 := request.security(syminfo.tickerid, TF_CTX, f_engine(inHtfCap, inMinTick, effBudget), lookahead = barmerge.lookahead_on)
+    snap0 := request.security(syminfo.tickerid, TF_CTX, f_engine(inHtfCap, inMinTick, effBudget, inRelAtr), lookahead = barmerge.lookahead_on)
     [a0_, c0_] = request.security(syminfo.tickerid, TF_CTX, [time_close[1], close[1]], lookahead = barmerge.lookahead_on)
     asOf0 := a0_
     cls0 := c0_
 if act1
-    snap1 := request.security(syminfo.tickerid, tf1, f_engine(inHtfCap, inMinTick, effBudget), lookahead = barmerge.lookahead_on)
+    snap1 := request.security(syminfo.tickerid, tf1, f_engine(inHtfCap, inMinTick, effBudget, inRelAtr), lookahead = barmerge.lookahead_on)
     asOf1 := request.security(syminfo.tickerid, tf1, time_close[1], lookahead = barmerge.lookahead_on)
 if act2
-    snap2 := request.security(syminfo.tickerid, tf2, f_engine(inHtfCap, inMinTick, effBudget), lookahead = barmerge.lookahead_on)
+    snap2 := request.security(syminfo.tickerid, tf2, f_engine(inHtfCap, inMinTick, effBudget, inRelAtr), lookahead = barmerge.lookahead_on)
     asOf2 := request.security(syminfo.tickerid, tf2, time_close[1], lookahead = barmerge.lookahead_on)
 if act3
-    snap3 := request.security(syminfo.tickerid, tf3, f_engine(inHtfCap, inMinTick, effBudget), lookahead = barmerge.lookahead_on)
+    snap3 := request.security(syminfo.tickerid, tf3, f_engine(inHtfCap, inMinTick, effBudget, inRelAtr), lookahead = barmerge.lookahead_on)
     asOf3 := request.security(syminfo.tickerid, tf3, time_close[1], lookahead = barmerge.lookahead_on)
 if act4
-    snap4 := request.security(syminfo.tickerid, tf4, f_engine(inHtfCap, inMinTick, effBudget), lookahead = barmerge.lookahead_on)
+    snap4 := request.security(syminfo.tickerid, tf4, f_engine(inHtfCap, inMinTick, effBudget, inRelAtr), lookahead = barmerge.lookahead_on)
     asOf4 := request.security(syminfo.tickerid, tf4, time_close[1], lookahead = barmerge.lookahead_on)
 var array<Zone>   chartZ = array.new<Zone>()
 var array<Zone>   hz1 = array.new<Zone>()
@@ -341,6 +367,10 @@ var array<string> wKeys = array.new_string(0)
 var array<int>    wCnt  = array.new_int(0)
 var int  lastResolveAt = 0
 var array<label>  dbgLbls = array.new<label>()
+var array<string> sMsg = array.new_string(3, "")
+var array<int>    stN = array.new_int(4, 0)
+var array<int>    stW = array.new_int(4, 0)
+var array<float>  stR = array.new_float(4, 0.0)
 bool okWinAs = not (inAsTz == inLoTz and inAsH == inLoH and inAsM == inLoM)
 bool okWinAm = not (inAmSH == inAmEH and inAmSM == inAmEM)
 bool okWinPm = not (inPmSH == inPmEH and inPmSM == inPmEM)
@@ -416,6 +446,12 @@ f_upT(float x) =>
     math.ceil(x / syminfo.mintick - 0.000001) * syminfo.mintick
 f_rnd(float x) =>
     math.round(x / syminfo.mintick) * syminfo.mintick
+f_log(string txt) =>
+    if inLog
+        log.info("H Ticks | " + txt)
+    true
+f_winIdx(string nm) =>
+    nm == "Asia -> London" ? 0 : (nm == "New York morning" ? 1 : 2)
 f_stepChart(Zone z, float hi, float lo, float cl, int bi, int t, int tc) =>
     int r = 0
     if bi > z.formBar
@@ -697,7 +733,7 @@ f_drawSetups() =>
                 r := s.entryTime + chartMs
             string txt = ""
             if inLabels
-                txt := (s.dir > 0 ? "Long 1R" : "Short 1R") + (s.state == 1 ? " ✓ target" : (s.state == 2 ? " ✗ stop" : (s.state == 3 ? " ✗ stop (both in one candle)" : "")))
+                txt := (s.dir > 0 ? "Long 1R" : "Short 1R") + (s.state == 1 ? " ✓ " + str.tostring(s.rMult, "#.0") + "R" : (s.state == 2 or s.state == 3 ? " ✗ " + str.tostring(s.rMult, "#.0") + "R" : (s.state == 4 ? " exit " + str.tostring(s.rMult, "#.0") + "R" : "")))
             if na(s.lE)
                 s.lE := line.new(x1 = s.entryTime, y1 = s.entry, x2 = r, y2 = s.entry, xloc = xloc.bar_time, color = color.new(color.gray, 20), style = line.style_solid, width = 1)
                 s.lS := line.new(x1 = s.entryTime, y1 = s.stop, x2 = r, y2 = s.stop, xloc = xloc.bar_time, color = color.new(inBear, 20), style = line.style_dashed, width = 1)
@@ -785,7 +821,7 @@ f_ctxUpdate(array<float> snap, int asOf, float cCl) =>
     if cnt > 0
         for k = 0 to cnt - 1
             int base = HDR + k * ZS
-            if math.abs(snap.get(base + 1)) == 2.0
+            if math.abs(snap.get(base + 1)) == 2.0 and f_tk(snap.get(base + 2)) - f_tk(snap.get(base + 3)) >= inCtxMinTicks
                 float w = snap.get(base + 2) - snap.get(base + 3)
                 int ft = int(snap.get(base))
                 if bestK < 0 or w < bestW or (w == bestW and ft >= bestFt)
@@ -813,7 +849,10 @@ f_ctxUpdate(array<float> snap, int asOf, float cCl) =>
                 cx.winStart := ws
                 cx.winEnd := we
                 cx.retestBar := -1
+                cx.away := 0
                 cx.lastReason := ""
+                sMsg.set(0, "H Ticks 3m context " + (cx.dir > 0 ? "LONG" : "SHORT") + " " + syminfo.ticker + " | zone " + str.tostring(cx.bottom, format.mintick) + "-" + str.tostring(cx.top, format.mintick) + " | " + wn)
+                f_log("ctx created " + (cx.dir > 0 ? "long" : "short") + " " + cx.winId)
     true
 f_ctxSync(array<float> snap, int asOf, float cCl) =>
     if not na(snap) and not na(asOf) and not na(cCl)
@@ -875,6 +914,12 @@ f_tryEntry(Zone t) =>
     if rT >= 1
         int tT = bull ? eT + rT : eT - rT
         target := tT * syminfo.mintick
+        if rT < inMinRiskT
+            ok := false
+            why := f_addWhy(why, "Risk below minimum (" + str.tostring(rT) + " ticks)")
+        if inMaxRiskT > 0 and rT > inMaxRiskT
+            ok := false
+            why := f_addWhy(why, "Risk above maximum (" + str.tostring(rT) + " ticks)")
     else
         ok := false
         why := f_addWhy(why, "Invalid risk")
@@ -890,11 +935,16 @@ f_tryEntry(Zone t) =>
             ok := false
             why := f_addWhy(why, "Blocked by " + obsName)
     if ok
+        float riskPx = rT * syminfo.mintick
         Setup s = Setup.new(id = cx.winId + "|" + str.tostring(time_close), dir = bull ? 1 : -1, entry = entry, stop = stop, target = target, riskT = rT, entryTime = time_close, entryBar = bar_index, winId = cx.winId, winName = cx.winName, ctxZid = cx.zid, srcs = srcTxt)
         setups.push(s)
         f_winInc(cx.winId)
         f_evInc(bull ? 9 : 10, "")
-        qMsg.set(bull ? 0 : 1, "H Ticks " + (bull ? "LONG" : "SHORT") + " " + syminfo.ticker + " " + timeframe.period + " | Entry " + str.tostring(entry, format.mintick) + " | Stop " + str.tostring(stop, format.mintick) + " | Target 1R " + str.tostring(target, format.mintick) + " | Session " + cx.winName + " | 3m context " + str.tostring(cx.bottom, format.mintick) + "-" + str.tostring(cx.top, format.mintick) + " | HTF obstacles checked: " + srcTxt)
+        string riskTxt = str.tostring(rT) + " ticks / " + str.tostring(riskPx * syminfo.pointvalue, "#.##") + " " + syminfo.currency + " per contract"
+        string human = "H Ticks " + (bull ? "LONG" : "SHORT") + " " + syminfo.ticker + " " + timeframe.period + " | Entry " + str.tostring(entry, format.mintick) + " | Stop " + str.tostring(stop, format.mintick) + " | Target 1R " + str.tostring(target, format.mintick) + " | Risk " + riskTxt + " | Session " + cx.winName + " | 3m context " + str.tostring(cx.bottom, format.mintick) + "-" + str.tostring(cx.top, format.mintick) + " | HTF obstacles checked: " + srcTxt
+        string json = "{\"indicator\":\"H Ticks 3m30s\",\"side\":\"" + (bull ? "long" : "short") + "\",\"ticker\":\"" + syminfo.ticker + "\",\"entry\":" + str.tostring(entry, format.mintick) + ",\"stop\":" + str.tostring(stop, format.mintick) + ",\"target\":" + str.tostring(target, format.mintick) + ",\"risk_ticks\":" + str.tostring(rT) + ",\"session\":\"" + cx.winName + "\"}"
+        qMsg.set(bull ? 0 : 1, alJson ? json : human)
+        f_log("ENTRY " + (bull ? "long" : "short") + " E=" + str.tostring(entry) + " S=" + str.tostring(stop) + " T=" + str.tostring(target) + " rT=" + str.tostring(rT))
         f_ctxClear()
         while setups.size() > 30
             Setup old = setups.shift()
@@ -906,6 +956,7 @@ f_tryEntry(Zone t) =>
     else
         cx.lastReason := why
         f_dbg(why)
+        f_log("trigger rejected: " + why)
     ok
 f_trackSetups() =>
     int rt = 0
@@ -916,10 +967,35 @@ f_trackSetups() =>
             if s.state == 0 and bar_index > s.entryBar
                 bool stopHit = s.dir > 0 ? f_tk(low) <= f_tk(s.stop) : f_tk(high) >= f_tk(s.stop)
                 bool tgtHit = s.dir > 0 ? f_tk(high) >= f_tk(s.target) : f_tk(low) <= f_tk(s.target)
-                if stopHit or tgtHit
-                    s.state := stopHit and tgtHit ? 3 : (stopHit ? 2 : 1)
+                bool timeOut = inTimeStopMin > 0 and time_close - s.entryTime >= inTimeStopMin * 60000
+                if stopHit or tgtHit or timeOut
+                    float riskPx = math.abs(s.entry - s.stop)
+                    float slip = inSlipTicks * syminfo.mintick
+                    float fillE = s.entry + s.dir * slip
+                    float exitP = s.target
+                    int st = 1
+                    if stopHit
+                        float base = s.dir > 0 ? math.min(s.stop, open) : math.max(s.stop, open)
+                        exitP := base - s.dir * slip
+                        st := tgtHit ? 3 : 2
+                    else if not tgtHit
+                        exitP := close
+                        st := 4
+                    float rm = riskPx > 0 ? (s.dir * (exitP - fillE) - inCostTicks * syminfo.mintick) / riskPx : 0.0
+                    s.state := st
+                    s.rMult := rm
                     s.resolveTime := time_close
                     rt := time_close
+                    int wi = f_winIdx(s.winName)
+                    stN.set(wi, stN.get(wi) + 1)
+                    stN.set(3, stN.get(3) + 1)
+                    if rm > 0
+                        stW.set(wi, stW.get(wi) + 1)
+                        stW.set(3, stW.get(3) + 1)
+                    stR.set(wi, stR.get(wi) + rm)
+                    stR.set(3, stR.get(3) + rm)
+                    sMsg.set(2, "H Ticks setup resolved " + (s.dir > 0 ? "LONG" : "SHORT") + " " + syminfo.ticker + " | " + str.tostring(rm, "#.00") + "R (model, after assumed costs) | " + (st == 1 ? "target" : (st == 4 ? "time exit" : "stop")))
+                    f_log("resolved " + s.id + " state=" + str.tostring(st) + " R=" + str.tostring(rm))
     rt
 if supported and barstate.isfirst
     if en1 and sec1 > chartSecs and not al1
@@ -943,6 +1019,9 @@ if supported and barstate.isconfirmed
     f_resetEv()
     qMsg.set(0, "")
     qMsg.set(1, "")
+    sMsg.set(0, "")
+    sMsg.set(1, "")
+    sMsg.set(2, "")
     pend.clear()
     lastConfClose := time_close
     refPrice := close
@@ -993,13 +1072,23 @@ if supported and barstate.isconfirmed
         Zone trg = f_pickTrigger()
         if not na(trg)
             f_tryEntry(trg)
-    if cx.state == 1 and time >= cx.confAsOf and f_overlap(high, low, cx.bottom, cx.top)
-        cx.state := 2
-        cx.retestBar := bar_index
-        cx.retestTime := time
+    if cx.state == 1 and time >= cx.confAsOf
+        bool touch = f_overlap(high, low, cx.bottom, cx.top)
+        if touch and cx.away >= inDeparture
+            cx.state := 2
+            cx.retestBar := bar_index
+            cx.retestTime := time
+            sMsg.set(1, "H Ticks retest done: waiting for 30s trigger (" + (cx.dir > 0 ? "LONG" : "SHORT") + ") " + syminfo.ticker)
+            f_log("retest bar " + str.tostring(bar_index))
+        else
+            int aw = cx.dir > 0 ? f_tk(high) - f_tk(cx.top) : f_tk(cx.bottom) - f_tk(low)
+            if aw > cx.away
+                cx.away := aw
     if drawNow
         f_drawAll()
 var table warnTbl = table.new(position.top_right, 1, 1, border_width = 0)
+var table stTbl = table.new(position.bottom_right, 5, 5, bgcolor = color.new(color.black, 85), border_width = 0)
+var table staTbl = table.new(position.top_left, 1, 2, bgcolor = color.new(color.black, 85), border_width = 0)
 f_slotWarn(bool act, int idx, string nm) =>
     string r = ""
     if act and not srcSeen.get(idx)
@@ -1007,6 +1096,8 @@ f_slotWarn(bool act, int idx, string nm) =>
     else if act and srcSeen.get(idx) and not srcInit.get(idx) and not srcBad.get(idx)
         r := nm + ": chart history too short to establish state (omitted, not guessed)"
     r
+f_pct(int w, int n) =>
+    n > 0 ? str.tostring(100.0 * w / n, "#") + "%" : "-"
 if barstate.islast
     string w = supported ? array.join(warnArr, "\n") : "Switch to a standard 30-second chart"
     if supported
@@ -1024,11 +1115,38 @@ if barstate.islast
         table.cell(warnTbl, 0, 0, "", bgcolor = na)
     else
         table.cell(warnTbl, 0, 0, w, text_color = color.orange, text_size = size.small, bgcolor = color.new(color.black, 80), text_halign = text.align_left)
+    if supported and inStatus
+        string a1 = cx.state == 0 ? "Context: none" : "Context: " + (cx.dir > 0 ? "LONG" : "SHORT") + (cx.state == 1 ? " - awaiting retest" : " - awaiting 30s trigger") + " | " + cx.winName
+        string a2 = (cx.state == 0 ? "" : "Entries this window: " + str.tostring(f_winCount(cx.winId)) + "/" + str.tostring(inMaxEntries) + " | ") + (f_openSetup() ? "Setup OPEN" : "No open setup") + (cx.lastReason == "" ? "" : " | last: " + cx.lastReason)
+        table.cell(staTbl, 0, 0, a1, text_color = color.white, text_size = size.small, text_halign = text.align_left)
+        table.cell(staTbl, 0, 1, a2, text_color = color.silver, text_size = size.small, text_halign = text.align_left)
+    if supported and inStats
+        table.cell(stTbl, 0, 0, "Window (model)", text_color = color.white, text_size = size.small)
+        table.cell(stTbl, 1, 0, "N", text_color = color.white, text_size = size.small)
+        table.cell(stTbl, 2, 0, "Win%", text_color = color.white, text_size = size.small)
+        table.cell(stTbl, 3, 0, "Avg R", text_color = color.white, text_size = size.small)
+        table.cell(stTbl, 4, 0, "Net R", text_color = color.white, text_size = size.small)
+        for r = 0 to 3
+            string nm = r == 0 ? "Asia->London" : (r == 1 ? "NY morning" : (r == 2 ? "NY afternoon" : "Total"))
+            int n = stN.get(r)
+            table.cell(stTbl, 0, r + 1, nm, text_color = color.silver, text_size = size.small, text_halign = text.align_left)
+            table.cell(stTbl, 1, r + 1, str.tostring(n), text_color = color.silver, text_size = size.small)
+            table.cell(stTbl, 2, r + 1, f_pct(stW.get(r), n), text_color = color.silver, text_size = size.small)
+            table.cell(stTbl, 3, r + 1, n > 0 ? str.tostring(stR.get(r) / n, "#.00") : "-", text_color = color.silver, text_size = size.small)
+            table.cell(stTbl, 4, r + 1, str.tostring(stR.get(r), "#.0"), text_color = color.silver, text_size = size.small)
 bool evNow = supported and barstate.isrealtime and barstate.isconfirmed
-if evNow and alEntry
-    if ev.get(9) > 0
-        alert(qMsg.get(0), alert.freq_once_per_bar_close)
-    if ev.get(10) > 0
-        alert(qMsg.get(1), alert.freq_once_per_bar_close)
+if evNow
+    if alEntry
+        if ev.get(9) > 0
+            alert(qMsg.get(0), alert.freq_once_per_bar_close)
+        if ev.get(10) > 0
+            alert(qMsg.get(1), alert.freq_once_per_bar_close)
+    if alCtx
+        if sMsg.get(0) != ""
+            alert(sMsg.get(0), alert.freq_once_per_bar_close)
+        if sMsg.get(1) != ""
+            alert(sMsg.get(1), alert.freq_once_per_bar_close)
+    if alOutcome and sMsg.get(2) != ""
+        alert(sMsg.get(2), alert.freq_once_per_bar_close)
 alertcondition(evNow and ev.get(9) > 0, "Long entry (3m ctx -> 30s trigger, 1R)", "H Ticks: LONG entry on {{ticker}} {{interval}}")
 alertcondition(evNow and ev.get(10) > 0, "Short entry (3m ctx -> 30s trigger, 1R)", "H Ticks: SHORT entry on {{ticker}} {{interval}}")

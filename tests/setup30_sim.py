@@ -74,7 +74,7 @@ class M:
         w = s.owner(ct)
         if not w or w[0] != cx['win']: why.append('window')
         if s.cnt.get(cx['win'], 0) >= s.maxE: why.append('limit')
-        if s.open_setup(): why.append('position already open')
+        if s.one and s.open_setup(): why.append('open setup')
         E = round(c / TICK) * TICK; body = min(o, c) if bull else max(o, c)
         stop = (math.floor((body - s.buf * TICK) / TICK + 1e-6) if bull else math.ceil((body + s.buf * TICK) / TICK - 1e-6)) * TICK
         eT, sT = tk(E), tk(stop); rT = eT - sT if bull else sT - eT
@@ -285,12 +285,39 @@ mr1 = M(owner, min_risk=8); warm(mr1, T0 - 5 * BAR); t = long_setup(mr1); mr1.ba
 chk('Min risk (optional): a 3-tick body-stop risk is rejected when the minimum is 8 ticks (context stays pending)', not mr1.entries and mr1.ctx is not None)
 mr2 = M(owner, max_risk=2); warm(mr2, T0 - 5 * BAR); t = long_setup(mr2); mr2.bar(t, 102.75, 103.5, 102.5, 103.25)
 chk('Max risk (optional): a 3-tick risk is rejected when the maximum is 2 ticks', not mr2.entries)
-mo = M(owner, one_active=False); warm(mo, T0 - 5 * BAR); t = long_setup(mo); mo.bar(t, 102.75, 103.5, 102.5, 103.25)
-mo.ctx = dict(state=2, dir=1, top=102.0, bot=101.0, conf=T0, proc=T0, win='W1', winEnd=10_000_000, retestBar=0, ft=1, away=0)
-tq = t + BAR
-mo.bar(tq, 103.8, 103.9, 103.75, 103.8); mo.bar(tq + BAR, 103.7, 103.8, 103.5, 103.6); mo.bar(tq + 2 * BAR, 103.5, 103.5, 103.25, 103.4)   # gap [103.5,103.75] inside the open trade's stop/target range
-mo.bar(tq + 3 * BAR, 103.5, 103.85, 103.4, 103.8)                                                              # fresh inversion while the first trade is still open
-chk('Strategy guard: even with the one-active input OFF, a second entry is rejected while a position is open (no reversal/pyramiding)', len(mo.entries) == 1)
+
+# ---- cost-aware outcome model (mirror of f_trackSetups) ----
+def outcome(d, E, S, T, o, h, l, c, slip=1, cost=0, time_out=False):
+    risk = abs(E - S); fill = E + d * slip * TICK
+    stop_hit = tk(l) <= tk(S) if d > 0 else tk(h) >= tk(S)
+    tgt_hit = tk(h) >= tk(T) if d > 0 else tk(l) <= tk(T)
+    if not (stop_hit or tgt_hit or time_out): return None
+    exitp, st = T, 1
+    if stop_hit:
+        base = min(S, o) if d > 0 else max(S, o); exitp = base - d * slip * TICK; st = 3 if tgt_hit else 2
+    elif not tgt_hit: exitp, st = c, 4
+    return st, (d * (exitp - fill) - cost * TICK) / risk
+def near(a, b): return abs(a - b) < 1e-9
+r = outcome(1, 103.25, 102.5, 104.0, 103.5, 104.25, 103.4, 104.0, slip=0)
+chk('Outcome model: no slippage/cost -> a target is exactly +1R', r[0] == 1 and near(r[1], 1.0))
+r = outcome(1, 103.25, 102.5, 104.0, 103.0, 103.2, 102.4, 102.6, slip=0)
+chk('Outcome model: no slippage/cost -> a stop is exactly -1R', r[0] == 2 and near(r[1], -1.0))
+r = outcome(1, 103.25, 102.5, 104.0, 103.5, 104.25, 103.4, 104.0, slip=1)
+chk('Outcome model: 1 tick assumed slippage turns the target into +0.667R (risk 0.75)', near(r[1], (104.0 - 103.5) / 0.75))
+r = outcome(1, 103.25, 102.5, 104.0, 103.0, 103.2, 102.4, 102.6, slip=1)
+chk('Outcome model: with slippage the stop costs -1.667R (stop fill one tick worse, entry one tick worse)', near(r[1], (102.25 - 103.5) / 0.75))
+r = outcome(1, 103.25, 102.5, 104.0, 102.0, 102.25, 101.5, 102.0, slip=1)
+chk('Outcome model: a stop that GAPS through fills at the open (worse than the stop), not at the stop price', near(r[1], (101.75 - 103.5) / 0.75))
+r = outcome(1, 103.25, 102.5, 104.0, 103.25, 104.5, 102.25, 103.25, slip=0)
+chk('Outcome model: one candle touching both stop and target resolves stop-first (state 3)', r[0] == 3 and near(r[1], -1.0))
+r = outcome(1, 103.25, 102.5, 104.0, 103.5, 104.25, 103.4, 104.0, slip=0, cost=3)
+chk('Outcome model: assumed round-turn cost (3 ticks = 0.75) is deducted from every outcome', near(r[1], 1.0 - 0.75 / 0.75))
+r = outcome(-1, 100.5, 100.75, 100.25, 100.75, 100.75, 100.5, 100.5, slip=0)
+chk('Outcome model (short mirror): stop above entry hit -> -1R', r[0] == 2 and near(r[1], -1.0))
+r = outcome(-1, 100.5, 100.75, 100.25, 100.5, 100.5, 100.25, 100.25, slip=0)
+chk('Outcome model (short mirror): target below entry hit -> +1R', r[0] == 1 and near(r[1], 1.0))
+r = outcome(1, 103.25, 102.5, 104.0, 103.3, 103.6, 103.0, 103.5, slip=0, time_out=True)
+chk('Outcome model: optional time exit resolves at the close (R measured at that close)', r[0] == 4 and near(r[1], (103.5 - 103.25) / 0.75))
 print(f"{'test':122} {'result':6} basis")
 for n, r, k in R: print(f"{n:122} {r:6} {k}")
 print(sum(r == 'PASS' for _, r, _ in R), '/', len(R), 'passed')
