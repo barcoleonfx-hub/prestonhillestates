@@ -1,5 +1,40 @@
 //@version=6
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// H Ticks — FVG / iFVG : 15m bias -> ANY ONE context timeframe (1m / 2m / 3m / 5m) inverts -> retest of THAT gap ->
+//                         decisive 30s inversion linked to THAT context -> entry at close -> structural stop -> fixed 1R
+//
+// REQUIRES A STANDARD 30-SECOND CHART. Anything else shows "Switch to a standard 30-second chart" and generates nothing.
+// CONTEXT TIMEFRAMES: Auto = 1m, 2m, 3m and 5m each keep their OWN independent state (inversion, retest, leg extreme).
+//   ANY ONE of them can supply a valid setup; no agreement between them is required; no timeframe waits for a larger one.
+//   A newer context replaces only the pending context of the SAME timeframe. Retests are never matched across timeframes.
+// SEQUENCE per context (all mechanical, all on confirmed candles; no score, no win-rate claim):
+//   1. 15m BIAS: confirmed 15m pivots (2 left / 2 right, strict), available only after the second right-side candle completes;
+//      a confirmed 15m CLOSE strictly beyond the latest unbroken swing (available before the breaking candle began) sets it.
+//      UNKNOWN until the first break. Required at context creation and at entry.
+//   2. CONTEXT: a source FVG inverts on a confirmed source CLOSE strictly beyond its far boundary (wick / equality is not
+//      enough), in the bias direction, inside an enabled entry window. Cancelled by a later close of its OWN timeframe back
+//      through the zone, by a 15m bias reversal, or at the end of its entry window.
+//   3. RETEST: a later 30s candle (opening at/after the inversion confirmation) intersects that context gap. Zone is kept.
+//   4. TRIGGER: a fresh 30s FVG (formation candle opens at/after the confirmation, overlaps the context gap) inverts in the
+//      setup direction on a candle strictly after the retest candle, and that inversion candle is DECISIVE (Standard/Strong).
+//   5. STOP = beyond the retest-leg extreme of THAT context (first retest candle .. entry candle) +/- max(1 tick, 0.10 x
+//      previous 30s ATR); ENTRY = the inversion candle's confirmed close; TARGET = exactly the same tick distance (1R).
+//   6. CLEAR PATH: no opposing 15m/1H/4H gap on [entry, target] and the target ends >= 1 tick before the nearest unconsumed
+//      3m swing level. Missing coverage is UNKNOWN, never clear.
+//   SELECTION: every pending context is evaluated independently through ALL gates on every trigger bar. Failing candidates
+//   never block passing ones. If several pass, 5m > 3m > 2m > 1m decides (a tie-break only). Exactly one entry is created;
+//   all pending contexts are then discarded. Gates: same window instance, < 3 entries per instance, one unresolved setup.
+// Timing: all state changes and drawings happen on confirmed 30s bars. Alerts only on confirmed realtime bars.
+// DIAGNOSTICS (Debug ON only; counting and logging, no trading rule depends on them): per NY date x session (Asia / NY morning /
+//   NY afternoon) counts of eligible bars, context inversions by 1m/2m/3m/5m, admitted contexts, retests, 30s candidates and the
+//   FIRST failed gate of every rejected candidate with measured value vs threshold (Pine Logs + label tooltips), unresolved-setup
+//   lock intervals, and an accounting check that must read OK. A date whose enabled window got no bar is NOT EVALUATED.
+// Verification: see H_Ticks_FVG_iFVG_NOTES.md (code review + Python model only; NOT compiled in TradingView, NOT Bar-Replay tested).
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// INDICATOR (not a strategy). Outcomes: OPEN / TARGET_HIT / STOP_HIT / AMBIGUOUS on 30s candles strictly AFTER the entry
+// candle (opening price first, then the range). No slippage, costs or time exit; an estimate, not broker results.
 indicator("H Ticks — FVG / iFVG", shorttitle = "H Ticks", overlay = true, max_boxes_count = 500, max_lines_count = 500, max_labels_count = 500, max_bars_back = 500)
+
 const string GRP_CTX = "Context timeframe"
 const string GRP_WIN = "Entry windows (Asia 09:00 Tokyo -> 08:00 London, NY 09:45-11:30, NY 14:30-15:30; DST-aware; Mon-Fri)"
 const string GRP_Q   = "Setup quality"
@@ -26,6 +61,8 @@ string inDbgLbl = input.string("NY windows only", "Debug: rejected-candidate lab
 bool   alEntry = input.bool(true, "Alert on each new entry", group = GRP_AL)
 bool   alTarget = input.bool(true, "Alert when a setup hits its target", group = GRP_AL)
 bool   alStop = input.bool(true, "Alert when a setup hits its stop", group = GRP_AL)
+
+// ── fixed, documented rules (not user settings) ──
 const string TZ_NY = "America/New_York"
 const int REP_MAX = 20
 int    REP_DATES = inRepDays
@@ -39,7 +76,7 @@ const int NCTX = 4
 const int FN = 8
 const int FB = 16
 const int NSS = 4
-const int DGN = 56
+const int DGN = 101
 bool   alAmb = false
 bool   alCtx = false
 bool   alJson = false
@@ -117,6 +154,7 @@ color  cCtxFill = color.new(color.blue, 82)
 color  cCtxLine = color.blue
 color  cTrgFill = color.new(color.orange, 75)
 color  cTrgLine = color.rgb(230, 81, 0)
+
 const int ZS = 8
 const int HDR = 3
 const int ST_BULL_FVG  = 1
@@ -127,6 +165,7 @@ const int ST_UNT_BULL  = 11
 const int ST_TAP_BULL  = 12
 const int ST_UNT_BEAR  = 13
 const int ST_TAP_BEAR  = 14
+
 type Zone
     string id
     int    src = -1
@@ -154,6 +193,8 @@ type Zone
     float  dist = 0.0
     bool   vis = false
     box    bx
+
+// The single pending 3-minute context. state: 0 NONE, 1 PENDING_RETEST, 2 WAITING_FOR_30S_TRIGGER.
 type Ctx
     int    k = 0
     string tfTxt = ""
@@ -179,6 +220,7 @@ type Ctx
     float  retestPx = na
     string lastReason = ""
     box    bx
+
 type Setup
     string id
     int    dir
@@ -234,6 +276,10 @@ type Setup
     label  lbTg
     label  lbCm
     label  lbTm
+
+// One pending context evaluated against ONE trigger bar. stage = gates passed in order (impulse, stop/risk, clear path,
+// admission); fail = code of the first failed gate (7 impulse, 8 stop/risk, 9 coverage unknown, 10 obstacle,
+// 11 window instance, 12 session limit, 13 unresolved setup, 14 bias).
 type Cand
     int    k
     Zone   trg
@@ -254,6 +300,8 @@ type Cand
     int    sub = 0
     int    impFirst = -1
     int    impMask = 0
+
+// A confirmed 3m swing level (strength 2/2) tracked on the chart. consumed = a later candle reached it.
 type Lvl
     float  price
     int    dir
@@ -261,10 +309,14 @@ type Lvl
     int    confT
     bool   consumed = false
     bool   seen = false
+
 f_tk(float x) =>
     math.round(x / syminfo.mintick)
+
+// Closed-interval overlap of a candle range with the ORIGINAL zone boundaries.
 f_overlap(float hi, float lo, float zb, float zt) =>
     f_tk(hi) >= f_tk(zb) and f_tk(lo) <= f_tk(zt)
+
 f_tfText(int s) =>
     string r = ""
     if s >= 604800 and s % 604800 == 0
@@ -278,6 +330,9 @@ f_tfText(int s) =>
     else
         r := str.tostring(s) + "s"
     r
+
+// Engine zone record (8 floats): formTime, code (+-1 live, +-2 inverted-this-bar; sign = direction),
+// top, bottom, confTime, tapTime (0 = untapped), formation candle index, formation ATR (-1 = n/a).
 f_push(array<float> z, int ft, int dir, float tp, float bt, int conf, int fidx, float atr) =>
     z.push(float(ft))
     z.push(float(dir))
@@ -286,8 +341,20 @@ f_push(array<float> z, int ft, int dir, float tp, float bt, int conf, int fidx, 
     z.push(float(conf))
     z.push(0.0)
     z.push(float(fidx))
-    z.push(na(atr) ? -1.0 : atr)
+    z.push(na(atr) ? -1.0 : atr)   // frozen formation ATR of this source candle, -1 = unavailable
     true
+
+// ═══════════════════════ SOURCE-CONTEXT LIFECYCLE ENGINE (runs inside request.security) ════════
+// Returns the published snapshot (array<float>): header [truncated flag, readyTime (0 = still warming up)], then 8 floats
+// per zone, oldest first. The same array object is returned on every bar on which nothing changed; a published array is
+// never mutated. While warming up only the header is published (no zones are ever used from a partial history).
+// History policy (NO wall-clock cutoff, identical in normal loading and Bar Replay):
+//   * every source candle the platform supplies is processed, oldest first; nothing depends on the computer's current time;
+//   * a live zone expires once (candle open - formation time) >= `horizonMs` (silent, documented horizon);
+//   * READY = the processed history spans a full horizon after the FIRST candle the platform supplied, so no zone inside the
+//     horizon can be unknown. The header also reports that first-candle time so a late start can be explained;
+//   * capacity: the OLDEST live zone is dropped and truncation stays flagged (coverage UNKNOWN) until that zone would have
+//     expired anyway. No relevance shortcut: a dropped gap is never assumed irrelevant.
 f_engine(int cap, int minTicks, int horizonMs) =>
     var array<float> Z = array.new_float(0)
     var array<float> pub = array.from(0.0, 0.0, 0.0)
@@ -297,8 +364,8 @@ f_engine(int cap, int minTicks, int horizonMs) =>
     var float lastProc = 0.0
     var int firstProcT = 0
     array<float> out = na
-    float atrS = ta.atr(14)
-    float fatr1 = atrS[1]
+    float atrS = ta.atr(14)      // source-timeframe ATR, evaluated every bar
+    float fatr1 = atrS[1]        // ATR on the SAME completed candle [1] as the formation OHLC
     float h1 = high[1]
     float l1 = low[1]
     float c1 = close[1]
@@ -317,6 +384,7 @@ f_engine(int cap, int minTicks, int horizonMs) =>
             if firstProcT == 0
                 firstProcT := t1
             bool dirty = false
+            // 1) drop zones flagged inverted on the previous source bar
             int n0 = int(Z.size() / ZS)
             if n0 > 0
                 for i = n0 - 1 to 0
@@ -324,6 +392,8 @@ f_engine(int cap, int minTicks, int horizonMs) =>
                         for k = 1 to ZS
                             Z.remove(i * ZS)
                         dirty := true
+            // 2) lifecycle of existing zones on the completed candle. Only candles that OPEN at/after the
+            //    formation confirmation are eligible (the formation candle never touches/inverts itself).
             int n1 = int(Z.size() / ZS)
             if n1 > 0
                 for i = 0 to n1 - 1
@@ -334,11 +404,12 @@ f_engine(int cap, int minTicks, int horizonMs) =>
                         float zb = Z.get(b + 3)
                         bool inv = cd > 0 ? f_tk(c1) < f_tk(zb) : f_tk(c1) > f_tk(zt)
                         if inv
-                            Z.set(b + 1, cd * 2.0)
+                            Z.set(b + 1, cd * 2.0)   // source CLOSE strictly beyond the opposite boundary
                             dirty := true
                         else if Z.get(b + 5) == 0.0 and f_overlap(h1, l1, zb, zt)
-                            Z.set(b + 5, float(tc1))
+                            Z.set(b + 5, float(tc1)) // first touch (monotonic)
                             dirty := true
+            // 3) formation: candle 3 = [1], candle 1 = [3]; candle 2 only has to exist
             if not na(h2) and not na(l2) and not na(h3) and not na(l3)
                 int bullGap = f_tk(l1) - f_tk(h3)
                 int bearGap = f_tk(l3) - f_tk(h1)
@@ -348,6 +419,7 @@ f_engine(int cap, int minTicks, int horizonMs) =>
                 else if bearGap >= minTicks
                     f_push(Z, t1, -1, l3, h1, tc1, cidx, fatr1)
                     dirty := true
+            // 4) horizon expiry (silent, never an inversion). Flagged zones are left so the inversion is published.
             int n2 = int(Z.size() / ZS)
             if n2 > 0
                 for i = n2 - 1 to 0
@@ -355,6 +427,7 @@ f_engine(int cap, int minTicks, int horizonMs) =>
                         for k = 1 to ZS
                             Z.remove(i * ZS)
                         dirty := true
+            // 5) capacity: drop the OLDEST unflagged live zone (Z is chronological); truncation is flagged, never ignored
             int n3 = int(Z.size() / ZS)
             int nFlag = 0
             if n3 > 0
@@ -374,14 +447,17 @@ f_engine(int cap, int minTicks, int horizonMs) =>
                         Z.remove(pIdx * ZS)
                     dirty := true
                 over -= 1
+            // 6) truncation flag: a capacity-dropped zone could still be live inside the horizon => coverage unknown
             bool truncNow = maxPruned >= 0 and t1 - maxPruned < horizonMs
             if truncNow != lastTrunc
                 lastTrunc := truncNow
                 dirty := true
+            // 7) READY once the processed history spans a full horizon; flip is published
             bool nowReady = t1 - firstProcT >= horizonMs
             if nowReady != lastReady
                 lastReady := nowReady
                 dirty := true
+            // 8) publish a NEW array only if something changed (header only while warming up)
             if dirty
                 array<float> tmp = array.from(truncNow ? 1.0 : 0.0, nowReady ? float(tc1) : 0.0, float(firstProcT))
                 if nowReady
@@ -389,6 +465,13 @@ f_engine(int cap, int minTicks, int horizonMs) =>
                 pub := tmp
         out := pub
     out
+
+// 3m swing-level engine (inside request.security on the 3m series). Strict pivots 2 left / 2 right; a pivot becomes
+// available only when its second right-side candle completes. A level is consumed by the first LATER completed candle that
+// reaches it (high >= level / low <= level); the pivot candle and the confirming candles never consume it (strict pivot).
+// Published like the zone engine: header [truncated, readyTime], then 4 floats per level (price, +1 high / -1 low,
+// pivot candle open time, confirmation time). Horizon expiry and capacity are time/size bounded; capacity drops the OLDEST
+// level and flags coverage UNKNOWN until it would have expired.
 f_lvlEngine(int cap, int horizonMs) =>
     var array<float> L = array.new_float(0)
     var array<float> pub = array.from(0.0, 0.0, 0.0)
@@ -468,6 +551,11 @@ f_lvlEngine(int cap, int horizonMs) =>
                 pub := tmp
         out := pub
     out
+
+// 15m directional bias engine (inside request.security on the 15m series; completed candle [1] only).
+// 1) the break test uses only pivots that were confirmed on EARLIER candles (available before the breaking candle began);
+// 2) only afterwards is the pivot confirmed by this candle stored (never backdated). A level breaks at most once.
+// Returns [bias +1/-1/0, broken level, pivot candle open time, break-confirmation time].
 f_bias15() =>
     var float swH = na
     var float swHT = na
@@ -524,10 +612,13 @@ f_bias15() =>
                     swLA := float(tc1)
                     swLB := false
     [bias, bLvl, bLvlT, bAv]
+
+// ═════════════════════════════ CHART SUPPORT, SOURCES, REQUESTS ═════════════════════════════
 bool stdChart  = chart.is_standard and not timeframe.isticks
 bool supported = stdChart and timeframe.isseconds and timeframe.multiplier == 30
 int  chartSecs = supported ? timeframe.in_seconds() : 0
 int  chartMs   = chartSecs * 1000
+
 int  sec1 = timeframe.in_seconds(tf1)
 int  sec2 = timeframe.in_seconds(tf2)
 int  sec3 = timeframe.in_seconds(tf3)
@@ -544,6 +635,7 @@ bool act1 = ok1 and al1
 bool act2 = ok2 and al2
 bool act3 = ok3 and al3
 bool act4 = ok4 and al4
+
 int  secL = 180
 bool actL = supported and chartSecs > 0 and secL % chartSecs == 0
 bool sel1 = inCtxSel == "Auto (1m, 2m, 3m, 5m)" or inCtxSel == "1m only"
@@ -564,6 +656,7 @@ int  hrz1 = inHorizon * sec1 * 1000
 int  hrz2 = inHorizon * sec2 * 1000
 int  hrz3 = inHorizon * sec3 * 1000
 int  hrz4 = inHorizon * sec4 * 1000
+
 array<float> snapC0 = na
 array<float> snapC1 = na
 array<float> snapC2 = na
@@ -619,6 +712,15 @@ if supported
     blR := bl_
     btR := bt_
     baR := ba_
+int   hmNy = hour(time, TZ_NY) * 60 + minute(time, TZ_NY)
+bool  vwAnchor = hmNy >= 570 and hmNy[1] < 570
+float vwapNy = ta.vwap(hlc3, vwAnchor)
+float em9 = na
+float em21 = na
+if supported
+    [e9_, e21_] = request.security(syminfo.tickerid, "1", [ta.ema(close, 9)[1], ta.ema(close, 21)[1]], lookahead = barmerge.lookahead_on)
+    em9 := e9_
+    em21 := e21_
 if act1
     snap1 := request.security(syminfo.tickerid, tf1, f_engine(inHtfCap, inMinTick, hrz1), lookahead = barmerge.lookahead_on)
     asOf1 := request.security(syminfo.tickerid, tf1, time_close[1], lookahead = barmerge.lookahead_on)
@@ -646,9 +748,9 @@ var array<bool>   srcInit  = array.new_bool(10, false)
 var array<bool>   srcTrunc = array.new_bool(10, false)
 var array<bool>   srcReady = array.new_bool(10, false)
 var array<string> warnArr  = array.new_string(0)
-var array<int>    ev   = array.new_int(12, 0)
+var array<int>    ev   = array.new_int(12, 0)         // 7 target hit, 8 stop hit, 9 long entry, 10 short entry, 11 ambiguous
 var array<string> evTf = array.new_string(12, "")
-var array<string> aMsgs = array.new_string(0)
+var array<string> aMsgs = array.new_string(0)         // alert lines of the current confirmed bar (sent as ONE alert())
 var int   firstTime = time
 var int   lastConfClose = na
 var float refPrice = na
@@ -657,21 +759,54 @@ int   prevCloseT = time_close[1]
 float h2c = high[2]
 float l2c = low[2]
 var array<Ctx>    cxs = array.from(Ctx.new(k = 0, tfTxt = "1m", tfSecs = 60), Ctx.new(k = 1, tfTxt = "2m", tfSecs = 120), Ctx.new(k = 2, tfTxt = "3m", tfSecs = 180), Ctx.new(k = 3, tfTxt = "5m", tfSecs = 300))
-var array<int>    fnl = array.new_int(NCTX * FN, 0)
+var array<int>    fnl = array.new_int(NCTX * FN, 0)    // per-timeframe funnel: inversions, admitted, retests, eligible 30s inversions, impulse, stop/risk, clear path, entries
 var array<int>    fnb = array.new_int(NCTX * FB, 0)
+// Diagnostic matrix: for each NY reporting date (same order as dKey) x session (0 Asia, 1 NY morning, 2 NY afternoon, 3 outside any
+// window) x DGN columns. Layout: 0 eligible bars, 1 bars fully covered, 2 bars with 15m bias UNKNOWN, 3-6 context inversions 1m/2m/3m/5m,
+// 7 contexts admitted, 8 retested, 9 candidates, 10 formed-after-context, 11 overlap, 12 impulse, 13 stop/risk, 14 clear path,
+// 15 admission, 16 entries, 17-29 first failed gate (17 formed-before, 18 no overlap, 19 impulse, 20 stop/risk, 21 HTF coverage,
+// 22 3m structure not ready, 23 HTF gap, 24 3m swing, 25 window instance, 26 session limit, 27 unresolved setup, 28 bias, 29 outranked),
+// 30 inversion before retest, 31 inversion on retest candle, 32-37 inversion rejected (32 bias unknown, 33 bias opposite, 34 narrow,
+// 35 other inversion chosen, 36 unresolved-setup lock, 37 no window), 38-42 context lost (38 replaced, 39 discarded at another entry,
+// 40 window expiry, 41 closed through, 42 bias flip), 43 informational (candle-1 before confirmation), 44-49 impulse FIRST failed
+// sub-check (dir, body/ATR, body/range, close position, extension, unavailable), 50-54 impulse sub-check failed at all, 55 bars with an open setup.
+// TAP DIAGNOSTIC (no entries): 56 HTF gaps tapped on the chart candle (any direction), 57 in-window taps of a gap in the bias direction,
+// 58 unused, 59 ARMED (bias known, in window, no tap already armed; NO confluence requirement), 60 / 61 / 70 informational: at the tap
+// the strict VWAP+EMA test would have failed on VWAP / EMA / was unavailable, 62 tap while already armed, 63 / 64 1m / 2m inversions
+// strictly after the tap (trigger candidates), 65 inversions that straddle the tap, 66 inversions in another window instance,
+// 67 / 68 trigger candidates with the strict VWAP+EMA test ok / not ok AT THE TRIGGER, 69 arms ended by window end or bias flip
+// without an inversion, 71 trigger candidates with the EMA 9/21 trend alone in the bias direction, 72 with price on the bias side of VWAP.
+// SHADOW TRACKER (hypothetical 1:1 trades from each tap trigger; nothing is drawn or entered): 73 skipped, no valid risk, 74 skipped, a
+// shadow trade is still open, 75 skipped, 3 shadow trades already in that window instance; then per variant v (0 all, 1 strict VWAP+EMA,
+// 2 EMA trend, 3 VWAP side, 4 clear path, 5 strict + clear path) columns 76+4v created, +1 target, +2 stop, +3 ambiguous; 100 sum of risk ticks.
 var array<int>    dg = array.new_int(0)
-var array<string> fbNames = array.from("replaced", "expired", "closed through", "bias flip", "inv: no window", "inv: bias/narrow", "inv: unresolved block", "impulse fail", "stop/risk fail", "coverage unknown", "obstacle", "window instance", "session limit", "unresolved setup", "bias at entry", "outranked")
-var array<Zone>   pend = array.new<Zone>()
+var array<int>    armI = array.new_int(5, 0)          // tap diagnostic arm: 0 active, 1 direction, 2 tap candle close, 3 window end, 4 session index
+var array<float>  armF = array.new_float(1, na)       // tap diagnostic: extreme (low for bullish, high for bearish) from the tap candle onwards
+var array<int>    shDir = array.new_int(0)            // shadow tracker: open hypothetical trades (all arrays share one index)
+var array<int>    shEB = array.new_int(0)
+var array<int>    shET = array.new_int(0)
+var array<float>  shStop = array.new_float(0)
+var array<float>  shTgt = array.new_float(0)
+var array<int>    shDK = array.new_int(0)
+var array<int>    shW = array.new_int(0)
+var array<bool>   shFS = array.new_bool(0)
+var array<bool>   shFT = array.new_bool(0)
+var array<bool>   shFV = array.new_bool(0)
+var array<bool>   shFC = array.new_bool(0)
+var array<int>    shK = array.new_int(0)              // shadow trades per window instance (key = window end)
+var array<int>    shC = array.new_int(0)
+var array<string> fbNames = array.from("replaced", "expired", "closed through", "bias flip", "inv: no window", "inv: bias/narrow", "inv: unresolved block", "impulse fail", "stop/risk fail", "coverage unknown", "obstacle", "window instance", "session limit", "unresolved setup", "bias at entry", "outranked")    // per-timeframe first-failed-gate / block counters (each candidate counted once)
+var array<Zone>   pend = array.new<Zone>()            // 30s gaps that inverted on THIS bar (trigger candidates)
 var array<Setup>  setups = array.new<Setup>()
-var array<string> wKeys = array.new_string(0)
+var array<string> wKeys = array.new_string(0)         // entries per window instance
 var array<int>    wCnt  = array.new_int(0)
 var int  lastResolveAt = 0
 var array<label>  dbgLbls = array.new<label>()
-var array<int>    dKey    = array.new_int(0)
+var array<int>    dKey    = array.new_int(0)          // NY calendar dates with chart data (yyyymmdd), oldest first
 var array<int>    dDow    = array.new_int(0)
-var array<int>    dWinN   = array.new_int(0)
-var array<int>    dWinBad = array.new_int(0)
-var array<int>    dSetN   = array.new_int(0)
+var array<int>    dWinN   = array.new_int(0)          // confirmed bars inside an enabled entry window
+var array<int>    dWinBad = array.new_int(0)          // ... of which qualification coverage was incomplete
+var array<int>    dSetN   = array.new_int(0)          // setups entered on that date
 var int  firstDateKey = na
 var int  covStart = na
 var bool needPrune = false
@@ -680,10 +815,17 @@ int   biasDir = na(bzR) ? 0 : int(bzR)
 bool okWinAs = not (inAsTz == inLoTz and inAsH == inLoH and inAsM == inLoM)
 bool okWinAm = not (inAmSH == inAmEH and inAmSM == inAmEM)
 bool okWinPm = not (inPmSH == inPmEH and inPmSM == inPmEM)
+
+// ───────────── entry windows (calendar-aware; named IANA timezones; never the chart display timezone) ─────────────
+// Local timestamp for the calendar date `dayShift` days from ref's local date in tz. Stepping is anchored at local
+// NOON so a DST day (23h/25h) can never skip or repeat a date; hh:mm is then built with timestamp(tz, ...).
 f_localTs(int ref, string tz, int dayShift, int hh, int mm) =>
     int noon = timestamp(tz, year(ref, tz), month(ref, tz), dayofmonth(ref, tz), 12, 0, 0)
     int shifted = noon + dayShift * 86400000
     timestamp(tz, year(shifted, tz), month(shifted, tz), dayofmonth(shifted, tz), hh, mm, 0)
+
+// One window candidate containing T (start inclusive, end exclusive). Instances starting on T's local start-date
+// and the previous start-date are checked, so overnight windows are found. Returns [start, end] or [na, na].
 f_winCand(int T, bool en, bool valid, int sh, int sm, string stz, int eh, int em, string etz) =>
     int bs = na
     int be = na
@@ -691,7 +833,7 @@ f_winCand(int T, bool en, bool valid, int sh, int sm, string stz, int eh, int em
         for s = 0 to 1
             int st = f_localTs(T, stz, -s, sh, sm)
             int e0 = f_localTs(st, etz, 0, eh, em)
-            int eEnd = e0 > st ? e0 : f_localTs(st, etz, 1, eh, em)
+            int eEnd = e0 > st ? e0 : f_localTs(st, etz, 1, eh, em)   // first end strictly after the start
             int dw = dayofweek(st, stz)
             bool dayOk = inWkd == "Every day" or (dw >= dayofweek.monday and dw <= dayofweek.friday)
             if dayOk and T >= st and T < eEnd
@@ -699,6 +841,8 @@ f_winCand(int T, bool en, bool valid, int sh, int sm, string stz, int eh, int em
                     bs := st
                     be := eEnd
     [bs, be]
+
+// Deterministic assignment: latest start wins; equal starts: NY morning, then NY afternoon, then Asia -> London.
 f_selectWindow(int T) =>
     [sA, eA] = f_winCand(T, inWinAsia, okWinAs, inAsH, inAsM, inAsTz, inLoH, inLoM, inLoTz)
     [sM, eM] = f_winCand(T, inWinAm, okWinAm, inAmSH, inAmSM, inAmTz, inAmEH, inAmEM, inAmTz)
@@ -719,11 +863,14 @@ f_selectWindow(int T) =>
         bs := sA
         be := eA
     [bn, bs, be]
+
+// ═════════════════════════════════════════ ACTIONS ════════════════════════════════════════════
 f_destroy(Zone z) =>
     if not na(z.bx)
         box.delete(z.bx)
         z.bx := na
     true
+
 f_evInc(int i, string tf) =>
     ev.set(i, ev.get(i) + 1)
     if tf != ""
@@ -732,22 +879,31 @@ f_evInc(int i, string tf) =>
         if not toks.includes(tf)
             evTf.set(i, cur == "" ? tf : cur + "," + tf)
     true
+
 f_resetEv() =>
     for i = 0 to 11
         ev.set(i, 0)
         evTf.set(i, "")
     true
+
 f_addWhy(string a, string b) =>
     b == "" ? a : (a == "" ? b : a + "; " + b)
+
+
+
+
 f_log(string txt) =>
     if inLog
         log.info("H Ticks | " + txt)
     true
+
+// One chart-layer lifecycle step. Returns 0 none, 1 inverted, 2 removed (touch), 3 removed (invalidation).
 f_stepChart(Zone z, float hi, float lo, float cl, int bi, int t, int tc) =>
     int r = 0
     if bi > z.formBar
         bool bull = z.dir > 0
         if z.state == ST_BULL_FVG or z.state == ST_BEAR_FVG
+            // inversion: confirmed close strictly through the opposite OUTER boundary
             bool inv = bull ? f_tk(cl) < f_tk(z.bottom) : f_tk(cl) > f_tk(z.top)
             if inv
                 z.state := bull ? ST_BEAR_IFVG : ST_BULL_IFVG
@@ -756,12 +912,17 @@ f_stepChart(Zone z, float hi, float lo, float cl, int bi, int t, int tc) =>
                 z.invAvail := tc
                 r := 1
         else if bi > z.invBar
+            // the inversion candle (bi == invBar) can never remove the new iFVG
             bool invalid = bull ? f_tk(cl) > f_tk(z.top) : f_tk(cl) < f_tk(z.bottom)
             if invalid
                 r := 3
             else if f_overlap(hi, lo, z.bottom, z.top)
                 r := 2
     r
+
+// Reconcile one source slot against the engine snapshot (HTF layer). Chronological two-pointer merge.
+// `gen` = false during the slot's first (bootstrap) reconciliation: nothing is announced then.
+// The watermark only gates creation of zones that have no store match; matched zones always update.
 f_reconcile(array<Zone> store, int idx, string tfTxt, array<float> snap, int asOf) =>
     bool gen = srcInit.get(idx)
     srcTrunc.set(idx, snap.get(0) == 1.0)
@@ -806,7 +967,7 @@ f_reconcile(array<Zone> store, int idx, string tfTxt, array<float> snap, int asO
                 if flg
                     z.endNow := true
                 else if tp > 0 and not z.tapped
-                    z.tapped := true
+                    z.tapped := true          // monotonic: never reverted by a snapshot
                     z.state := z.dir > 0 ? ST_TAP_BULL : ST_TAP_BEAR
                     z.tapTime := tp
                     z.tapAvail := time_close
@@ -818,8 +979,11 @@ f_reconcile(array<Zone> store, int idx, string tfTxt, array<float> snap, int asO
                 Zone nz = Zone.new(id = syminfo.tickerid + "|" + tfTxt + "|" + str.tostring(ft) + "|" + str.tostring(d), src = idx, tfTxt = tfTxt, dir = d, state = st, top = zt, bottom = zb, formTime = ft, confTime = conf, availTime = time_close, width = zt - zb, fatr = fa < 0 ? na : fa, tapped = tpd, tapTime = tp, tapAvail = time_close, lastEvt = asOf, seen = true)
                 store.push(nz)
                 wm.set(idx, ft)
+                // genuine formation = confirmed by the source candle that just completed, after bootstrap
                 if gen and conf == asOf
                     f_evInc(4, tfTxt)
+    // zones missing from the snapshot are gone (expired, capacity-pruned, or already removed): silent.
+    // zones the engine flagged inverted: removal dominates any tap in the same step.
     int n2 = store.size()
     if n2 > 0
         for i = n2 - 1 to 0
@@ -834,6 +998,10 @@ f_reconcile(array<Zone> store, int idx, string tfTxt, array<float> snap, int asO
                 store.remove(i)
     srcInit.set(idx, true)
     true
+
+// Obstacle zones come from SOURCE candles only (existence, source-close inversion), so no chart history is needed to use them;
+// chart taps are display-only. A chart candle straddling a source boundary only skips that single update (counted), never
+// disables the source: the next snapshot carries the complete state.
 f_sync(array<Zone> store, int idx, string tfTxt, array<float> snap, int asOf) =>
     if not na(snap) and not na(asOf)
         srcSeen.set(idx, true)
@@ -856,6 +1024,10 @@ f_tapStore(array<Zone> a) =>
                 z.tapAvail := time_close
                 f_evInc(5, z.tfTxt)
     true
+
+// ───────────── HTF obstacle / coverage ─────────────
+// Opposing active tracked HTF FVGs whose ORIGINAL boundaries intersect the closed interval [lo, hi].
+// Deliberately ignores every display filter (size, budgets, nearest sets, visibility).
 f_scanObs(array<Zone> a, bool bull, float lo, float hi) =>
     int cnt = 0
     string nm = ""
@@ -871,6 +1043,7 @@ f_scanObs(array<Zone> a, bool bull, float lo, float hi) =>
                 if nm == ""
                     nm := z.tfTxt + (z.dir < 0 ? " bearish" : " bullish") + " FVG, " + str.tostring(z.bottom, format.mintick) + "–" + str.tostring(z.top, format.mintick)
     [cnt, nm]
+
 f_scanAll(bool bull, float lo, float hi) =>
     [ca, na_] = f_scanObs(hz1, bull, lo, hi)
     [cb, nb_] = f_scanObs(hz2, bull, lo, hi)
@@ -878,11 +1051,15 @@ f_scanAll(bool bull, float lo, float hi) =>
     [cd, nd_] = f_scanObs(hz4, bull, lo, hi)
     string nm = na_ != "" ? na_ : (nb_ != "" ? nb_ : (nc_ != "" ? nc_ : nd_))
     [ca + cb + cc + cd, nm]
+
+// 0 = not applicable (disabled / equal / lower / duplicate), 1 = valid, 2 = UNKNOWN (never "clear")
 f_slotState(bool en, bool okS, bool actS, int idx) =>
     int st = 0
     if en and okS
         st := actS and srcSeen.get(idx) and srcInit.get(idx) and srcReady.get(idx) and not srcTrunc.get(idx) ? 1 : 2
     st
+
+// Why a source is not valid (empty when valid / not applicable). Names the source and the limitation.
 f_slotWhy(bool en, bool okS, bool actS, int idx, string nm) =>
     string r = ""
     if en and okS
@@ -897,6 +1074,8 @@ f_slotWhy(bool en, bool okS, bool actS, int idx, string nm) =>
         else if not srcReady.get(idx)
             r := nm + ": history warming up (obstacle horizon not yet covered)"
     r
+
+// cov: 0 complete, 1 unknown (some applicable source not valid), 2 no applicable source
 f_coverage() =>
     int s1 = f_slotState(en1, ok1, act1, 0)
     int s2 = f_slotState(en2, ok2, act2, 1)
@@ -920,20 +1099,27 @@ f_coverage() =>
         why := f_addWhy(why, f_slotWhy(en3, ok3, act3, 2, f_tfText(sec3)))
         why := f_addWhy(why, f_slotWhy(en4, ok4, act4, 3, f_tfText(sec4)))
     [nUnk > 0 ? 1 : (nValid > 0 ? 0 : 2), txt, why]
+
+// 3m context source: usable only when data is present, aligned, initialised and warmed up. Capacity truncation can only
+// MISS contexts (never create one), so it is reported but does not make the source unusable.
 f_ctxReadyK(int k) =>
     bool r = false
     if actCtxA.get(k)
         int ix = IX_CTX + k
         r := srcSeen.get(ix) and srcInit.get(ix) and srcReady.get(ix)
     r
+
+// every ACTIVE context timeframe is usable (used only to label date coverage; each context works as soon as ITS source is ready)
 f_ctxReadyAll() =>
     bool r = true
     for k = 0 to NCTX - 1
         if actCtxA.get(k) and not f_ctxReadyK(k)
             r := false
     r
+
 f_lvlReady() =>
     actL and srcSeen.get(IX_LVL) and srcInit.get(IX_LVL) and srcReady.get(IX_LVL) and not srcTrunc.get(IX_LVL)
+
 f_lvlWhy() =>
     string r = ""
     if supported and actL
@@ -946,6 +1132,7 @@ f_lvlWhy() =>
         else if not srcReady.get(IX_LVL)
             r := "3m structure: history warming up (level horizon not yet covered)"
     r
+
 f_ctxWhyK(int k) =>
     string nm = cxs.get(k).tfTxt + " context"
     int ix = IX_CTX + k
@@ -960,15 +1147,19 @@ f_ctxWhyK(int k) =>
         else if srcTrunc.get(ix)
             r := nm + ": gap capacity exceeded (older gaps omitted; contexts may be missed)"
     r
+
 f_ctxWhy() =>
     string r = ""
     for k = 0 to NCTX - 1
         r := f_addWhy(r, f_ctxWhyK(k))
     r
+
+// ───────────── display selection (never touches lifecycle state or array order) ─────────────
+// Size filter on FROZEN width and FROZEN formation ATR. Tick-aware, so a width exactly at the threshold qualifies.
 f_sizeOk(float width, float fatr, int minT, float mult) =>
     bool ok = true
     if mult > 0 and na(fatr)
-        ok := false
+        ok := false              // ATR qualification unknown: hide (still tracked)
     else
         float thrT = float(minT)
         if mult > 0
@@ -976,6 +1167,8 @@ f_sizeOk(float width, float fatr, int minT, float mult) =>
             thrT := atrT > thrT ? atrT : thrT
         ok := f_tk(width) >= thrT - 0.000001
     ok
+
+// Nearest-EDGE distance (0 when price is inside or on a boundary).
 f_dist(Zone z, float ref) =>
     float d = 0.0
     if f_tk(ref) < f_tk(z.bottom)
@@ -983,6 +1176,9 @@ f_dist(Zone z, float ref) =>
     else if f_tk(ref) > f_tk(z.top)
         d := ref - z.top
     d
+
+// ═════════════════════════════════════════ DRAWING ════════════════════════════════════════════
+// Persistent handles, mutated only on confirmed bars (drawNow). Hidden/removed items are deleted; state is untouched.
 f_syncDraw(Zone z, bool htf, bool want) =>
     if not want
         f_destroy(z)
@@ -1012,6 +1208,7 @@ f_syncDraw(Zone z, bool htf, bool want) =>
             box.set_text(z.bx, txt)
             box.set_text_color(z.bx, color.new(base, 15))
     true
+
 f_classify(array<Zone> a, bool htf) =>
     int n = a.size()
     if n > 0
@@ -1028,6 +1225,7 @@ f_classify(array<Zone> a, bool htf) =>
                 if inShow30 and f_sizeOk(z.width, z.fatr, inFvgMinT, inFvgAtr)
                     z.cat := isI ? 1 : 0
     true
+
 f_pickCat(array<Zone> a, int cat, int limit) =>
     int n = a.size()
     if n > 0 and limit > 0
@@ -1051,6 +1249,7 @@ f_pickCat(array<Zone> a, int cat, int limit) =>
                 Zone sel = a.get(best)
                 sel.vis := true
     true
+
 f_drawHtf(array<Zone> a) =>
     f_classify(a, true)
     f_pickCat(a, 2, inHtfAbove)
@@ -1062,6 +1261,7 @@ f_drawHtf(array<Zone> a) =>
             Zone z = a.get(i)
             f_syncDraw(z, true, z.vis)
     true
+
 f_drawCtx() =>
     for k = 0 to NCTX - 1
         Ctx c = cxs.get(k)
@@ -1087,8 +1287,10 @@ f_drawCtx() =>
             box.delete(c.bx)
             c.bx := na
     true
+
 f_nyT(int t) =>
     str.format_time(t, "MM-dd HH:mm:ss", TZ_NY)
+
 f_delSetupDraw(Setup s) =>
     if not na(s.lE)
         line.delete(s.lE)
@@ -1145,6 +1347,8 @@ f_delSetupDraw(Setup s) =>
         label.delete(s.lbTm)
         s.lbTm := na
     true
+
+// Create-or-update helpers: every property is (re)applied so a handle can never keep stale values.
 f_boxUp(box b, int l, float tp, int r, float bt, color bg, color bc, string txt, color tc, string sty, int bw) =>
     box h = b
     if na(h)
@@ -1161,6 +1365,7 @@ f_boxUp(box b, int l, float tp, int r, float bt, color bg, color bc, string txt,
         box.set_text(h, txt)
         box.set_text_color(h, tc)
     h
+
 f_lineUp(line ln, int x1, float y1, int x2, float y2, color c, string sty) =>
     line h = ln
     if na(h)
@@ -1170,6 +1375,7 @@ f_lineUp(line ln, int x1, float y1, int x2, float y2, color c, string sty) =>
         line.set_xy2(h, x2, y2)
         line.set_color(h, c)
     h
+
 f_lblUp(label lb, int x, float y, string txt, color tc, string sty, string tip) =>
     label h = lb
     if na(h)
@@ -1181,6 +1387,13 @@ f_lblUp(label lb, int x, float y, string txt, color tc, string sty, string tip) 
         label.set_color(h, cLblBg)
         label.set_tooltip(h, tip)
     h
+
+// Every setup owns its OWN frozen handles and its OWN copy of both gaps (context gap + 30s trigger gap), so clearing a pending
+// context or removing a live iFVG never touches setup evidence. Z-order = creation order: R/R shading first, then the two gap
+// boxes (they end where the shading begins, so they are never covered), then lines and labels.
+// The position look-alike (NOT TradingView's native tool) starts at the entry confirmation; while OPEN it extends to the latest
+// confirmed close; once resolved the shading ends at the actual resolution time, widened to a display-only minimum width
+// when needed. The TRUE exit time has its own dotted marker + label and is what the statistics use.
 f_syncSetupDraw(Setup s, bool want) =>
     if not want
         f_delSetupDraw(s)
@@ -1273,6 +1486,7 @@ f_syncSetupDraw(Setup s, bool want) =>
                 label.delete(s.lbTm)
                 s.lbTm := na
     true
+
 f_drawSetups() =>
     int n = setups.size()
     int drawn = 0
@@ -1287,6 +1501,7 @@ f_drawSetups() =>
                         drawn += 1
                     f_syncSetupDraw(s, want)
     true
+
 f_drawAll() =>
     if not na(lastConfClose) and not na(refPrice)
         f_classify(chartZ, false)
@@ -1304,6 +1519,9 @@ f_drawAll() =>
         f_drawCtx()
         f_drawSetups()
     true
+
+// ───────────── 3m context, entry, outcome ─────────────
+// ───────────── 3m structural levels on the chart ─────────────
 f_lvlReconcile(array<float> snap) =>
     int cnt = int((snap.size() - HDR) / LS)
     int m = lvStore.size()
@@ -1334,6 +1552,7 @@ f_lvlReconcile(array<float> snap) =>
             if not lvStore.get(i).seen
                 lvStore.remove(i)
     true
+
 f_lvlSync(array<float> snap, int asOf) =>
     if not na(snap) and not na(asOf)
         srcSeen.set(IX_LVL, true)
@@ -1360,6 +1579,9 @@ f_lvlConsume() =>
                 if hit
                     q.consumed := true
     true
+
+// Nearest remaining (unconsumed, available before this candle began) level in the target direction.
+// Blocks unless the target ends at least one tick before it. Returns [blocked, nearest level or na].
 f_structCheck(bool bull, int tT) =>
     float near = na
     int n = lvStore.size()
@@ -1375,6 +1597,8 @@ f_structCheck(bool bull, int tT) =>
     if not na(near)
         blocked := bull ? tT > f_tk(near) - 1 : tT < f_tk(near) + 1
     [blocked, near]
+
+
 f_ctxClear(Ctx c) =>
     if not na(c.bx)
         box.delete(c.bx)
@@ -1382,28 +1606,43 @@ f_ctxClear(Ctx c) =>
     c.state := 0
     c.retestBar := -1
     true
+
 f_ctxClearAll() =>
     for k = 0 to NCTX - 1
         f_ctxClear(cxs.get(k))
     true
+
 f_fn(int k, int col) =>
     fnl.set(k * FN + col, fnl.get(k * FN + col) + 1)
     true
+
 f_winIdx(string nm) =>
     nm == "Asia -> London" ? 0 : (nm == "New York morning" ? 1 : 2)
+
 f_winIdxN(string nm, int ws) =>
     na(ws) ? 3 : f_winIdx(nm)
+
+// Diagnostic counter for the CURRENT reporting date (last dKey entry). Counting only; never read by any trading decision.
 f_dgN(int w, int col, int n) =>
     int nd = dKey.size()
     if nd > 0 and n > 0 and w >= 0 and w < NSS
         int ix = ((nd - 1) * NSS + w) * DGN + col
         dg.set(ix, dg.get(ix) + n)
     true
+
 f_dg(int w, int col) =>
     f_dgN(w, col, 1)
+
+f_dgAtN(int di, int w, int col, int n) =>
+    if di >= 0 and di < dKey.size() and n > 0 and w >= 0 and w < NSS
+        int ix = (di * NSS + w) * DGN + col
+        dg.set(ix, dg.get(ix) + n)
+    true
+
 f_fb(int k, int col) =>
     fnb.set(k * FB + col, fnb.get(k * FB + col) + 1)
     true
+
 f_setupExists(string trgId, string ctxId) =>
     bool r = false
     int n = setups.size()
@@ -1413,6 +1652,7 @@ f_setupExists(string trgId, string ctxId) =>
             if q.trgId == trgId or q.ctxId == ctxId
                 r := true
     r
+
 f_openSetup() =>
     bool o = false
     int n = setups.size()
@@ -1421,6 +1661,7 @@ f_openSetup() =>
             if setups.get(i).state == 0
                 o := true
     o
+
 f_winCount(string id) =>
     int c = 0
     int n = wKeys.size()
@@ -1429,6 +1670,7 @@ f_winCount(string id) =>
             if wKeys.get(i) == id
                 c := wCnt.get(i)
     c
+
 f_winInc(string id) =>
     bool found = false
     int n = wKeys.size()
@@ -1444,8 +1686,11 @@ f_winInc(string id) =>
         wKeys.shift()
         wCnt.shift()
     true
+
+// ───────────── reporting calendar: New York entry dates ─────────────
 f_dateKey(int t) =>
     year(t, TZ_NY) * 10000 + month(t, TZ_NY) * 100 + dayofmonth(t, TZ_NY)
+
 f_dateIdx(int k) =>
     int r = -1
     int n = dKey.size()
@@ -1454,6 +1699,9 @@ f_dateIdx(int k) =>
             if r < 0 and dKey.get(i) == k
                 r := i
     r
+
+// The reported dates: the latest REP_DATES Mon-Fri NY dates that have chart data (plus any weekend date that holds setups,
+// so no setup is ever silently left out). Oldest first.
 f_reportDates() =>
     array<int> r = array.new_int(0)
     int n = dKey.size()
@@ -1464,6 +1712,9 @@ f_reportDates() =>
                 if wk or dSetN.get(i) > 0
                     r.unshift(dKey.get(i))
     r
+
+// Retention: an UNRESOLVED setup is never pruned. A RESOLVED setup is pruned only when its entry date is older than the
+// oldest reported date. Statistics are computed from these records and never from drawings.
 f_pruneSetups() =>
     array<int> rd = f_reportDates()
     int cut = rd.size() > 0 ? rd.first() : 0
@@ -1475,6 +1726,7 @@ f_pruneSetups() =>
                 f_delSetupDraw(s)
                 setups.remove(i)
     true
+
 f_dateCount(int k, int st) =>
     int c = 0
     int n = setups.size()
@@ -1484,8 +1736,11 @@ f_dateCount(int k, int st) =>
             if s.dateKey == k and (st < 0 or s.state == st)
                 c += 1
     c
+
 f_dgBars(int idx, int w, int col) =>
     dg.get((idx * NSS + w) * DGN + col)
+
+// An enabled entry window that received NO eligible bar on a Mon-Fri date means that window was NOT EVALUATED on that date.
 f_dateWinZero(int idx) =>
     bool z = false
     bool wk = dDow.get(idx) >= dayofweek.monday and dDow.get(idx) <= dayofweek.friday
@@ -1497,6 +1752,9 @@ f_dateWinZero(int idx) =>
         if inWinPm and okWinPm and f_dgBars(idx, 2, 0) == 0
             z := true
     z
+
+// 0 fully evaluated (every eligible bar had every required source ready and a known 15m bias), 1 partial,
+// 2 unavailable (never complete), 3 unavailable (an enabled window received no eligible bar)
 f_dateStatus(int idx) =>
     int st = 0
     int wn = dWinN.get(idx)
@@ -1508,9 +1766,13 @@ f_dateStatus(int idx) =>
     else if bad > 0 or dKey.get(idx) == firstDateKey
         st := 1
     st
+
 f_dateTxt(int k) =>
     string t = str.tostring(k)
     str.substring(t, 4, 6) + "-" + str.substring(t, 6, 8)
+
+// Diagnostic: charges a blocked context / entry to the setup that holds the lock (the open one, else the latest resolved one
+// when a source candle that closed before that resolution is only now processed). Counting only.
 f_lockHit(bool ent) =>
     Setup hit = na
     int n = setups.size()
@@ -1528,6 +1790,278 @@ f_lockHit(bool ent) =>
         else
             hit.blkCtx += 1
     true
+
+// ───────────── TAP + BIAS CONFLUENCE DIAGNOSTIC (counting only; creates no setup and no entry) ─────────────
+// 0 = VWAP (anchored NY 09:30) and the 1m EMA 9/21 stack both agree with the direction, 1 = VWAP disagrees, 2 = EMA stack disagrees,
+// 3 = unavailable. Evaluated on the confirmed chart bar.
+f_confFail(int dir) =>
+    int f = 0
+    if na(vwapNy) or na(em9) or na(em21)
+        f := 3
+    else if (dir > 0 ? close <= vwapNy : close >= vwapNy)
+        f := 1
+    else if (dir > 0 ? not (close > em9 and close > em21 and em9 > em21) : not (close < em9 and close < em21 and em9 < em21))
+        f := 2
+    f
+
+f_trendOk(int dir) =>
+    not na(em9) and not na(em21) and (dir > 0 ? em9 > em21 : em9 < em21)
+
+f_vwapOk(int dir) =>
+    not na(vwapNy) and (dir > 0 ? close > vwapNy : close < vwapNy)
+
+// One log line per trigger candidate (debug only): times in New York, the values behind each confluence variant.
+f_trigLog(int k, int asOf, int dirA) =>
+    if inDebug
+        log.info("H Ticks | TRIGGER CANDIDATE " + (k == 0 ? "1m" : "2m") + (dirA > 0 ? " bullish" : " bearish") + " inversion, source candle closed " + f_nyT(asOf) + " NY, tap candle closed " + f_nyT(armI.get(2)) + " NY | processed on the candle closing " + f_nyT(time_close) + " NY | close " + str.tostring(close, format.mintick) + " vs VWAP " + str.tostring(vwapNy, format.mintick) + " (" + (f_vwapOk(dirA) ? "ok" : "wrong side") + "), EMA9 " + str.tostring(em9, format.mintick) + " / EMA21 " + str.tostring(em21, format.mintick) + " (trend " + (f_trendOk(dirA) ? "ok" : "against") + ", strict " + (f_confFail(dirA) == 0 ? "ok" : "not ok") + ")")
+    true
+
+// One log line per HTF tap seen on the chart candle (debug only) with the first reason it did or did not arm.
+f_tapLog(Zone z, string why, int cf) =>
+    if inDebug
+        log.info("H Ticks | TAP " + z.tfTxt + (z.dir > 0 ? " bullish" : " bearish") + " gap " + str.tostring(z.bottom, format.mintick) + "-" + str.tostring(z.top, format.mintick) + " | candle closes " + f_nyT(time_close) + " NY | 15m bias " + (biasDir > 0 ? "bullish" : (biasDir < 0 ? "bearish" : "unknown")) + " | " + why + " | at the tap: close " + str.tostring(close, format.mintick) + " vs VWAP " + str.tostring(vwapNy, format.mintick) + ", EMA9 " + str.tostring(em9, format.mintick) + " / EMA21 " + str.tostring(em21, format.mintick) + " (strict test " + (cf == 0 ? "would pass" : (cf == 1 ? "would fail on VWAP" : (cf == 2 ? "would fail on EMA" : "n/a"))) + ")")
+    true
+
+// ───────────── SHADOW TRACKER: hypothetical 1:1 trades from the tap trigger (counting only; no entry, no drawing, no alert) ─────────────
+// Entry = close of the chart candle that processes the trigger. Stop = beyond the extreme from the tap candle through that candle
+// +/- max(1 tick, 0.10 x prev ATR), rounded outward; target = the same tick distance. Same outcome rules as real setups (candles
+// strictly after the entry candle, open first, then the range). Gates: one shadow trade open at a time, 3 per window instance.
+f_shWinCount(int k) =>
+    int c = 0
+    int n = shK.size()
+    if n > 0
+        for i = 0 to n - 1
+            if shK.get(i) == k
+                c := shC.get(i)
+    c
+
+f_shWinInc(int k) =>
+    bool found = false
+    int n = shK.size()
+    if n > 0
+        for i = 0 to n - 1
+            if shK.get(i) == k
+                shC.set(i, shC.get(i) + 1)
+                found := true
+    if not found
+        shK.push(k)
+        shC.push(1)
+    while shK.size() > 60
+        shK.shift()
+        shC.shift()
+    true
+
+f_shadowNew(int dirA, int wA, int weI) =>
+    bool bull = dirA > 0
+    float atrP = chartAtr[1]
+    int bufT = na(atrP) ? 1 : math.max(1, int(math.ceil(0.10 * atrP / syminfo.mintick - 0.000001)))
+    float ext = armF.get(0)
+    int eT = f_tk(close)
+    int sT = 0
+    int rT = 0
+    bool okR = not na(ext)
+    if okR
+        sT := bull ? int(math.floor(ext / syminfo.mintick + 0.000001)) - bufT : int(math.ceil(ext / syminfo.mintick - 0.000001)) + bufT
+        rT := bull ? eT - sT : sT - eT
+        okR := rT >= 1
+    if not okR
+        f_dg(wA, 73)
+    else if shDir.size() > 0
+        f_dg(wA, 74)
+    else if f_shWinCount(weI) >= MAX_ENTRIES
+        f_dg(wA, 75)
+    else
+        float entry = eT * syminfo.mintick
+        int tT = bull ? eT + rT : eT - rT
+        float target = tT * syminfo.mintick
+        float stop = sT * syminfo.mintick
+        bool clr = false
+        string pathTxt = "HTF coverage not complete"
+        [cvS, txS, whS] = f_coverage()
+        if cvS == 0
+            float lo = bull ? entry : target
+            float hi = bull ? target : entry
+            [obsN, obsNm] = f_scanAll(bull, lo, hi)
+            if obsN > 0
+                pathTxt := "blocked by " + obsNm
+            else if not f_lvlReady()
+                pathTxt := "3m structure not ready"
+            else
+                [stB, stNr] = f_structCheck(bull, tT)
+                clr := not stB
+                pathTxt := stB ? "blocked by a 3m swing" : "clear"
+        bool vS = f_confFail(dirA) == 0
+        bool vT = f_trendOk(dirA)
+        bool vV = f_vwapOk(dirA)
+        shDir.push(dirA)
+        shEB.push(bar_index)
+        shET.push(time_close)
+        shStop.push(stop)
+        shTgt.push(target)
+        shDK.push(f_dateKey(time_close))
+        shW.push(wA)
+        shFS.push(vS)
+        shFT.push(vT)
+        shFV.push(vV)
+        shFC.push(clr)
+        f_shWinInc(weI)
+        f_dg(wA, 76)
+        if vS
+            f_dg(wA, 80)
+        if vT
+            f_dg(wA, 84)
+        if vV
+            f_dg(wA, 88)
+        if clr
+            f_dg(wA, 92)
+        if vS and clr
+            f_dg(wA, 96)
+        f_dgN(wA, 100, rT)
+        if inDebug
+            log.info("H Ticks | SHADOW TRADE " + (bull ? "LONG" : "SHORT") + " | entry candle closes " + f_nyT(time_close) + " NY | entry " + str.tostring(entry, format.mintick) + " stop " + str.tostring(stop, format.mintick) + " target " + str.tostring(target, format.mintick) + " risk " + str.tostring(rT) + " ticks | strict " + (vS ? "ok" : "no") + ", EMA trend " + (vT ? "ok" : "no") + ", VWAP side " + (vV ? "ok" : "no") + ", clear path " + (clr ? "yes" : "no") + " (" + pathTxt + ")")
+    true
+
+f_shadowTrack() =>
+    int n = shDir.size()
+    if n > 0
+        int oTk = f_tk(open)
+        int hTk = f_tk(high)
+        int lTk = f_tk(low)
+        for i = n - 1 to 0
+            if bar_index > shEB.get(i)
+                int sTk = f_tk(shStop.get(i))
+                int tTk = f_tk(shTgt.get(i))
+                int res = 0
+                if shDir.get(i) > 0
+                    if oTk >= tTk
+                        res := 1
+                    else if oTk <= sTk
+                        res := 2
+                    else
+                        bool th = hTk >= tTk
+                        bool sh = lTk <= sTk
+                        res := th and sh ? 3 : (th ? 1 : (sh ? 2 : 0))
+                else
+                    if oTk <= tTk
+                        res := 1
+                    else if oTk >= sTk
+                        res := 2
+                    else
+                        bool th = lTk <= tTk
+                        bool sh = hTk >= sTk
+                        res := th and sh ? 3 : (th ? 1 : (sh ? 2 : 0))
+                if res != 0
+                    int di = f_dateIdx(shDK.get(i))
+                    int w = shW.get(i)
+                    f_dgAtN(di, w, 76 + res, 1)
+                    if shFS.get(i)
+                        f_dgAtN(di, w, 80 + res, 1)
+                    if shFT.get(i)
+                        f_dgAtN(di, w, 84 + res, 1)
+                    if shFV.get(i)
+                        f_dgAtN(di, w, 88 + res, 1)
+                    if shFC.get(i)
+                        f_dgAtN(di, w, 92 + res, 1)
+                    if shFS.get(i) and shFC.get(i)
+                        f_dgAtN(di, w, 96 + res, 1)
+                    if inDebug
+                        log.info("H Ticks | SHADOW RESOLVED " + (res == 1 ? "TARGET" : (res == 2 ? "STOP" : "AMBIGUOUS")) + " | entered " + f_nyT(shET.get(i)) + " NY, resolved on the candle closing " + f_nyT(time_close) + " NY")
+                    shDir.remove(i)
+                    shEB.remove(i)
+                    shET.remove(i)
+                    shStop.remove(i)
+                    shTgt.remove(i)
+                    shDK.remove(i)
+                    shW.remove(i)
+                    shFS.remove(i)
+                    shFT.remove(i)
+                    shFV.remove(i)
+                    shFC.remove(i)
+    true
+
+// A 1m / 2m inversion in the bias direction while a tap is armed. Strictly after the tap = the source candle OPENED at/after the
+// tap candle closed; the same window instance is required; the first valid one is the trigger candidate and ends the arm.
+// The VWAP / EMA variants are evaluated HERE (price has bounced), not at the pullback tap.
+f_armInv(int k, int asOf, int tfMs) =>
+    if armI.get(0) == 1
+        [wnI, wsI, weI] = f_selectWindow(asOf)
+        int wA = armI.get(4)
+        if asOf - tfMs < armI.get(2)
+            f_dg(wA, 65)
+        else if na(wsI) or weI != armI.get(3)
+            f_dg(wA, 66)
+        else
+            int dirA = armI.get(1)
+            f_dg(wA, 63 + k)
+            f_dg(wA, f_confFail(dirA) == 0 ? 67 : 68)
+            if f_trendOk(dirA)
+                f_dg(wA, 71)
+            if f_vwapOk(dirA)
+                f_dg(wA, 72)
+            f_trigLog(k, asOf, dirA)
+            f_shadowNew(dirA, wA, weI)
+            armI.set(0, 0)
+    true
+
+f_tapScan(array<Zone> a, int wT, bool inWin, int weT) =>
+    int n = a.size()
+    if n > 0
+        for i = 0 to n - 1
+            Zone z = a.get(i)
+            if z.tapped and z.tapTime == time and z.tapAvail == time_close
+                f_dg(wT, 56)
+                int cf = biasDir != 0 ? f_confFail(biasDir) : 3
+                string why = "not armed: 15m bias unknown"
+                if biasDir != 0
+                    if z.dir != biasDir
+                        why := "not armed: gap points against the bias"
+                    else
+                        f_dg(wT, 57)
+                        if not inWin
+                            why := "not armed: outside every entry window"
+                        else
+                            if cf == 3
+                                f_dg(wT, 70)
+                            else if cf == 1
+                                f_dg(wT, 60)
+                            else if cf == 2
+                                f_dg(wT, 61)
+                            if armI.get(0) == 1
+                                f_dg(wT, 62)
+                                why := "not armed: an earlier tap is still armed"
+                            else
+                                f_dg(wT, 59)
+                                armF.set(0, biasDir > 0 ? low : high)
+                                armI.set(0, 1)
+                                armI.set(1, biasDir)
+                                armI.set(2, time_close)
+                                armI.set(3, weT)
+                                armI.set(4, wT)
+                                why := "ARMED"
+                f_tapLog(z, why, cf)
+    true
+
+f_armStep() =>
+    if armI.get(0) == 1
+        if time_close >= armI.get(3) or biasDir != armI.get(1)
+            f_dg(armI.get(4), 69)
+            armI.set(0, 0)
+    [wnT, wsT, weT] = f_selectWindow(time_close)
+    int wT = f_winIdxN(wnT, wsT)
+    f_tapScan(hz1, wT, not na(wsT), weT)
+    f_tapScan(hz2, wT, not na(wsT), weT)
+    f_tapScan(hz3, wT, not na(wsT), weT)
+    f_tapScan(hz4, wT, not na(wsT), weT)
+    if armI.get(0) == 1
+        float ex = armF.get(0)
+        if armI.get(1) > 0
+            armF.set(0, na(ex) ? low : math.min(ex, low))
+        else
+            armF.set(0, na(ex) ? high : math.max(ex, high))
+    true
+
+// Mandatory expiry at the originating window's end (end exclusive); optional maximum age. Never transferred.
+// Mandatory expiry at the originating window's end (end exclusive). Never transferred to another window.
 f_ctxExpire() =>
     for k = 0 to NCTX - 1
         Ctx c = cxs.get(k)
@@ -1537,6 +2071,10 @@ f_ctxExpire() =>
             f_dg(f_winIdxN(c.winName, c.winStart), 40)
             f_ctxClear(c)
     true
+
+// One new confirmed source update for context timeframe k: (1) a later close of its OWN timeframe through the zone cancels its
+// pending context; (2) inversions flagged by THIS source candle may create / replace that timeframe's context (bias direction,
+// narrowest then newest, one-active rule, same window instance). Other timeframes are never touched.
 f_ctxUpdate(int k, array<float> snap, int asOf, float cCl) =>
     Ctx c = cxs.get(k)
     if c.state != 0 and asOf > c.confAsOf
@@ -1570,6 +2108,8 @@ f_ctxUpdate(int k, array<float> snap, int asOf, float cCl) =>
                     nNW += 1
                 else
                     nEl += 1
+                if k <= 1 and dirOk and wideOk
+                    f_armInv(k, asOf, c.tfSecs * 1000)
                 if dirOk and wideOk
                     float w = snap.get(base + 2) - snap.get(base + 3)
                     int ft = int(snap.get(base))
@@ -1629,6 +2169,7 @@ f_ctxUpdate(int k, array<float> snap, int asOf, float cCl) =>
                     f_dg(oldW, 38)
                 f_log("ctx created " + c.tfTxt + " " + (c.dir > 0 ? "long" : "short") + " " + c.winId)
     true
+
 f_ctxSync(int k, array<float> snap, int asOf, float cCl) =>
     int ix = IX_CTX + k
     if not na(snap) and not na(asOf) and not na(cCl)
@@ -1647,6 +2188,10 @@ f_ctxSync(int k, array<float> snap, int asOf, float cCl) =>
                     if srcReady.get(ix)
                         f_ctxUpdate(k, snap, asOf, cCl)
     true
+
+// Trigger candidates = 30s gaps inverted on THIS bar in this context's direction whose formation candle opened at/after the
+// context's inversion confirmation and that intersect THIS context gap (closed interval). Newest formation first; then larger
+// width; then later array order (ids are timestamp-derived and unique per bar, so that final tie-break cannot occur).
 f_pickTrigger(Ctx c) =>
     Zone best = na
     int n = pend.size()
@@ -1663,6 +2208,9 @@ f_pickTrigger(Ctx c) =>
                 if take
                     best := z
     best
+
+// DIAGNOSTIC ONLY (changes no decision): of the 30s gaps that inverted on THIS bar in the context's direction, how many exist,
+// how many formed at/after the context confirmation, and how many of those also intersect the context gap.
 f_trigDiag(Ctx c) =>
     int nS = 0
     int nF = 0
@@ -1679,6 +2227,8 @@ f_trigDiag(Ctx c) =>
                     if f_overlap(z.top, z.bottom, c.bottom, c.top)
                         nO += 1
     [nS, nF, nO]
+
+// Newest same-direction inverted 30s gap of this bar (optionally only those formed at/after the context confirmation); for records.
 f_newestSame(Ctx c, bool formedOnly) =>
     Zone best = na
     int n = pend.size()
@@ -1690,6 +2240,7 @@ f_newestSame(Ctx c, bool formedOnly) =>
                 if na(best) or z.formTime > best.formTime
                     best := z
     best
+
 f_decisive(Zone t, bool bull, float atrP) =>
     bool ok = true
     string why = ""
@@ -1744,12 +2295,16 @@ f_decisive(Zone t, bool bull, float atrP) =>
             first := first < 0 ? 4 : first
             why := f_addWhy(why, "Weak inversion: close extends " + str.tostring(got / syminfo.mintick, "#.0") + " ticks beyond the trigger gap, " + str.tostring(ext / syminfo.mintick, "#.0") + " required")
     [ok, why, bodyAtr, first, mask]
+
 f_dbg(string txt, string tip) =>
     if inDebug
         dbgLbls.push(label.new(bar_index, high, "x " + txt, style = label.style_label_down, size = size.tiny, textcolor = color.gray, color = color.new(color.gray, 90), tooltip = tip))
         while dbgLbls.size() > 30
             label.delete(dbgLbls.shift())
     true
+
+// One rejected candidate: ONE record (first failed condition only), written to Pine Logs and, per the label setting, as a chart label
+// whose tooltip carries the same text. Times are New York. Debug only; no state is touched.
 f_candRej(Ctx c, string reason, string detail) =>
     if inDebug
         string head = "REJECT " + reason + " | " + c.tfTxt + " ctx " + (c.dir > 0 ? "LONG" : "SHORT") + " | " + c.winName + " | candle closes " + f_nyT(time_close) + " NY | ctx gap " + str.tostring(c.bottom, format.mintick) + "-" + str.tostring(c.top, format.mintick) + " confirmed " + f_nyT(c.confAsOf) + " | retest " + f_nyT(c.retestTime) + " | " + detail
@@ -1757,6 +2312,11 @@ f_candRej(Ctx c, string reason, string detail) =>
         if inDbgLbl == "All sessions" or (inDbgLbl == "NY windows only" and c.winName != "Asia -> London")
             f_dbg(c.tfTxt + " " + reason, head)
     true
+
+// Entry decision, taken ONCE for this trigger. Rejection keeps the context pending and is never revisited.
+// Evaluate ONE pending context (with its own trigger and its own retest-leg stop) through every gate, in order:
+// 1 impulse, 2 structural stop / risk, 3 clear path (HTF gaps + coverage + 3m swing room), 4 admission (window instance,
+// session limit, unresolved setup, bias). The FIRST failed gate is recorded once. Pure: touches no global state.
 f_evalCand(Ctx c, Zone t) =>
     Cand r = Cand.new(k = c.k, trg = t)
     bool bull = c.dir > 0
@@ -1853,6 +2413,8 @@ f_evalCand(Ctx c, Zone t) =>
                     r.stage := 4
                     r.ok := true
     r
+
+// Create the ONE entry from the chosen candidate. All levels are frozen on the record; both gaps are copied into it.
 f_enter(Cand r, Ctx c) =>
     bool bull = c.dir > 0
     Zone t = r.trg
@@ -1871,6 +2433,7 @@ f_enter(Cand r, Ctx c) =>
         aMsgs.push("H Ticks ENTRY " + dirW + " " + syminfo.ticker + " " + timeframe.period + " | ID " + sid + " | Context " + c.tfTxt + " | Entry " + str.tostring(r.entry, format.mintick) + " | Stop " + str.tostring(r.stop, format.mintick) + " | Target 1R " + str.tostring(r.target, format.mintick) + " | Risk " + str.tostring(r.riskT) + " ticks | Session " + c.winName + " | HTF obstacles checked: " + r.srcTxt)
     f_log("ENTRY " + dirW + " " + c.tfTxt + " E=" + str.tostring(r.entry) + " S=" + str.tostring(r.stop) + " T=" + str.tostring(r.target) + " rT=" + str.tostring(r.riskT))
     true
+
 f_trackSetups() =>
     int rt = 0
     int n = setups.size()
@@ -1913,6 +2476,8 @@ f_trackSetups() =>
                         aMsgs.push("H Ticks " + what + " | ID " + s.id + " | " + (s.dir > 0 ? "LONG" : "SHORT") + " " + syminfo.ticker + " | Session " + s.winName + " | Entry " + str.tostring(s.entry, format.mintick) + " Stop " + str.tostring(s.stop, format.mintick) + " Target " + str.tostring(s.target, format.mintick))
                     f_log("resolved " + s.id + " state=" + str.tostring(res))
     rt
+
+// ═════════════════════════════ MAIN: confirmed-bar processing ═════════════════════════════════
 if supported and barstate.isfirst
     if en1 and sec1 > chartSecs and not al1
         warnArr.push(f_tfText(sec1) + " obstacle source disabled: not an integer multiple of the chart timeframe")
@@ -1928,7 +2493,9 @@ if supported and barstate.isfirst
         warnArr.push("Entry window B disabled: start equals end")
     if inWinPm and not okWinPm
         warnArr.push("Entry window C disabled: start equals end")
+
 bool drawNow = supported and barstate.isconfirmed and (barstate.islast or barstate.islastconfirmedhistory or barstate.isrealtime)
+
 if supported and barstate.isconfirmed
     f_resetEv()
     aMsgs.clear()
@@ -1936,6 +2503,7 @@ if supported and barstate.isconfirmed
     lastConfClose := time_close
     refPrice := close
     needPrune := false
+    // reporting calendar: NY date of this confirmed bar's close (entry dates use the same basis)
     int dkNow = f_dateKey(time_close)
     if dKey.size() == 0 or dKey.last() != dkNow
         dKey.push(dkNow)
@@ -1956,6 +2524,8 @@ if supported and barstate.isconfirmed
             for ii = 1 to NSS * DGN
                 dg.shift()
         needPrune := true
+
+    // 1) mechanical 30s gap lifecycle (unchanged rules). Inversions this bar become trigger candidates.
     int nc = chartZ.size()
     if nc > 0
         for i = nc - 1 to 0
@@ -1969,6 +2539,8 @@ if supported and barstate.isconfirmed
             else if bar_index - z.formBar >= inChWin
                 f_destroy(z)
                 chartZ.remove(i)
+
+    // 2) new 30s gap confirmed by THIS closed bar (candle 3)
     if bar_index >= 2 and not na(h2c) and not na(l2c)
         int bullGap = f_tk(low) - f_tk(h2c)
         int bearGap = f_tk(l2c) - f_tk(high)
@@ -1981,6 +2553,8 @@ if supported and barstate.isconfirmed
     while chartZ.size() > inChCap
         Zone old = chartZ.shift()
         f_destroy(old)
+
+    // 3) obstacle sources: confirmed source inversions / taps are applied BEFORE any entry decision
     if act1
         f_sync(hz1, 0, f_tfText(sec1), snap1, asOf1)
     if act2
@@ -1993,10 +2567,16 @@ if supported and barstate.isconfirmed
     f_tapStore(hz2)
     f_tapStore(hz3)
     f_tapStore(hz4)
+    f_armStep()
+
+    // 4) outcome tracking of entered setups (resolution must precede context ingestion)
     int rt = f_trackSetups()
     if rt > 0
         lastResolveAt := rt
         needPrune := true
+    f_shadowTrack()
+
+    // 5) contexts: expiry, 15m-bias cancellation, then each timeframe's newly available confirmed source data (own cancel / create)
     f_ctxExpire()
     if biasDir != 0
         for k = 0 to NCTX - 1
@@ -2017,6 +2597,8 @@ if supported and barstate.isconfirmed
     if actL
         f_lvlSync(snapL, asOfL)
     f_lvlConsume()
+    // qualification coverage of THIS bar: every active context source ready, 3m structure ready AND every applicable obstacle
+    // source complete. Counted per NY date, only for bars inside an enabled entry window.
     [cvQ, txQ, whQ] = f_coverage()
     bool qualOk = f_ctxReadyAll() and f_lvlReady() and cvQ == 0 and biasDir != 0
     if qualOk and na(covStart)
@@ -2035,10 +2617,12 @@ if supported and barstate.isconfirmed
         dWinN.set(dq, dWinN.get(dq) + 1)
         if not qualOk
             dWinBad.set(dq, dWinBad.get(dq) + 1)
+    // every pending context that already retested is evaluated INDEPENDENTLY on this bar (own trigger, own retest leg)
     array<Cand> cands = array.new<Cand>()
     for k = 0 to NCTX - 1
         Ctx cc = cxs.get(k)
         if cc.state == 2 and cc.retestBar < bar_index
+            // retest-leg extreme of THIS context runs from its first retest candle THROUGH this (possible entry) candle
             if cc.dir > 0 and low < cc.legExt
                 cc.legExt := low
                 cc.legExtT := time
@@ -2094,6 +2678,7 @@ if supported and barstate.isconfirmed
                     cc.lastReason := rc.why
                     f_candRej(cc, array.get(array.from("IMPULSE", "STOP/RISK", "COVERAGE", "OBSTACLE", "WINDOW-INSTANCE", "SESSION-LIMIT", "UNRESOLVED-SETUP", "BIAS"), rc.fail - 7), "trigger gap " + str.tostring(trg.bottom, format.mintick) + "-" + str.tostring(trg.top, format.mintick) + " (confirming candle " + f_nyT(trg.formTime) + "): " + rc.why)
                 cands.push(rc)
+    // choose among PASSING candidates only: 5m > 3m > 2m > 1m (tie-break, not a confirmation requirement)
     Cand pick = na
     if cands.size() > 0
         for pk = 0 to NCTX - 1
@@ -2119,6 +2704,7 @@ if supported and barstate.isconfirmed
                     f_dg(f_winIdxN(cdd.winName, cdd.winStart), 39)
             f_ctxClearAll()
             needPrune := true
+    // retests are evaluated AFTER the trigger step so a candle that both first retests and inverts a gap can never trigger
     for k = 0 to NCTX - 1
         Ctx cr = cxs.get(k)
         if cr.state == 1 and time >= cr.confAsOf
@@ -2143,18 +2729,24 @@ if supported and barstate.isconfirmed
                 int aw = cr.dir > 0 ? f_tk(high) - f_tk(cr.top) : f_tk(cr.bottom) - f_tk(low)
                 if aw > cr.away
                     cr.away := aw
+
     if needPrune
         f_pruneSetups()
+
+    // 6) drawings follow the committed state
     if drawNow
         f_drawAll()
+
 var table stBox = table.new(position.top_right, 1, 6 + REP_MAX, bgcolor = na, border_width = 0)
 var table dbgTbl = table.new(position.bottom_left, 1, 100, bgcolor = na, border_width = 1, border_color = color.gray)
 f_bx(int r, string txt, string tip) =>
     table.cell(stBox, 0, r, txt, text_color = color.black, text_size = size.small, text_halign = text.align_left, bgcolor = na, tooltip = tip)
     true
+
 f_dl(int r, string txt, bool hdr) =>
     table.cell(dbgTbl, 0, r, txt, text_color = hdr ? cHdrTx : cRowTx, text_size = size.small, text_halign = text.align_left, bgcolor = hdr ? cHdrBg : cRowBg)
     true
+
 f_blockTxt(int k) =>
     string r = ""
     for j = 0 to FB - 1
@@ -2162,6 +2754,8 @@ f_blockTxt(int k) =>
         if v > 0
             r += (r == "" ? "" : " | ") + fbNames.get(j) + " " + str.tostring(v)
     cxs.get(k).tfTxt + ": " + (r == "" ? "none" : r)
+
+// Sum of one diagnostic column over the reported dates for session w.
 f_dgSum(array<int> rd, int w, int col) =>
     int sm = 0
     int n = rd.size()
@@ -2171,6 +2765,25 @@ f_dgSum(array<int> rd, int w, int col) =>
             if di >= 0
                 sm += dg.get((di * NSS + w) * DGN + col)
     sm
+
+f_shVar(array<int> rd, int w, int v, string nm) =>
+    int c = 0
+    int ww = 0
+    int ll = 0
+    int aa = 0
+    if w >= 0
+        c := f_dgSum(rd, w, 76 + 4 * v)
+        ww := f_dgSum(rd, w, 77 + 4 * v)
+        ll := f_dgSum(rd, w, 78 + 4 * v)
+        aa := f_dgSum(rd, w, 79 + 4 * v)
+    else
+        for q = 0 to 2
+            c += f_dgSum(rd, q, 76 + 4 * v)
+            ww += f_dgSum(rd, q, 77 + 4 * v)
+            ll += f_dgSum(rd, q, 78 + 4 * v)
+            aa += f_dgSum(rd, q, 79 + 4 * v)
+    nm + " " + str.tostring(c) + " made: " + str.tostring(ww) + " target / " + str.tostring(ll) + " stop / " + str.tostring(aa) + " ambiguous / " + str.tostring(c - ww - ll - aa) + " open"
+
 f_dgList(array<int> rd, int w, int c0, array<string> names) =>
     string r = ""
     int n = names.size()
@@ -2179,6 +2792,7 @@ f_dgList(array<int> rd, int w, int c0, array<string> names) =>
         if v > 0
             r += (r == "" ? "" : " | ") + names.get(j) + " " + str.tostring(v)
     r == "" ? "none" : r
+
 f_srcLine(int idx, string nm, bool act) =>
     string r = nm + ": "
     if not act
@@ -2188,6 +2802,7 @@ f_srcLine(int idx, string nm, bool act) =>
     else
         r += (srcFT.get(idx) > 0 ? "data from " + f_nyT(srcFT.get(idx)) + " NY" : "data start n/a") + ", " + (srcReady.get(idx) ? "ready since " + f_nyT(srcRT.get(idx)) + " NY" : "WARMING UP") + (srcTrunc.get(idx) ? ", CAPACITY-TRUNCATED" : "") + (srcSkip.get(idx) > 0 ? ", skipped updates " + str.tostring(srcSkip.get(idx)) : "")
     r
+
 if barstate.islast
     if not supported
         f_bx(0, "Switch to a standard 30-second chart", "")
@@ -2304,6 +2919,40 @@ if barstate.islast
         int aEnt = f_dgSum(rdg, 0, 16) + f_dgSum(rdg, 1, 16) + f_dgSum(rdg, 2, 16) + f_dgSum(rdg, 0, 29) + f_dgSum(rdg, 1, 29) + f_dgSum(rdg, 2, 29)
         f_dl(dr, "ACCOUNTING CHECK: inversions " + str.tostring(aInv) + " = rejected + admitted " + str.tostring(aInvOut) + (aInv == aInvOut ? " OK" : " MISMATCH") + " | linked candidates " + str.tostring(aCand) + " = failed + passed " + str.tostring(aCandOut) + (aCand == aCandOut ? " OK" : " MISMATCH") + " | passed " + str.tostring(aAdm) + " = entries + outranked " + str.tostring(aEnt) + (aAdm == aEnt ? " OK" : " MISMATCH") + " | impulse fails " + str.tostring(aImp) + " = sub-check firsts " + str.tostring(aImpSub) + (aImp == aImpSub ? " OK" : " MISMATCH"), false)
         dr += 1
+        f_dl(dr, "TAP + BIAS DIAGNOSTIC (counting only, no entries): 15m/1H/4H gap tapped on the chart candle in the bias direction inside a window ARMS (no VWAP/EMA test at the tap); then 1m / 2m bias-direction inversions that open after the tap; VWAP / EMA are judged at the trigger", true)
+        dr += 1
+        int tB = 0
+        int tA = 0
+        for w = 0 to 2
+            int b57 = f_dgSum(rdg, w, 57)
+            int arm = f_dgSum(rdg, w, 59)
+            tB += b57
+            tA += arm + f_dgSum(rdg, w, 62)
+            f_dl(dr, sn.get(w) + ": HTF taps " + str.tostring(f_dgSum(rdg, w, 56)) + " > in bias direction " + str.tostring(b57) + " > ARMED " + str.tostring(arm) + " (ignored, already armed " + str.tostring(f_dgSum(rdg, w, 62)) + ") | info, strict VWAP+EMA test AT THE TAP would have failed: VWAP " + str.tostring(f_dgSum(rdg, w, 60)) + ", EMA " + str.tostring(f_dgSum(rdg, w, 61)) + ", n/a " + str.tostring(f_dgSum(rdg, w, 70)), false)
+            dr += 1
+            f_dl(dr, "   inversions after the tap: 1m " + str.tostring(f_dgSum(rdg, w, 63)) + " / 2m " + str.tostring(f_dgSum(rdg, w, 64)) + " | TRIGGER CANDIDATES AT THE TRIGGER: strict VWAP+EMA ok " + str.tostring(f_dgSum(rdg, w, 67)) + " / not ok " + str.tostring(f_dgSum(rdg, w, 68)) + " | EMA 9/21 trend only ok " + str.tostring(f_dgSum(rdg, w, 71)) + " | price on bias side of VWAP " + str.tostring(f_dgSum(rdg, w, 72)) + " | arms ended with no inversion " + str.tostring(f_dgSum(rdg, w, 69)) + " | straddled the tap " + str.tostring(f_dgSum(rdg, w, 65)) + ", other window " + str.tostring(f_dgSum(rdg, w, 66)), false)
+            dr += 1
+        f_dl(dr, "Tap check: in-window bias-direction taps " + str.tostring(tB) + " = armed + ignored " + str.tostring(tA) + (tB == tA ? " OK" : " MISMATCH") + " | armed right now: " + (armI.get(0) == 1 ? "YES, since " + f_nyT(armI.get(2)) + " NY" : "no") + " | taps are counted only when the chart candle itself touches the gap | every tap and trigger candidate is also written to Pine Logs (TAP / TRIGGER CANDIDATE)", false)
+        dr += 1
+        f_dl(dr, "SHADOW TRACKER (hypothetical 1:1 trades from each tap trigger; NOTHING is entered, drawn or alerted; entry = close of the candle that processes the trigger, stop = beyond the tap-to-trigger extreme + buffer; one shadow trade at a time, 3 per window; no impulse or risk filter; tiny samples prove nothing)", true)
+        dr += 1
+        int shMade = 0
+        int shSkip = 0
+        int shTrig = 0
+        for w = 0 to 2
+            int mk = f_dgSum(rdg, w, 76)
+            int sk = f_dgSum(rdg, w, 73) + f_dgSum(rdg, w, 74) + f_dgSum(rdg, w, 75)
+            shMade += mk
+            shSkip += sk
+            shTrig += f_dgSum(rdg, w, 63) + f_dgSum(rdg, w, 64)
+            f_dl(dr, sn.get(w) + ": trigger candidates " + str.tostring(f_dgSum(rdg, w, 63) + f_dgSum(rdg, w, 64)) + " > shadow trades " + str.tostring(mk) + " (skipped: no valid risk " + str.tostring(f_dgSum(rdg, w, 73)) + ", another shadow open " + str.tostring(f_dgSum(rdg, w, 74)) + ", window cap " + str.tostring(f_dgSum(rdg, w, 75)) + ") | average risk " + (mk > 0 ? str.tostring(f_dgSum(rdg, w, 100) / mk, "#.0") + " ticks" : "n/a"), false)
+            dr += 1
+            f_dl(dr, "   " + f_shVar(rdg, w, 0, "ALL") + " | " + f_shVar(rdg, w, 1, "STRICT VWAP+EMA") + " | " + f_shVar(rdg, w, 2, "EMA TREND") + " | " + f_shVar(rdg, w, 3, "VWAP SIDE") + " | " + f_shVar(rdg, w, 4, "CLEAR PATH") + " | " + f_shVar(rdg, w, 5, "STRICT + CLEAR"), false)
+            dr += 1
+        f_dl(dr, "ALL SESSIONS: " + f_shVar(rdg, -1, 0, "ALL") + " | " + f_shVar(rdg, -1, 1, "STRICT") + " | " + f_shVar(rdg, -1, 2, "EMA TREND") + " | " + f_shVar(rdg, -1, 3, "VWAP SIDE") + " | " + f_shVar(rdg, -1, 4, "CLEAR PATH") + " | " + f_shVar(rdg, -1, 5, "STRICT + CLEAR"), false)
+        dr += 1
+        f_dl(dr, "Shadow check: trigger candidates " + str.tostring(shTrig) + " = shadow trades + skipped " + str.tostring(shMade + shSkip) + (shTrig == shMade + shSkip ? " OK" : " MISMATCH") + " | shadow trades open right now: " + str.tostring(shDir.size()) + " | every shadow trade and resolution is also in Pine Logs (SHADOW TRADE / SHADOW RESOLVED)", false)
+        dr += 1
         f_dl(dr, "UNRESOLVED-SETUP LOCK HISTORY (reported dates): entry -> resolution = blocking interval", true)
         dr += 1
         int shown = 0
@@ -2371,6 +3020,11 @@ if barstate.islast
         table.clear(dbgTbl, 0, dr, 0, 99)
     else
         table.clear(dbgTbl, 0, 0, 0, 99)
+
+// ═════════════════════════════════════════ ALERTS ═════════════════════════════════════════════
+// Only genuine events on a confirmed REALTIME bar; never from history / bootstrap. Every event of the bar is collected in
+// aMsgs while the state machine runs (each event is created once, at its single state transition) and sent as ONE alert().
+// Drawing happens independently and can never produce an alert.
 bool evNow = supported and barstate.isrealtime and barstate.isconfirmed
 if evNow and aMsgs.size() > 0
     alert(array.join(aMsgs, "\n"), alert.freq_once_per_bar_close)

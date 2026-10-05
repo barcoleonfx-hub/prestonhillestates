@@ -25,6 +25,7 @@
 //   never block passing ones. If several pass, 5m > 3m > 2m > 1m decides (a tie-break only). Exactly one entry is created;
 //   all pending contexts are then discarded. Gates: same window instance, < 3 entries per instance, one unresolved setup.
 // Timing: all state changes and drawings happen on confirmed 30s bars. Alerts only on confirmed realtime bars.
+// INDICATOR A (this file): the chain only. The tap + bias idea and its shadow tracker live in research/ (indicator B, counting only).
 // DIAGNOSTICS (Debug ON only; counting and logging, no trading rule depends on them): per NY date x session (Asia / NY morning /
 //   NY afternoon) counts of eligible bars, context inversions by 1m/2m/3m/5m, admitted contexts, retests, 30s candidates and the
 //   FIRST failed gate of every rejected candidate with measured value vs threshold (Pine Logs + label tooltips), unresolved-setup
@@ -76,7 +77,7 @@ const int NCTX = 4
 const int FN = 8
 const int FB = 16
 const int NSS = 4
-const int DGN = 101
+const int DGN = 56
 bool   alAmb = false
 bool   alCtx = false
 bool   alJson = false
@@ -712,15 +713,6 @@ if supported
     blR := bl_
     btR := bt_
     baR := ba_
-int   hmNy = hour(time, TZ_NY) * 60 + minute(time, TZ_NY)
-bool  vwAnchor = hmNy >= 570 and hmNy[1] < 570
-float vwapNy = ta.vwap(hlc3, vwAnchor)
-float em9 = na
-float em21 = na
-if supported
-    [e9_, e21_] = request.security(syminfo.tickerid, "1", [ta.ema(close, 9)[1], ta.ema(close, 21)[1]], lookahead = barmerge.lookahead_on)
-    em9 := e9_
-    em21 := e21_
 if act1
     snap1 := request.security(syminfo.tickerid, tf1, f_engine(inHtfCap, inMinTick, hrz1), lookahead = barmerge.lookahead_on)
     asOf1 := request.security(syminfo.tickerid, tf1, time_close[1], lookahead = barmerge.lookahead_on)
@@ -770,31 +762,7 @@ var array<int>    fnb = array.new_int(NCTX * FB, 0)
 // 35 other inversion chosen, 36 unresolved-setup lock, 37 no window), 38-42 context lost (38 replaced, 39 discarded at another entry,
 // 40 window expiry, 41 closed through, 42 bias flip), 43 informational (candle-1 before confirmation), 44-49 impulse FIRST failed
 // sub-check (dir, body/ATR, body/range, close position, extension, unavailable), 50-54 impulse sub-check failed at all, 55 bars with an open setup.
-// TAP DIAGNOSTIC (no entries): 56 HTF gaps tapped on the chart candle (any direction), 57 in-window taps of a gap in the bias direction,
-// 58 unused, 59 ARMED (bias known, in window, no tap already armed; NO confluence requirement), 60 / 61 / 70 informational: at the tap
-// the strict VWAP+EMA test would have failed on VWAP / EMA / was unavailable, 62 tap while already armed, 63 / 64 1m / 2m inversions
-// strictly after the tap (trigger candidates), 65 inversions that straddle the tap, 66 inversions in another window instance,
-// 67 / 68 trigger candidates with the strict VWAP+EMA test ok / not ok AT THE TRIGGER, 69 arms ended by window end or bias flip
-// without an inversion, 71 trigger candidates with the EMA 9/21 trend alone in the bias direction, 72 with price on the bias side of VWAP.
-// SHADOW TRACKER (hypothetical 1:1 trades from each tap trigger; nothing is drawn or entered): 73 skipped, no valid risk, 74 skipped, a
-// shadow trade is still open, 75 skipped, 3 shadow trades already in that window instance; then per variant v (0 all, 1 strict VWAP+EMA,
-// 2 EMA trend, 3 VWAP side, 4 clear path, 5 strict + clear path) columns 76+4v created, +1 target, +2 stop, +3 ambiguous; 100 sum of risk ticks.
 var array<int>    dg = array.new_int(0)
-var array<int>    armI = array.new_int(5, 0)          // tap diagnostic arm: 0 active, 1 direction, 2 tap candle close, 3 window end, 4 session index
-var array<float>  armF = array.new_float(1, na)       // tap diagnostic: extreme (low for bullish, high for bearish) from the tap candle onwards
-var array<int>    shDir = array.new_int(0)            // shadow tracker: open hypothetical trades (all arrays share one index)
-var array<int>    shEB = array.new_int(0)
-var array<int>    shET = array.new_int(0)
-var array<float>  shStop = array.new_float(0)
-var array<float>  shTgt = array.new_float(0)
-var array<int>    shDK = array.new_int(0)
-var array<int>    shW = array.new_int(0)
-var array<bool>   shFS = array.new_bool(0)
-var array<bool>   shFT = array.new_bool(0)
-var array<bool>   shFV = array.new_bool(0)
-var array<bool>   shFC = array.new_bool(0)
-var array<int>    shK = array.new_int(0)              // shadow trades per window instance (key = window end)
-var array<int>    shC = array.new_int(0)
 var array<string> fbNames = array.from("replaced", "expired", "closed through", "bias flip", "inv: no window", "inv: bias/narrow", "inv: unresolved block", "impulse fail", "stop/risk fail", "coverage unknown", "obstacle", "window instance", "session limit", "unresolved setup", "bias at entry", "outranked")    // per-timeframe first-failed-gate / block counters (each candidate counted once)
 var array<Zone>   pend = array.new<Zone>()            // 30s gaps that inverted on THIS bar (trigger candidates)
 var array<Setup>  setups = array.new<Setup>()
@@ -1633,12 +1601,6 @@ f_dgN(int w, int col, int n) =>
 f_dg(int w, int col) =>
     f_dgN(w, col, 1)
 
-f_dgAtN(int di, int w, int col, int n) =>
-    if di >= 0 and di < dKey.size() and n > 0 and w >= 0 and w < NSS
-        int ix = (di * NSS + w) * DGN + col
-        dg.set(ix, dg.get(ix) + n)
-    true
-
 f_fb(int k, int col) =>
     fnb.set(k * FB + col, fnb.get(k * FB + col) + 1)
     true
@@ -1791,275 +1753,6 @@ f_lockHit(bool ent) =>
             hit.blkCtx += 1
     true
 
-// ───────────── TAP + BIAS CONFLUENCE DIAGNOSTIC (counting only; creates no setup and no entry) ─────────────
-// 0 = VWAP (anchored NY 09:30) and the 1m EMA 9/21 stack both agree with the direction, 1 = VWAP disagrees, 2 = EMA stack disagrees,
-// 3 = unavailable. Evaluated on the confirmed chart bar.
-f_confFail(int dir) =>
-    int f = 0
-    if na(vwapNy) or na(em9) or na(em21)
-        f := 3
-    else if (dir > 0 ? close <= vwapNy : close >= vwapNy)
-        f := 1
-    else if (dir > 0 ? not (close > em9 and close > em21 and em9 > em21) : not (close < em9 and close < em21 and em9 < em21))
-        f := 2
-    f
-
-f_trendOk(int dir) =>
-    not na(em9) and not na(em21) and (dir > 0 ? em9 > em21 : em9 < em21)
-
-f_vwapOk(int dir) =>
-    not na(vwapNy) and (dir > 0 ? close > vwapNy : close < vwapNy)
-
-// One log line per trigger candidate (debug only): times in New York, the values behind each confluence variant.
-f_trigLog(int k, int asOf, int dirA) =>
-    if inDebug
-        log.info("H Ticks | TRIGGER CANDIDATE " + (k == 0 ? "1m" : "2m") + (dirA > 0 ? " bullish" : " bearish") + " inversion, source candle closed " + f_nyT(asOf) + " NY, tap candle closed " + f_nyT(armI.get(2)) + " NY | processed on the candle closing " + f_nyT(time_close) + " NY | close " + str.tostring(close, format.mintick) + " vs VWAP " + str.tostring(vwapNy, format.mintick) + " (" + (f_vwapOk(dirA) ? "ok" : "wrong side") + "), EMA9 " + str.tostring(em9, format.mintick) + " / EMA21 " + str.tostring(em21, format.mintick) + " (trend " + (f_trendOk(dirA) ? "ok" : "against") + ", strict " + (f_confFail(dirA) == 0 ? "ok" : "not ok") + ")")
-    true
-
-// One log line per HTF tap seen on the chart candle (debug only) with the first reason it did or did not arm.
-f_tapLog(Zone z, string why, int cf) =>
-    if inDebug
-        log.info("H Ticks | TAP " + z.tfTxt + (z.dir > 0 ? " bullish" : " bearish") + " gap " + str.tostring(z.bottom, format.mintick) + "-" + str.tostring(z.top, format.mintick) + " | candle closes " + f_nyT(time_close) + " NY | 15m bias " + (biasDir > 0 ? "bullish" : (biasDir < 0 ? "bearish" : "unknown")) + " | " + why + " | at the tap: close " + str.tostring(close, format.mintick) + " vs VWAP " + str.tostring(vwapNy, format.mintick) + ", EMA9 " + str.tostring(em9, format.mintick) + " / EMA21 " + str.tostring(em21, format.mintick) + " (strict test " + (cf == 0 ? "would pass" : (cf == 1 ? "would fail on VWAP" : (cf == 2 ? "would fail on EMA" : "n/a"))) + ")")
-    true
-
-// ───────────── SHADOW TRACKER: hypothetical 1:1 trades from the tap trigger (counting only; no entry, no drawing, no alert) ─────────────
-// Entry = close of the chart candle that processes the trigger. Stop = beyond the extreme from the tap candle through that candle
-// +/- max(1 tick, 0.10 x prev ATR), rounded outward; target = the same tick distance. Same outcome rules as real setups (candles
-// strictly after the entry candle, open first, then the range). Gates: one shadow trade open at a time, 3 per window instance.
-f_shWinCount(int k) =>
-    int c = 0
-    int n = shK.size()
-    if n > 0
-        for i = 0 to n - 1
-            if shK.get(i) == k
-                c := shC.get(i)
-    c
-
-f_shWinInc(int k) =>
-    bool found = false
-    int n = shK.size()
-    if n > 0
-        for i = 0 to n - 1
-            if shK.get(i) == k
-                shC.set(i, shC.get(i) + 1)
-                found := true
-    if not found
-        shK.push(k)
-        shC.push(1)
-    while shK.size() > 60
-        shK.shift()
-        shC.shift()
-    true
-
-f_shadowNew(int dirA, int wA, int weI) =>
-    bool bull = dirA > 0
-    float atrP = chartAtr[1]
-    int bufT = na(atrP) ? 1 : math.max(1, int(math.ceil(0.10 * atrP / syminfo.mintick - 0.000001)))
-    float ext = armF.get(0)
-    int eT = f_tk(close)
-    int sT = 0
-    int rT = 0
-    bool okR = not na(ext)
-    if okR
-        sT := bull ? int(math.floor(ext / syminfo.mintick + 0.000001)) - bufT : int(math.ceil(ext / syminfo.mintick - 0.000001)) + bufT
-        rT := bull ? eT - sT : sT - eT
-        okR := rT >= 1
-    if not okR
-        f_dg(wA, 73)
-    else if shDir.size() > 0
-        f_dg(wA, 74)
-    else if f_shWinCount(weI) >= MAX_ENTRIES
-        f_dg(wA, 75)
-    else
-        float entry = eT * syminfo.mintick
-        int tT = bull ? eT + rT : eT - rT
-        float target = tT * syminfo.mintick
-        float stop = sT * syminfo.mintick
-        bool clr = false
-        string pathTxt = "HTF coverage not complete"
-        [cvS, txS, whS] = f_coverage()
-        if cvS == 0
-            float lo = bull ? entry : target
-            float hi = bull ? target : entry
-            [obsN, obsNm] = f_scanAll(bull, lo, hi)
-            if obsN > 0
-                pathTxt := "blocked by " + obsNm
-            else if not f_lvlReady()
-                pathTxt := "3m structure not ready"
-            else
-                [stB, stNr] = f_structCheck(bull, tT)
-                clr := not stB
-                pathTxt := stB ? "blocked by a 3m swing" : "clear"
-        bool vS = f_confFail(dirA) == 0
-        bool vT = f_trendOk(dirA)
-        bool vV = f_vwapOk(dirA)
-        shDir.push(dirA)
-        shEB.push(bar_index)
-        shET.push(time_close)
-        shStop.push(stop)
-        shTgt.push(target)
-        shDK.push(f_dateKey(time_close))
-        shW.push(wA)
-        shFS.push(vS)
-        shFT.push(vT)
-        shFV.push(vV)
-        shFC.push(clr)
-        f_shWinInc(weI)
-        f_dg(wA, 76)
-        if vS
-            f_dg(wA, 80)
-        if vT
-            f_dg(wA, 84)
-        if vV
-            f_dg(wA, 88)
-        if clr
-            f_dg(wA, 92)
-        if vS and clr
-            f_dg(wA, 96)
-        f_dgN(wA, 100, rT)
-        if inDebug
-            log.info("H Ticks | SHADOW TRADE " + (bull ? "LONG" : "SHORT") + " | entry candle closes " + f_nyT(time_close) + " NY | entry " + str.tostring(entry, format.mintick) + " stop " + str.tostring(stop, format.mintick) + " target " + str.tostring(target, format.mintick) + " risk " + str.tostring(rT) + " ticks | strict " + (vS ? "ok" : "no") + ", EMA trend " + (vT ? "ok" : "no") + ", VWAP side " + (vV ? "ok" : "no") + ", clear path " + (clr ? "yes" : "no") + " (" + pathTxt + ")")
-    true
-
-f_shadowTrack() =>
-    int n = shDir.size()
-    if n > 0
-        int oTk = f_tk(open)
-        int hTk = f_tk(high)
-        int lTk = f_tk(low)
-        for i = n - 1 to 0
-            if bar_index > shEB.get(i)
-                int sTk = f_tk(shStop.get(i))
-                int tTk = f_tk(shTgt.get(i))
-                int res = 0
-                if shDir.get(i) > 0
-                    if oTk >= tTk
-                        res := 1
-                    else if oTk <= sTk
-                        res := 2
-                    else
-                        bool th = hTk >= tTk
-                        bool sh = lTk <= sTk
-                        res := th and sh ? 3 : (th ? 1 : (sh ? 2 : 0))
-                else
-                    if oTk <= tTk
-                        res := 1
-                    else if oTk >= sTk
-                        res := 2
-                    else
-                        bool th = lTk <= tTk
-                        bool sh = hTk >= sTk
-                        res := th and sh ? 3 : (th ? 1 : (sh ? 2 : 0))
-                if res != 0
-                    int di = f_dateIdx(shDK.get(i))
-                    int w = shW.get(i)
-                    f_dgAtN(di, w, 76 + res, 1)
-                    if shFS.get(i)
-                        f_dgAtN(di, w, 80 + res, 1)
-                    if shFT.get(i)
-                        f_dgAtN(di, w, 84 + res, 1)
-                    if shFV.get(i)
-                        f_dgAtN(di, w, 88 + res, 1)
-                    if shFC.get(i)
-                        f_dgAtN(di, w, 92 + res, 1)
-                    if shFS.get(i) and shFC.get(i)
-                        f_dgAtN(di, w, 96 + res, 1)
-                    if inDebug
-                        log.info("H Ticks | SHADOW RESOLVED " + (res == 1 ? "TARGET" : (res == 2 ? "STOP" : "AMBIGUOUS")) + " | entered " + f_nyT(shET.get(i)) + " NY, resolved on the candle closing " + f_nyT(time_close) + " NY")
-                    shDir.remove(i)
-                    shEB.remove(i)
-                    shET.remove(i)
-                    shStop.remove(i)
-                    shTgt.remove(i)
-                    shDK.remove(i)
-                    shW.remove(i)
-                    shFS.remove(i)
-                    shFT.remove(i)
-                    shFV.remove(i)
-                    shFC.remove(i)
-    true
-
-// A 1m / 2m inversion in the bias direction while a tap is armed. Strictly after the tap = the source candle OPENED at/after the
-// tap candle closed; the same window instance is required; the first valid one is the trigger candidate and ends the arm.
-// The VWAP / EMA variants are evaluated HERE (price has bounced), not at the pullback tap.
-f_armInv(int k, int asOf, int tfMs) =>
-    if armI.get(0) == 1
-        [wnI, wsI, weI] = f_selectWindow(asOf)
-        int wA = armI.get(4)
-        if asOf - tfMs < armI.get(2)
-            f_dg(wA, 65)
-        else if na(wsI) or weI != armI.get(3)
-            f_dg(wA, 66)
-        else
-            int dirA = armI.get(1)
-            f_dg(wA, 63 + k)
-            f_dg(wA, f_confFail(dirA) == 0 ? 67 : 68)
-            if f_trendOk(dirA)
-                f_dg(wA, 71)
-            if f_vwapOk(dirA)
-                f_dg(wA, 72)
-            f_trigLog(k, asOf, dirA)
-            f_shadowNew(dirA, wA, weI)
-            armI.set(0, 0)
-    true
-
-f_tapScan(array<Zone> a, int wT, bool inWin, int weT) =>
-    int n = a.size()
-    if n > 0
-        for i = 0 to n - 1
-            Zone z = a.get(i)
-            if z.tapped and z.tapTime == time and z.tapAvail == time_close
-                f_dg(wT, 56)
-                int cf = biasDir != 0 ? f_confFail(biasDir) : 3
-                string why = "not armed: 15m bias unknown"
-                if biasDir != 0
-                    if z.dir != biasDir
-                        why := "not armed: gap points against the bias"
-                    else
-                        f_dg(wT, 57)
-                        if not inWin
-                            why := "not armed: outside every entry window"
-                        else
-                            if cf == 3
-                                f_dg(wT, 70)
-                            else if cf == 1
-                                f_dg(wT, 60)
-                            else if cf == 2
-                                f_dg(wT, 61)
-                            if armI.get(0) == 1
-                                f_dg(wT, 62)
-                                why := "not armed: an earlier tap is still armed"
-                            else
-                                f_dg(wT, 59)
-                                armF.set(0, biasDir > 0 ? low : high)
-                                armI.set(0, 1)
-                                armI.set(1, biasDir)
-                                armI.set(2, time_close)
-                                armI.set(3, weT)
-                                armI.set(4, wT)
-                                why := "ARMED"
-                f_tapLog(z, why, cf)
-    true
-
-f_armStep() =>
-    if armI.get(0) == 1
-        if time_close >= armI.get(3) or biasDir != armI.get(1)
-            f_dg(armI.get(4), 69)
-            armI.set(0, 0)
-    [wnT, wsT, weT] = f_selectWindow(time_close)
-    int wT = f_winIdxN(wnT, wsT)
-    f_tapScan(hz1, wT, not na(wsT), weT)
-    f_tapScan(hz2, wT, not na(wsT), weT)
-    f_tapScan(hz3, wT, not na(wsT), weT)
-    f_tapScan(hz4, wT, not na(wsT), weT)
-    if armI.get(0) == 1
-        float ex = armF.get(0)
-        if armI.get(1) > 0
-            armF.set(0, na(ex) ? low : math.min(ex, low))
-        else
-            armF.set(0, na(ex) ? high : math.max(ex, high))
-    true
-
 // Mandatory expiry at the originating window's end (end exclusive); optional maximum age. Never transferred.
 // Mandatory expiry at the originating window's end (end exclusive). Never transferred to another window.
 f_ctxExpire() =>
@@ -2108,8 +1801,6 @@ f_ctxUpdate(int k, array<float> snap, int asOf, float cCl) =>
                     nNW += 1
                 else
                     nEl += 1
-                if k <= 1 and dirOk and wideOk
-                    f_armInv(k, asOf, c.tfSecs * 1000)
                 if dirOk and wideOk
                     float w = snap.get(base + 2) - snap.get(base + 3)
                     int ft = int(snap.get(base))
@@ -2567,14 +2258,12 @@ if supported and barstate.isconfirmed
     f_tapStore(hz2)
     f_tapStore(hz3)
     f_tapStore(hz4)
-    f_armStep()
 
     // 4) outcome tracking of entered setups (resolution must precede context ingestion)
     int rt = f_trackSetups()
     if rt > 0
         lastResolveAt := rt
         needPrune := true
-    f_shadowTrack()
 
     // 5) contexts: expiry, 15m-bias cancellation, then each timeframe's newly available confirmed source data (own cancel / create)
     f_ctxExpire()
@@ -2766,24 +2455,6 @@ f_dgSum(array<int> rd, int w, int col) =>
                 sm += dg.get((di * NSS + w) * DGN + col)
     sm
 
-f_shVar(array<int> rd, int w, int v, string nm) =>
-    int c = 0
-    int ww = 0
-    int ll = 0
-    int aa = 0
-    if w >= 0
-        c := f_dgSum(rd, w, 76 + 4 * v)
-        ww := f_dgSum(rd, w, 77 + 4 * v)
-        ll := f_dgSum(rd, w, 78 + 4 * v)
-        aa := f_dgSum(rd, w, 79 + 4 * v)
-    else
-        for q = 0 to 2
-            c += f_dgSum(rd, q, 76 + 4 * v)
-            ww += f_dgSum(rd, q, 77 + 4 * v)
-            ll += f_dgSum(rd, q, 78 + 4 * v)
-            aa += f_dgSum(rd, q, 79 + 4 * v)
-    nm + " " + str.tostring(c) + " made: " + str.tostring(ww) + " target / " + str.tostring(ll) + " stop / " + str.tostring(aa) + " ambiguous / " + str.tostring(c - ww - ll - aa) + " open"
-
 f_dgList(array<int> rd, int w, int c0, array<string> names) =>
     string r = ""
     int n = names.size()
@@ -2918,40 +2589,6 @@ if barstate.islast
         int aAdm = f_dgSum(rdg, 0, 15) + f_dgSum(rdg, 1, 15) + f_dgSum(rdg, 2, 15)
         int aEnt = f_dgSum(rdg, 0, 16) + f_dgSum(rdg, 1, 16) + f_dgSum(rdg, 2, 16) + f_dgSum(rdg, 0, 29) + f_dgSum(rdg, 1, 29) + f_dgSum(rdg, 2, 29)
         f_dl(dr, "ACCOUNTING CHECK: inversions " + str.tostring(aInv) + " = rejected + admitted " + str.tostring(aInvOut) + (aInv == aInvOut ? " OK" : " MISMATCH") + " | linked candidates " + str.tostring(aCand) + " = failed + passed " + str.tostring(aCandOut) + (aCand == aCandOut ? " OK" : " MISMATCH") + " | passed " + str.tostring(aAdm) + " = entries + outranked " + str.tostring(aEnt) + (aAdm == aEnt ? " OK" : " MISMATCH") + " | impulse fails " + str.tostring(aImp) + " = sub-check firsts " + str.tostring(aImpSub) + (aImp == aImpSub ? " OK" : " MISMATCH"), false)
-        dr += 1
-        f_dl(dr, "TAP + BIAS DIAGNOSTIC (counting only, no entries): 15m/1H/4H gap tapped on the chart candle in the bias direction inside a window ARMS (no VWAP/EMA test at the tap); then 1m / 2m bias-direction inversions that open after the tap; VWAP / EMA are judged at the trigger", true)
-        dr += 1
-        int tB = 0
-        int tA = 0
-        for w = 0 to 2
-            int b57 = f_dgSum(rdg, w, 57)
-            int arm = f_dgSum(rdg, w, 59)
-            tB += b57
-            tA += arm + f_dgSum(rdg, w, 62)
-            f_dl(dr, sn.get(w) + ": HTF taps " + str.tostring(f_dgSum(rdg, w, 56)) + " > in bias direction " + str.tostring(b57) + " > ARMED " + str.tostring(arm) + " (ignored, already armed " + str.tostring(f_dgSum(rdg, w, 62)) + ") | info, strict VWAP+EMA test AT THE TAP would have failed: VWAP " + str.tostring(f_dgSum(rdg, w, 60)) + ", EMA " + str.tostring(f_dgSum(rdg, w, 61)) + ", n/a " + str.tostring(f_dgSum(rdg, w, 70)), false)
-            dr += 1
-            f_dl(dr, "   inversions after the tap: 1m " + str.tostring(f_dgSum(rdg, w, 63)) + " / 2m " + str.tostring(f_dgSum(rdg, w, 64)) + " | TRIGGER CANDIDATES AT THE TRIGGER: strict VWAP+EMA ok " + str.tostring(f_dgSum(rdg, w, 67)) + " / not ok " + str.tostring(f_dgSum(rdg, w, 68)) + " | EMA 9/21 trend only ok " + str.tostring(f_dgSum(rdg, w, 71)) + " | price on bias side of VWAP " + str.tostring(f_dgSum(rdg, w, 72)) + " | arms ended with no inversion " + str.tostring(f_dgSum(rdg, w, 69)) + " | straddled the tap " + str.tostring(f_dgSum(rdg, w, 65)) + ", other window " + str.tostring(f_dgSum(rdg, w, 66)), false)
-            dr += 1
-        f_dl(dr, "Tap check: in-window bias-direction taps " + str.tostring(tB) + " = armed + ignored " + str.tostring(tA) + (tB == tA ? " OK" : " MISMATCH") + " | armed right now: " + (armI.get(0) == 1 ? "YES, since " + f_nyT(armI.get(2)) + " NY" : "no") + " | taps are counted only when the chart candle itself touches the gap | every tap and trigger candidate is also written to Pine Logs (TAP / TRIGGER CANDIDATE)", false)
-        dr += 1
-        f_dl(dr, "SHADOW TRACKER (hypothetical 1:1 trades from each tap trigger; NOTHING is entered, drawn or alerted; entry = close of the candle that processes the trigger, stop = beyond the tap-to-trigger extreme + buffer; one shadow trade at a time, 3 per window; no impulse or risk filter; tiny samples prove nothing)", true)
-        dr += 1
-        int shMade = 0
-        int shSkip = 0
-        int shTrig = 0
-        for w = 0 to 2
-            int mk = f_dgSum(rdg, w, 76)
-            int sk = f_dgSum(rdg, w, 73) + f_dgSum(rdg, w, 74) + f_dgSum(rdg, w, 75)
-            shMade += mk
-            shSkip += sk
-            shTrig += f_dgSum(rdg, w, 63) + f_dgSum(rdg, w, 64)
-            f_dl(dr, sn.get(w) + ": trigger candidates " + str.tostring(f_dgSum(rdg, w, 63) + f_dgSum(rdg, w, 64)) + " > shadow trades " + str.tostring(mk) + " (skipped: no valid risk " + str.tostring(f_dgSum(rdg, w, 73)) + ", another shadow open " + str.tostring(f_dgSum(rdg, w, 74)) + ", window cap " + str.tostring(f_dgSum(rdg, w, 75)) + ") | average risk " + (mk > 0 ? str.tostring(f_dgSum(rdg, w, 100) / mk, "#.0") + " ticks" : "n/a"), false)
-            dr += 1
-            f_dl(dr, "   " + f_shVar(rdg, w, 0, "ALL") + " | " + f_shVar(rdg, w, 1, "STRICT VWAP+EMA") + " | " + f_shVar(rdg, w, 2, "EMA TREND") + " | " + f_shVar(rdg, w, 3, "VWAP SIDE") + " | " + f_shVar(rdg, w, 4, "CLEAR PATH") + " | " + f_shVar(rdg, w, 5, "STRICT + CLEAR"), false)
-            dr += 1
-        f_dl(dr, "ALL SESSIONS: " + f_shVar(rdg, -1, 0, "ALL") + " | " + f_shVar(rdg, -1, 1, "STRICT") + " | " + f_shVar(rdg, -1, 2, "EMA TREND") + " | " + f_shVar(rdg, -1, 3, "VWAP SIDE") + " | " + f_shVar(rdg, -1, 4, "CLEAR PATH") + " | " + f_shVar(rdg, -1, 5, "STRICT + CLEAR"), false)
-        dr += 1
-        f_dl(dr, "Shadow check: trigger candidates " + str.tostring(shTrig) + " = shadow trades + skipped " + str.tostring(shMade + shSkip) + (shTrig == shMade + shSkip ? " OK" : " MISMATCH") + " | shadow trades open right now: " + str.tostring(shDir.size()) + " | every shadow trade and resolution is also in Pine Logs (SHADOW TRADE / SHADOW RESOLVED)", false)
         dr += 1
         f_dl(dr, "UNRESOLVED-SETUP LOCK HISTORY (reported dates): entry -> resolution = blocking interval", true)
         dr += 1

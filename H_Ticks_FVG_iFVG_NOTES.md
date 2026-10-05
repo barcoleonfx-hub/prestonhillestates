@@ -214,3 +214,7 @@ Every tap trigger candidate becomes a hypothetical 1:1 trade: entry = close of t
 
 ### Days reported (2026-10-05)
 New setting "Days reported (stats box and debug counts)", default 20 (1-20), replaces the fixed 5. The stats box title shows how many dates are really used ("Last N days (all loaded)" when the chart has fewer). The per-date arrays keep 40 dates, the debug table has 100 rows, the stats table 26 rows. Reported dates are limited by how many 30s bars TradingView loads (about 11 weekdays on the user's chart on 10-05); Coverage reads Partial when fewer than the requested number are available. No trading rule changed.
+
+### Split into A and B (2026-10-05)
+**A = `H_Ticks_FVG_iFVG.pine` (+ `_paste.pine`)**: the real chain only (15m bias -> 1m/2m/3m/5m context inversion -> retest -> fresh 30s inversion -> decisive candle -> structural stop -> 1R), the per-date / per-session funnel with accounting checks, REJECT records, lock history, Days reported (default 20). Removed: the tap + bias diagnostic, the VWAP / EMA request, the shadow tracker, their counters, panel blocks and log lines (one `request.security` fewer). No trading rule changed (all trading functions are text-identical to commit 00df0ca where they were before).
+**B = research only**: `research/H_Ticks_B_research_tap_shadow_COMBINED.pine` is the former combined script (A chain + tap + shadow). It is the base to trim into a standalone indicator B later; its checks live in `tests/research/tap_shadow_sim.py` (14 checks). B is NOT a standalone script yet.
