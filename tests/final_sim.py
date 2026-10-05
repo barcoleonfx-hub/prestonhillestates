@@ -208,7 +208,7 @@ chk('Code: outcome model unchanged (strictly-after-entry candle, opening-price p
 
 # ---------- simple settings ----------
 inputs = re.findall(r'^\w+\s+(\w+)\s*=\s*input\.', CODE, re.M)
-chk('Only practical user inputs remain (%d): %s' % (len(inputs), ','.join(inputs)), len(inputs) <= 18 and 'inPreset' in inputs and 'inTheme' in inputs and 'inDebug' in inputs, 'CODE INSPECTION')
+chk('Only practical user inputs remain (%d): %s' % (len(inputs), ','.join(inputs)), len(inputs) <= 20 and 'inRepDays' in inputs and 'inPreset' in inputs and 'inTheme' in inputs and 'inDebug' in inputs, 'CODE INSPECTION')
 chk('Debug defaults OFF; Standard default; Light default', 'inDebug = input.bool(false' in CODE and 'input.string("Standard"' in CODE and 'input.string("Light"' in CODE, 'CODE INSPECTION')
 _vo = set(); _cur = 'top'
 for _l in CODE.split('\n'):

@@ -20,13 +20,15 @@ bool   inShowRR = input.bool(true, "Show risk/reward shading", group = GRP_APP)
 string inTheme = input.string("Light", "Theme (labels and tables)", options = ["Light", "Dark"], group = GRP_APP, tooltip = "Light: black entry line. Dark: white entry line (black would be invisible). Tables always use opaque backgrounds.")
 bool   inStats = input.bool(true, "Show the small stats box (top-right)", group = GRP_ST)
 bool   inDaily = input.bool(false, "Optional: daily breakdown under the stats box", group = GRP_ST)
-bool   inDebug = input.bool(false, "Debug panel: per-date / per-session funnel, first failed gate, lock intervals, source readiness, rejection records", group = GRP_DBG, tooltip = "Counts cover the 5 reported NY dates. Every rejected candidate is counted once at its FIRST failed gate and written to Pine Logs with timestamps, source timeframe and measured value vs threshold.")
+int    inRepDays = input.int(20, "Days reported (stats box and debug counts)", minval = 1, maxval = 20, group = GRP_ST, tooltip = "How many of the latest Mon-Fri New York dates the stats box and the debug counts cover. If the chart has fewer dates loaded, everything available is used and Coverage reads Partial. TradingView limits how many 30s bars are loaded; the script cannot add more.")
+bool   inDebug = input.bool(false, "Debug panel: per-date / per-session funnel, first failed gate, lock intervals, source readiness, rejection records", group = GRP_DBG, tooltip = "Counts cover the reported NY dates (setting: Days reported). Every rejected candidate is counted once at its FIRST failed gate and written to Pine Logs with timestamps, source timeframe and measured value vs threshold.")
 string inDbgLbl = input.string("NY windows only", "Debug: rejected-candidate labels (full record in the label tooltip and in Pine Logs)", options = ["Off", "NY windows only", "All sessions"], group = GRP_DBG, tooltip = "Only the latest 30 labels can exist at once. EVERY rejected candidate is also written to the Pine Logs pane while Debug is ON.")
 bool   alEntry = input.bool(true, "Alert on each new entry", group = GRP_AL)
 bool   alTarget = input.bool(true, "Alert when a setup hits its target", group = GRP_AL)
 bool   alStop = input.bool(true, "Alert when a setup hits its stop", group = GRP_AL)
 const string TZ_NY = "America/New_York"
-const int REP_DATES = 5
+const int REP_MAX = 20
+int    REP_DATES = inRepDays
 const int DRAW_MAX = 40
 const int MAX_ENTRIES = 3
 const int LS = 4
@@ -2221,7 +2223,7 @@ if supported and barstate.isconfirmed
             dg.push(0)
         if na(firstDateKey)
             firstDateKey := dkNow
-        while dKey.size() > 14
+        while dKey.size() > 40
             dKey.shift()
             dDow.shift()
             dWinN.shift()
@@ -2423,8 +2425,8 @@ if supported and barstate.isconfirmed
         f_pruneSetups()
     if drawNow
         f_drawAll()
-var table stBox = table.new(position.top_right, 1, 11, bgcolor = na, border_width = 0)
-var table dbgTbl = table.new(position.bottom_left, 1, 80, bgcolor = na, border_width = 1, border_color = color.gray)
+var table stBox = table.new(position.top_right, 1, 6 + REP_MAX, bgcolor = na, border_width = 0)
+var table dbgTbl = table.new(position.bottom_left, 1, 100, bgcolor = na, border_width = 1, border_color = color.gray)
 f_bx(int r, string txt, string tip) =>
     table.cell(stBox, 0, r, txt, text_color = color.black, text_size = size.small, text_halign = text.align_left, bgcolor = na, tooltip = tip)
     true
@@ -2484,7 +2486,7 @@ f_srcLine(int idx, string nm, bool act) =>
 if barstate.islast
     if not supported
         f_bx(0, "Switch to a standard 30-second chart", "")
-        table.clear(stBox, 0, 1, 0, 10)
+        table.clear(stBox, 0, 1, 0, 5 + REP_MAX)
     else if inStats
         array<int> rd = f_reportDates()
         int nr = rd.size()
@@ -2511,8 +2513,8 @@ if barstate.islast
                 if so.state == 0 and so.dateKey < rd.first()
                     oldOpen += 1
         bool covFull = nr == REP_DATES and miss == ""
-        string covTip = covFull ? "Every one of the last 5 dates was fully evaluated." : "Only RECORDED setups are counted. " + (nr < REP_DATES ? "Only " + str.tostring(nr) + " date(s) of chart data. " : "") + (miss == "" ? "" : "Not fully evaluated: " + miss) + "Zero setups on such a date is NOT proof that none qualified."
-        f_bx(0, "Last 5 days", "NY entry dates; outcomes follow the entry date")
+        string covTip = covFull ? "Every one of the " + str.tostring(REP_DATES) + " reported dates was fully evaluated." : "Only RECORDED setups are counted. " + (nr < REP_DATES ? "Only " + str.tostring(nr) + " date(s) of chart data. " : "") + (miss == "" ? "" : "Not fully evaluated: " + miss) + "Zero setups on such a date is NOT proof that none qualified."
+        f_bx(0, "Last " + str.tostring(nr) + " days" + (nr < REP_DATES ? " (all loaded)" : ""), "NY entry dates; outcomes follow the entry date")
         f_bx(1, "Setups: " + str.tostring(tW + tL + tO + tA), oldOpen > 0 ? str.tostring(oldOpen) + " older unresolved setup(s) are retained but not in this count" : "")
         f_bx(2, "Wins: " + str.tostring(tW) + " | Losses: " + str.tostring(tL), "")
         f_bx(3, "Open: " + str.tostring(tO) + " | Ambiguous: " + str.tostring(tA), "Ambiguous = target and stop both reachable in one candle with the order unknown")
@@ -2529,9 +2531,9 @@ if barstate.islast
                 else
                     table.clear(stBox, 0, 6 + r, 0, 6 + r)
         else
-            table.clear(stBox, 0, 6, 0, 10)
+            table.clear(stBox, 0, 6, 0, 5 + REP_MAX)
     else
-        table.clear(stBox, 0, 0, 0, 10)
+        table.clear(stBox, 0, 0, 0, 5 + REP_MAX)
     if supported and inDebug
         int dr = 0
         array<int> rdg = f_reportDates()
@@ -2644,7 +2646,7 @@ if barstate.islast
         if shown == 0
             f_dl(dr, "no setups on the reported dates, so no lock interval exists", false)
             dr += 1
-        f_dl(dr, "PER CONTEXT TIMEFRAME, SINCE LOAD (all loaded history, NOT only the 5 dates): inversions / admitted / retests / 30s candidates / impulse / stop-risk / clear path / entries", true)
+        f_dl(dr, "PER CONTEXT TIMEFRAME, SINCE LOAD (all loaded history, NOT only the reported dates): inversions / admitted / retests / 30s candidates / impulse / stop-risk / clear path / entries", true)
         dr += 1
         for k = 0 to NCTX - 1
             string fl = cxs.get(k).tfTxt + (actCtxA.get(k) ? ": " : " (off): ")
@@ -2695,9 +2697,9 @@ if barstate.islast
         if setups.size() > DRAW_MAX
             f_dl(dr, "Drawings limited to " + str.tostring(DRAW_MAX) + " setups; records and statistics are unaffected", false)
             dr += 1
-        table.clear(dbgTbl, 0, dr, 0, 79)
+        table.clear(dbgTbl, 0, dr, 0, 99)
     else
-        table.clear(dbgTbl, 0, 0, 0, 79)
+        table.clear(dbgTbl, 0, 0, 0, 99)
 bool evNow = supported and barstate.isrealtime and barstate.isconfirmed
 if evNow and aMsgs.size() > 0
     alert(array.join(aMsgs, "\n"), alert.freq_once_per_bar_close)

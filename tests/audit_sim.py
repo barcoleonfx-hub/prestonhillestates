@@ -153,8 +153,8 @@ chk('Code: setup drawings are rebuilt from the Setup records on drawNow (last co
 box = CODE[CODE.index('var table stBox'):CODE.index('f_dl(int r')]
 chk('Code: ONE small stats box, top-right, transparent background, solid black text, small size, no frame/border, no width/height, no merged cells',
     'position.top_right' in box and 'bgcolor = na' in box and 'text_color = color.black' in box and 'text_size = size.small' in box and 'border_width = 0' in box and not re.search(r'(?<!border_)width|height', box) and 'merge_cells' not in CODE, 'CODE INSPECTION')
-chk('Code: default content lines are exactly Last 5 days / Setups / Wins | Losses / Open | Ambiguous / Win rate / Coverage (win rate shows "—" without resolved trades)',
-    all(x in CODE for x in ('"Last 5 days"', '"Setups: "', '"Wins: "', '" | Losses: "', '"Open: "', '" | Ambiguous: "', '"Win rate: "', '"Coverage: "', '"—"')), 'CODE INSPECTION')
+chk('Code: default content lines are exactly Last N days / Setups / Wins | Losses / Open | Ambiguous / Win rate / Coverage (win rate shows "—" without resolved trades)',
+    all(x in CODE for x in ('"Last " + str.tostring(nr) + " days"', '"Setups: "', '"Wins: "', '" | Losses: "', '"Open: "', '" | Ambiguous: "', '"Win rate: "', '"Coverage: "', '"—"')), 'CODE INSPECTION')
 chk('Code: old bottom table, top-left status panel and warning band are gone; daily breakdown and debug are OFF by default',
     'stTbl' not in CODE and 'staTbl' not in CODE and 'warnTbl' not in CODE and 'inDaily = input.bool(false' in CODE and 'inDebug = input.bool(false' in CODE, 'CODE INSPECTION')
 chk('Code: coverage text is Full / Partial only; the long explanation is in a tooltip; partial coverage still counts only recorded setups',
