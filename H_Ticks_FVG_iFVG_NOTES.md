@@ -218,3 +218,9 @@ New setting "Days reported (stats box and debug counts)", default 20 (1-20), rep
 ### Split into A and B (2026-10-05)
 **A = `H_Ticks_FVG_iFVG.pine` (+ `_paste.pine`)**: the real chain only (15m bias -> 1m/2m/3m/5m context inversion -> retest -> fresh 30s inversion -> decisive candle -> structural stop -> 1R), the per-date / per-session funnel with accounting checks, REJECT records, lock history, Days reported (default 20). Removed: the tap + bias diagnostic, the VWAP / EMA request, the shadow tracker, their counters, panel blocks and log lines (one `request.security` fewer). No trading rule changed (all trading functions are text-identical to commit 00df0ca where they were before).
 **B = research only**: `research/H_Ticks_B_research_tap_shadow_COMBINED.pine` is the former combined script (A chain + tap + shadow). It is the base to trim into a standalone indicator B later; its checks live in `tests/research/tap_shadow_sim.py` (14 checks). B is NOT a standalone script yet.
+
+## 15s trigger option (round: "30s and 15s gaps, either one")
+- New inputs (Setup quality): `inUse15` (default OFF = original behaviour) and `inMin15` (default 3 ticks, 15s gaps narrower are ignored).
+- 15s candles come from `request.security_lower_tf("15S")`; the two 15s candles of each closed 30s bar are stepped in order with the same gap/inversion rules as the 30s gaps. A 15s gap that inverts on the bar and still stands joins the trigger candidates; everything after that (overlap with the context gap, freshness, impulse test on the 30s candle, stop, 1R, clear path, gates) is unchanged.
+- Touch/invalidation on the SAME 30s bar as the inversion never removes it (judged from the next bar).
+- Not compiled or replayed by me; needs 15s data on the TradingView plan. Entries from a 15s trigger say "15s trigger confirmed" in the label tooltip.

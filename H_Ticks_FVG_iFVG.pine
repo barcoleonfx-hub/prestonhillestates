@@ -49,6 +49,8 @@ bool   inWinAm = input.bool(true, "Window B: New York morning 09:45-11:30", grou
 bool   inWinPm = input.bool(true, "Window C: New York afternoon 14:30-15:30", group = GRP_WIN)
 string inPreset = input.string("Standard", "Impulse preset (decisive 30s inversion candle)", options = ["Standard", "Strong"], group = GRP_Q, tooltip = "Standard: body >= 0.8 x prev ATR, body/range >= 0.65, close in the outer 20% of the range. Strong: 1.0 x, 0.70, outer 15%. Both: body points in the setup direction and the close extends beyond the trigger gap boundary by max(1 tick, 0.10 x prev ATR). Starting parameters, not optimised or proven.")
 int    inMinTick = input.int(1, "Minimum gap size (ticks, all gap sources)", minval = 1, group = GRP_Q, tooltip = "Gaps at least this wide are detected and may form contexts, triggers and obstacles.")
+bool   inUse15 = input.bool(false, "Also accept 15s inversions as the trigger (30s chart only)", group = GRP_Q, tooltip = "OFF = original behaviour. ON = a fresh same-direction inverted 15s gap that overlaps the context gap can trigger exactly like a 30s one (same impulse test on the 30s candle, same stop, same gates). Needs 15s data on your TradingView plan.")
+int    inMin15 = input.int(3, "Minimum 15s trigger gap size (ticks)", minval = 1, group = GRP_Q, tooltip = "15s gaps narrower than this are ignored. The 30s gap size is the setting above.")
 bool   inShowPair = input.bool(true, "Show the context gap + 30s trigger gap of every setup", group = GRP_APP)
 bool   inShowHtf = input.bool(false, "Show nearby HTF gap boxes (clutter; OFF by default)", group = GRP_APP, tooltip = "Display only. Obstacle checks ALWAYS use all tracked 15m/1H/4H gaps, shown or hidden.")
 bool   inShowMarkers = input.bool(false, "Show detail markers (retest, stop anchor, inversion candles)", group = GRP_APP, tooltip = "Small labels that explain how a setup formed. The same facts are always in the label tooltips.")
@@ -193,6 +195,9 @@ type Zone
     int    cat = -1
     float  dist = 0.0
     bool   vis = false
+    int    tfMs = 0
+    int    invCb = -1
+    bool   dead = false
     box    bx
 
 // The single pending 3-minute context. state: 0 NONE, 1 PENDING_RETEST, 2 WAITING_FOR_30S_TRIGGER.
@@ -726,6 +731,24 @@ if act4
     snap4 := request.security(syminfo.tickerid, tf4, f_engine(inHtfCap, inMinTick, hrz4), lookahead = barmerge.lookahead_on)
     asOf4 := request.security(syminfo.tickerid, tf4, time_close[1], lookahead = barmerge.lookahead_on)
 var array<Zone>   chartZ = array.new<Zone>()
+var array<Zone>   z15 = array.new<Zone>()
+var float  h15a = na
+var float  h15b = na
+var float  l15a = na
+var float  l15b = na
+var int    t15p = na
+var int    seq15 = 0
+bool use15 = inUse15 and supported
+array<int>   lt15t = na
+array<float> lt15h = na
+array<float> lt15l = na
+array<float> lt15c = na
+if use15 and barstate.isconfirmed
+    [a15_, b15_, c15_, d15_] = request.security_lower_tf(syminfo.tickerid, "15S", [time, high, low, close])
+    lt15t := a15_
+    lt15h := b15_
+    lt15l := c15_
+    lt15c := d15_
 var array<Zone>   hz1 = array.new<Zone>()
 var array<Zone>   hz2 = array.new<Zone>()
 var array<Zone>   hz3 = array.new<Zone>()
@@ -864,6 +887,9 @@ f_log(string txt) =>
     if inLog
         log.info("H Ticks | " + txt)
     true
+
+f_zms(Zone z) =>
+    z.tfMs > 0 ? z.tfMs : chartMs
 
 // One chart-layer lifecycle step. Returns 0 none, 1 inverted, 2 removed (touch), 3 removed (invalidation).
 f_stepChart(Zone z, float hi, float lo, float cl, int bi, int t, int tc) =>
@@ -2112,8 +2138,8 @@ f_enter(Cand r, Ctx c) =>
     string sid = str.format_time(time_close, "yyyyMMdd-HHmmss", TZ_NY) + (bull ? "-L" : "-S")
     int dk = f_dateKey(time_close)
     string dirW = bull ? "LONG" : "SHORT"
-    string tip = "Setup " + sid + " " + dirW + " · " + c.winName + " · context " + c.tfTxt + "\n" + "15m bias: " + (bull ? "bullish (close above swing high " : "bearish (close below swing low ") + str.tostring(blR, format.mintick) + ", pivot " + f_nyT(int(btR)) + " NY, break confirmed " + f_nyT(int(baR)) + " NY)\n" + c.tfTxt + " inversion confirmed: " + f_nyT(c.confAsOf) + " NY\n" + "Chart first processed it: " + f_nyT(c.procTime) + " NY\n" + "Retest candle: " + f_nyT(c.retestTime) + " NY\n" + "30s trigger confirmed: " + f_nyT(time_close) + " NY\n" + "Impulse " + inPreset + ": body " + str.tostring(r.bodyAtr, "#.00") + " x prev ATR\n" + "Stop anchor (" + c.tfTxt + " retest leg): " + str.tostring(r.legX, format.mintick) + " @ " + f_nyT(r.legT) + " NY (+" + str.tostring(r.bufT) + " tick buffer)\n" + "Risk: " + str.tostring(r.riskT) + " ticks (1:1)\n" + "HTF sources checked: " + r.srcTxt + "\n" + "Nearest 3m structural obstacle: " + r.nearTxt
-    Setup s = Setup.new(id = sid, dateKey = dk, dir = c.dir, entry = r.entry, stop = r.stop, target = r.target, riskT = r.riskT, entryTime = time_close, entryBar = bar_index, winId = c.winId, winName = c.winName, ctxZid = c.zid, srcs = r.srcTxt, ctxTop = c.top, ctxBot = c.bottom, ctxFormT = c.formTime - 2 * c.tfSecs * 1000, trgTop = t.top, trgBot = t.bottom, trgFormT = t.formTime - 2 * chartMs, legExt = r.legX, stopAnchorT = r.legT, retestT = c.retestTime, retestPx = c.retestPx, ctxTf = c.tfTxt, ctxId = c.zid, ctxConfT = c.confAsOf, ctxInvT = c.confAsOf - c.tfSecs * 1000, ctxInvPx = c.invPx, trgId = t.id, trgInvT = time, trgInvPx = close, tip = tip)
+    string tip = "Setup " + sid + " " + dirW + " · " + c.winName + " · context " + c.tfTxt + "\n" + "15m bias: " + (bull ? "bullish (close above swing high " : "bearish (close below swing low ") + str.tostring(blR, format.mintick) + ", pivot " + f_nyT(int(btR)) + " NY, break confirmed " + f_nyT(int(baR)) + " NY)\n" + c.tfTxt + " inversion confirmed: " + f_nyT(c.confAsOf) + " NY\n" + "Chart first processed it: " + f_nyT(c.procTime) + " NY\n" + "Retest candle: " + f_nyT(c.retestTime) + " NY\n" + (t.tfTxt == "" ? "30s" : t.tfTxt) + " trigger confirmed: " + f_nyT(time_close) + " NY\n" + "Impulse " + inPreset + ": body " + str.tostring(r.bodyAtr, "#.00") + " x prev ATR\n" + "Stop anchor (" + c.tfTxt + " retest leg): " + str.tostring(r.legX, format.mintick) + " @ " + f_nyT(r.legT) + " NY (+" + str.tostring(r.bufT) + " tick buffer)\n" + "Risk: " + str.tostring(r.riskT) + " ticks (1:1)\n" + "HTF sources checked: " + r.srcTxt + "\n" + "Nearest 3m structural obstacle: " + r.nearTxt
+    Setup s = Setup.new(id = sid, dateKey = dk, dir = c.dir, entry = r.entry, stop = r.stop, target = r.target, riskT = r.riskT, entryTime = time_close, entryBar = bar_index, winId = c.winId, winName = c.winName, ctxZid = c.zid, srcs = r.srcTxt, ctxTop = c.top, ctxBot = c.bottom, ctxFormT = c.formTime - 2 * c.tfSecs * 1000, trgTop = t.top, trgBot = t.bottom, trgFormT = t.formTime - 2 * f_zms(t), legExt = r.legX, stopAnchorT = r.legT, retestT = c.retestTime, retestPx = c.retestPx, ctxTf = c.tfTxt, ctxId = c.zid, ctxConfT = c.confAsOf, ctxInvT = c.confAsOf - c.tfSecs * 1000, ctxInvPx = c.invPx, trgId = t.id, trgInvT = time, trgInvPx = close, tip = tip)
     setups.push(s)
     f_winInc(c.winId)
     int dxi = f_dateIdx(dk)
@@ -2178,6 +2204,8 @@ if supported and barstate.isfirst
         warnArr.push(f_tfText(sec3) + " obstacle source disabled: not an integer multiple of the chart timeframe")
     if en4 and sec4 > chartSecs and not al4
         warnArr.push(f_tfText(sec4) + " obstacle source disabled: not an integer multiple of the chart timeframe")
+    if inUse15 and not supported
+        warnArr.push("15s trigger disabled: needs the 30s chart")
     if inWinAsia and not okWinAs
         warnArr.push("Entry window A disabled: start equals end")
     if inWinAm and not okWinAm
@@ -2244,6 +2272,57 @@ if supported and barstate.isconfirmed
     while chartZ.size() > inChCap
         Zone old = chartZ.shift()
         f_destroy(old)
+
+    // 2b) optional 15s trigger gaps: the two 15s candles of this closed 30s bar are processed in order; a 15s gap that inverts on this
+    // bar (and is still standing after both candles) joins the trigger candidates. A touch/invalidation on the SAME bar as its
+    // inversion never removes it (it is judged from the next bar), mirroring the 30s rule.
+    if use15 and not na(lt15t) and lt15t.size() > 0
+        array<Zone> p15 = array.new<Zone>()
+        for q = 0 to lt15t.size() - 1
+            int qt = lt15t.get(q)
+            float qh = lt15h.get(q)
+            float ql = lt15l.get(q)
+            float qc = lt15c.get(q)
+            seq15 += 1
+            if not na(t15p) and qt - t15p > 15000
+                h15a := na
+                h15b := na
+                l15a := na
+                l15b := na
+            int n15 = z15.size()
+            if n15 > 0
+                for i = n15 - 1 to 0
+                    Zone z = z15.get(i)
+                    int r = f_stepChart(z, qh, ql, qc, seq15, qt, qt + 15000)
+                    if r == 1
+                        z.invCb := bar_index
+                        p15.push(z)
+                    else if r >= 2 and z.invCb != bar_index
+                        z.dead := true
+                        z15.remove(i)
+                    else if seq15 - z.formBar >= 9000
+                        z.dead := true
+                        z15.remove(i)
+            if not na(h15b) and not na(l15b)
+                int bG = f_tk(ql) - f_tk(h15b)
+                int sG = f_tk(l15b) - f_tk(qh)
+                int dN = bG >= inMin15 ? 1 : (sG >= inMin15 ? -1 : 0)
+                if dN != 0
+                    float zt15 = dN > 0 ? ql : l15b
+                    float zb15 = dN > 0 ? h15b : qh
+                    z15.push(Zone.new(id = syminfo.tickerid + "|15S|" + str.tostring(qt) + "|" + str.tostring(dN), dir = dN, state = dN > 0 ? ST_BULL_FVG : ST_BEAR_FVG, top = zt15, bottom = zb15, formTime = qt, confTime = qt + 15000, availTime = qt + 15000, width = zt15 - zb15, fatr = chartAtr, formBar = seq15, tfTxt = "15s", tfMs = 15000))
+            h15b := h15a
+            l15b := l15a
+            h15a := qh
+            l15a := ql
+            t15p := qt
+        while z15.size() > 300
+            z15.shift()
+        if p15.size() > 0
+            for i = 0 to p15.size() - 1
+                Zone pz = p15.get(i)
+                if not pz.dead
+                    pend.push(pz)
 
     // 3) obstacle sources: confirmed source inversions / taps are applied BEFORE any entry decision
     if act1
@@ -2326,7 +2405,7 @@ if supported and barstate.isconfirmed
                 if nFm == 0
                     f_dg(wc, 17)
                     Zone zf = f_newestSame(cc, false)
-                    f_candRej(cc, "FORMED-BEFORE-CONTEXT", "newest same-direction 30s gap: confirming candle opened " + f_nyT(zf.formTime) + " (first candle " + f_nyT(zf.formTime - 2 * chartMs) + ") vs context confirmation " + f_nyT(cc.confAsOf) + " NY: " + str.tostring((zf.formTime - cc.confAsOf) / 1000) + " s, at/after required")
+                    f_candRej(cc, "FORMED-BEFORE-CONTEXT", "newest same-direction 30s gap: confirming candle opened " + f_nyT(zf.formTime) + " (first candle " + f_nyT(zf.formTime - 2 * f_zms(zf)) + ") vs context confirmation " + f_nyT(cc.confAsOf) + " NY: " + str.tostring((zf.formTime - cc.confAsOf) / 1000) + " s, at/after required")
                 else
                     f_dg(wc, 10)
                     if nOv == 0
@@ -2337,7 +2416,7 @@ if supported and barstate.isconfirmed
                     else
                         f_dg(wc, 11)
             if not na(trg)
-                if trg.formTime - 2 * chartMs < cc.confAsOf
+                if trg.formTime - 2 * f_zms(trg) < cc.confAsOf
                     f_dg(wc, 43)
                 Cand rc = f_evalCand(cc, trg)
                 f_fn(k, 3)

@@ -87,7 +87,7 @@ chk('Code: preset constants 0.8/0.65/0.20 and 1.0/0.70/0.15, ext = max(1 tick, 0
 pend_by_bar = {5: ['weak-inversion-gap']}      # inverted on bar 5 (weak) -> rejected
 def candidates(bar): return pend_by_bar.get(bar, [])
 chk('A weak inversion is never reconsidered: bar 6 has no candidates unless a FRESH inversion occurs', candidates(5) and not candidates(6))
-chk('Code: pend is cleared every confirmed bar and rejection never re-queues', 'pend.clear()' in CODE and 'cc.lastReason := rc.why' in CODE and 'pend.push' in CODE and CODE.count('pend.push') == 1, 'CODE INSPECTION')
+chk('Code: pend is cleared every confirmed bar and rejection never re-queues', 'pend.clear()' in CODE and 'cc.lastReason := rc.why' in CODE and 'pend.push' in CODE and CODE.count('pend.push') == 2, 'CODE INSPECTION')
 
 # ---------- retest leg / structural stop / 1R geometry ----------
 def run_leg(bars, dirn):
@@ -208,7 +208,7 @@ chk('Code: outcome model unchanged (strictly-after-entry candle, opening-price p
 
 # ---------- simple settings ----------
 inputs = re.findall(r'^\w+\s+(\w+)\s*=\s*input\.', CODE, re.M)
-chk('Only practical user inputs remain (%d): %s' % (len(inputs), ','.join(inputs)), len(inputs) <= 20 and 'inRepDays' in inputs and 'inPreset' in inputs and 'inTheme' in inputs and 'inDebug' in inputs, 'CODE INSPECTION')
+chk('Only practical user inputs remain (%d): %s' % (len(inputs), ','.join(inputs)), len(inputs) <= 22 and 'inRepDays' in inputs and 'inPreset' in inputs and 'inTheme' in inputs and 'inDebug' in inputs, 'CODE INSPECTION')
 chk('Debug defaults OFF; Standard default; Light default', 'inDebug = input.bool(false' in CODE and 'input.string("Standard"' in CODE and 'input.string("Light"' in CODE, 'CODE INSPECTION')
 _vo = set(); _cur = 'top'
 for _l in CODE.split('\n'):

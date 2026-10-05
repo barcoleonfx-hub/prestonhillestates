@@ -20,7 +20,10 @@ same = ['f_pickTrigger', 'f_selectWindow', 'f_winCand', 'f_localTs', 'f_structCh
         'f_trackSetups', 'f_enter', 'f_bias15', 'f_engine', 'f_lvlEngine', 'f_stepChart', 'f_ctxReadyK', 'f_lvlReady', 'f_overlap', 'f_tk',
         'f_tapStore', 'f_openSetup', 'f_winCount', 'f_winInc', 'f_setupExists', 'f_lvlConsume', 'f_ctxSync', 'f_lvlSync']
 for n in same:
-    chk(f'{n}: body byte-identical to the previous commit', fn(OLD, n) == fn(NEW, n), 'TEXT DIFF vs HEAD')
+    o_, n_ = fn(OLD, n), fn(NEW, n)
+    if n == 'f_enter':   # only the optional 15s trigger label / timing helper differ (identical when the 15s option is off)
+        n_ = n_.replace('(t.tfTxt == "" ? "30s" : t.tfTxt) + " trigger confirmed: "', '"30s trigger confirmed: "').replace('f_zms(t)', 'chartMs')
+    chk(f'{n}: body byte-identical to the previous commit', o_ == n_, 'TEXT DIFF vs HEAD')
 ev_o, ev_n = fn(OLD, 'f_evalCand'), fn(NEW, 'f_evalCand')
 chk('f_evalCand: every if / else-if / loop condition identical (only messages and diagnostic fields added)', cond_lines(ev_o) == cond_lines(ev_n), 'TEXT DIFF vs HEAD')
 strip = lambda t: [l for l in t.split('\n') if not re.search(r'r\.sub :=|r\.impFirst|r\.impMask|pathWhy :=|r\.why :=|int room =', l)]
