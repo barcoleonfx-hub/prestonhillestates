@@ -193,3 +193,9 @@ Debug ON, Debug panel (bottom-left) after the 5 dates have loaded, plus the Pine
 1. **1m fallback trigger, step 1 = diagnostic counter only.** Per NY session, count fresh + context-gap-overlapping 1m inversions after a retest on bars where no 30s candidate passed. No entries. Only if the count is meaningful: add the fallback (30s wins first; 2m/3m/5m contexts only; 1m ATR for the impulse test; entry at the chart bar that closes the 1m candle by aggregating two 30s bars; setups tagged "30s trigger" / "1m trigger" with separate stats).
 2. **HTF-tap + bias confluence idea (user, 2026-10-05).** After a higher-timeframe gap is tapped, with the 15m directional bias agreeing, look only for 1m and 2m inverted gaps, 1:1. Under discussion; define "tapped" (which HTF, which direction relative to bias) before building. Measure with a diagnostic first.
 Both: no win-rate claim; judge by outcomes on data not used for tuning.
+
+### HTF-tap + bias confluence idea: user's answers (2026-10-05), still NOT built
+* Direction: bias direction only. Bias may be confirmed with VWAP, EMAs and the higher-timeframe bias tools (user left the exact choice to me; proposal below needs approval).
+* Trigger: a 1m or 2m gap inversion in the bias direction once the HTF gap has been tapped. Stop and target: 1:1 (stop anchor proposed = extreme from the tap candle to the inversion candle, +/- max(1 tick, 0.10 x prev ATR)).
+* Open definitions: which HTF gap counts as "the tap" (proposal: a bias-direction 15m/1H/4H gap, i.e. bullish gap tapped from above in a bullish bias), how long a tap stays valid (proposal: until the window ends or the bias flips, and one tap arms one trade), which VWAP anchor and EMA lengths.
+* Build order: diagnostic counters first (taps, bias-confluence passes, 1m/2m bias-direction inversions after a tap), then the setup as a SEPARATE tagged setup type with separate stats.
