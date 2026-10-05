@@ -188,3 +188,8 @@ This **replaces** the earlier Qualified-iFVG system (momentum routes, ATR-size g
 
 ### The exact view to capture
 Debug ON, Debug panel (bottom-left) after the 5 dates have loaded, plus the Pine Logs pane filtered on `REJECT` (NY lines). Screenshot or paste the panel from "DIAGNOSTIC VIEW" down to "SOURCES", including the ACCOUNTING CHECK line. Only then can the largest rejection category be named.
+
+## TO-DO / ideas (not built, nothing here changes the indicator yet)
+1. **1m fallback trigger, step 1 = diagnostic counter only.** Per NY session, count fresh + context-gap-overlapping 1m inversions after a retest on bars where no 30s candidate passed. No entries. Only if the count is meaningful: add the fallback (30s wins first; 2m/3m/5m contexts only; 1m ATR for the impulse test; entry at the chart bar that closes the 1m candle by aggregating two 30s bars; setups tagged "30s trigger" / "1m trigger" with separate stats).
+2. **HTF-tap + bias confluence idea (user, 2026-10-05).** After a higher-timeframe gap is tapped, with the 15m directional bias agreeing, look only for 1m and 2m inverted gaps, 1:1. Under discussion; define "tapped" (which HTF, which direction relative to bias) before building. Measure with a diagnostic first.
+Both: no win-rate claim; judge by outcomes on data not used for tuning.
