@@ -1158,12 +1158,14 @@ f_drawPlan(Day dy, int slot) =>
         if done
             f_lb(ms.tr.exitT, ms.tr.exitPx, pre + " " + (ms.tr.outcome == 1 ? "target" : (ms.tr.outcome == 2 ? "stop" : (ms.tr.outcome == 3 ? "time exit" : "ambiguous"))) + " " + str.tostring(ms.tr.netR, "#.00") + "R", color.black, label.style_label_down, ms.tr.note)
     true
+f_stName(int st) =>
+    st == 0 ? "WAITING" : (st == 1 ? "no manipulation yet" : (st == 2 ? "manipulation, no reversal yet" : (st == 3 ? "reversal confirmed" : (st == 6 ? "COMPLETE" : (st == 7 ? "EXPIRED" : (st == 8 ? "INVALIDATED" : "INELIGIBLE"))))))
 f_drawDay(Day dy) =>
     int xEnd = f_ts(dy.key, exitT)
     int xCut = f_ts(dy.key, cutT)
     if not na(dy.O)
         f_ln(dy.oT, dy.O, xEnd, dy.O, color.blue, line.style_dashed, 2)
-        f_lb(dy.oT, dy.O, "10am open " + str.tostring(dy.O, format.mintick), color.blue, label.style_label_right, f_dt(dy.key) + ": exact open of the 10:00 candle, usable once that candle closed")
+        f_lb(dy.oT, dy.O, "10am open " + str.tostring(dy.O, format.mintick) + " | " + f_stName(dy.st) + (dy.why == "" ? "" : ": " + dy.why), color.blue, label.style_label_right, f_dt(dy.key) + ": exact open of the 10:00 candle, usable once that candle closed")
         if inVisOR and not na(dy.orH)
             f_bx(f_ts(dy.key, orS), dy.orH, dy.oT, dy.orL, color.new(color.gray, 88), color.new(color.gray, 40))
     if dy.st >= 2 and not na(dy.mExt) and dy.st != 7
