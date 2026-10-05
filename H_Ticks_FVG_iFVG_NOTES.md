@@ -243,3 +243,9 @@ New setting "Days reported (stats box and debug counts)", default 20 (1-20), rep
 - Inherits Bias source, Relaxed windows and Relaxed bias-off tickboxes. Debug panel = B funnel counters (taps, armed, rejects by reason, entries).
 - Checks: tests/b_check.py (text + model only). NOT compiled in TradingView.
 - B correction: B runs on a standard 1-MINUTE chart (not 30s). The 1m trigger is a 1m gap inverting on the chart itself (entry at that candle's close); the optional 2m trigger still comes from a 2m request (known one chart candle later). Chart gaps use the same rules as A's 30s gaps (min size, confirmed close through the far boundary).
+
+## Indicator C: "H Ticks - 10AM Precision Model C" (new, separate; A and B untouched)
+- Files: `H_Ticks_C_10AM_Precision.pine` (source), `H_Ticks_C_10AM_Precision_paste.pine` (stripped for pasting), `H_Ticks_C_GUIDE.md` (parameters, execution model, limits),
+  `tests/c_model.py` + `tests/c_check.py` (Python port of the decision logic + text checks; `tests/c_before_precision.pine` = the Standard-only version used to prove Standard is unchanged).
+- Two execution variants: Standard (entry models A / B / C / C-wick, structural stop) and Precision (local rejection / secondary-sweep trigger, local stop, unswept-liquidity target, minimum R, expiry). Retries not implemented.
+- NOT compiled in TradingView, NOT chart-tested. 61 inputs (if TradingView rejects the input count, trim display toggles). Profitability unproven.
