@@ -25,7 +25,7 @@ DEFAULT = dict(orS=570, orE=600, openT=600, manE=610, cutT=645, exitT=660, thr_m
 class Trade:
     def __init__(s, **k):
         s.isOpen = True; s.outcome = 0; s.grossR = None; s.netR = None; s.netUsd = 0.0; s.costUsd = 0.0; s.maeP = 0.0; s.mfeP = 0.0
-        s.excUnc = False; s.entryAmb = False; s.note = ''; s.qty = 1; s.plannedR = None; s.tgtType = ''; s.riskUsd = 0.0
+        s.excUnc = False; s.entryAmb = False; s.gap = False; s.note = ''; s.qty = 1; s.plannedR = None; s.tgtType = ''; s.riskUsd = 0.0
         s.__dict__.update(k)
 
 class Mdl:
@@ -150,7 +150,11 @@ class Engine:
             if known: t.mfeP = max(0.0, fav)
             else:
                 t.mfeP = 0.0; t.excUnc = fav > 0; t.entryAmb = tgtTouch or fav > 0
-            if stopHit and tgtTouch:
+            gapStop = (o <= stp) if bull else (o >= stp)
+            if gapStop:
+                t.gap = True; t.maeP = max(t.maeP, (lim - o) if bull else (o - lim)); t.excUnc = True
+                s.finish(md, 4, o, s.time, 'gap through entry AND stop')
+            elif stopHit and tgtTouch:
                 t.maeP = max(t.maeP, t.riskPts); t.excUnc = True
                 s.finish(md, 4, stp, s.time, 'ambiguous: stop and target both reachable on the fill candle')
             elif stopHit:
@@ -159,11 +163,7 @@ class Engine:
                 t.mfeP = max(t.mfeP, abs(tgt - lim)); s.finish(md, 1, tgt, s.time, 'target hit on the fill candle (fill at the open)')
 
     def fillStep(s, dy, md):
-        bull = dy.dir > 0
-        if (s.open < dy.mExt) if bull else (s.open > dy.mExt):
-            md.st = 4; md.why = 'invalidated: the candle opened beyond the frozen manipulation extreme'; s.fn(md.slot, 9)
-        else:
-            s.fillTry(dy, md)
+        s.fillTry(dy, md)
 
     def posStep(s, dy, md):
         t = md.tr; bull = t.dir > 0; stp = md.stp; tgt = md.tgt; ent = t.entryPx
@@ -309,10 +309,6 @@ class Engine:
         o, h, l = s.open, s.high, s.low
         if s.bi > md.armBar + p['pExp']:
             md.st = 4; md.why = 'expired'; s.fn(4, 7)
-        elif (o <= md.stp) if bull else (o >= md.stp):
-            s.invalidate(md, 'local stop level breached before the fill')
-        elif (o < dy.mExt) if bull else (o > dy.mExt):
-            s.invalidate(md, 'shared setup invalidated')
         else:
             touchE = (l <= md.lim - thrP) if bull else (h >= md.lim + thrP)
             tgtFirst = (not touchE) and ((h >= md.tgt) if bull else (l <= md.tgt))

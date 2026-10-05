@@ -1,5 +1,7 @@
 # H Ticks - Powell Model C: guide (Contextual preset + Legacy 10am preset)
 
+**Audit patch applied (see C_AUDIT_NOTES.md): gap execution policy, pre-existing rejection parent, Sunday context, aggregation completeness, pre-window Fib endpoints, causal breaker, range-state labelling, mandatory Precision parent.**
+
 **Research model. Profitability is unproven.** Everything is *our mechanical reading* of the guide, not Powell's official rules. Simulation on completed 1m
 candles. **Not compiled in TradingView and not chart-tested** (see "Verification status"). The paste file is about 143 KB stripped; whether TradingView accepts
 that size is **unverified** - if it reports "script too large", say so and a lean build (Contextual only) will be made.
@@ -26,7 +28,7 @@ that size is **unverified** - if it reports "script too large", say so and a lea
 3. **CISD**: at the sweep the reference (first open of the contiguous opposite-colour run leading into the sweep candle; dojis end a run) is frozen; a *later* source-TF candle must
    **close** through it. No run = CISD unavailable = setup rejected with a reason.
 4. **Areas** (must exist before an order uses them): FVG (usable after the 3rd candle closes), order block (last opposite candle before the displacement, full high-low, CE = midpoint),
-   breaker (a CLOSE through the block; a wick is not enough), rejection block (our wick/body thresholds), iFVG (opposite gap inverted by a close). An area dies when a 1m candle closes
+   breaker (causal confirmed-swing sequence A->B->C then a CLOSE beyond B; the broken block is B's order block), rejection block (our wick/body thresholds), iFVG (opposite gap inverted by a close). An area dies when a 1m candle closes
    through its far side and is stale once price touched its CE after it was known.
 5. **Selection (deterministic)**: prefer areas overlapping the selected HTF POI, else the CE nearest to the last close on the retracement side, tie -> most recently confirmed, then type.
    Frozen when the order is armed. A setup formed before the window stays eligible (no fresh sweep needed) until it expires, is invalidated, or a new trading day starts.

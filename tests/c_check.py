@@ -49,7 +49,7 @@ chk('minimum R is checked on the rounded entry / stop / target', 'math.abs(tgtR 
 chk('nearest eligible target only; no farther substitution', 'math.min(c1, c2)' in CODE and 'math.max(c1, c2)' in CODE and 'No eligible liquidity target' in CODE)
 chk('targets must be unswept (post-open extremes / extremes since the previous 16:00)', 'not (dy.poHi > dy.orH)' in CODE and 'not (sHi > dy.pdH)' in CODE and 'not (dy.poLo < dy.orL)' in CODE and 'not (sLo < dy.pdL)' in CODE)
 chk('target frozen at arming (stored on the model, never recomputed)', 'md.tgt := tgtR' in CODE and 'md.tgt :=' not in fn_text(CODE, 'f_posStep'))
-chk('precision pending order cancel rules: expiry, local stop, shared invalidation, target before entry', all(x in fn_text(CODE, 'f_fillStepP') for x in ('inPExp', 'local stop level breached', 'shared setup invalidated', 'target was reached before the entry')))
+chk('precision pending order cancel rules: expiry and target-before-entry only; NO silent cancellation on a gap (flagged gap event instead)', all(x in fn_text(CODE, 'f_fillStepP') for x in ('inPExp', 'target was reached before the entry')) and 'local stop level breached' not in fn_text(CODE, 'f_fillStepP') and 'gap through entry AND stop' in fn_text(CODE, 'f_fillTry'))
 chk('Fixed-R target is a separate labelled mode', 'inPTgt == "Fixed R"' in CODE and '"fixed-R"' in CODE)
 chk('retries are not implemented (documented)', 'Precision retries are NOT implemented' in CODE)
 chk('whole-contract sizing only (int contracts, floor)', 'int inQty = input.int' in CODE and 'math.floor(inCashRisk' in CODE)
@@ -63,13 +63,7 @@ chk('paste file exists (size reported, TradingView limit NOT verified)', os.path
 if OLD:
     for f in ['f_posStep', 'f_waitB', 'f_waitC', 'f_cReject', 'f_exceeded', 'f_fibLvl', 'f_invalidate', 'f_cond']:
         chk(f'Standard {f} byte-identical to the pre-Precision version', fn_text(OLD, f) == fn_text(SRC, f))
-    # f_fillTry must equal the old f_fillStep touch/fill part (only the new trade fields differ); compare stripped lines
-    old = fn_text(OLD, 'f_fillStep'); old_touch = old[old.index('        bool touch'):]
-    old_l = [l.strip() for l in old_touch.split('\n') if l.strip() and l.strip() != 'true']
-    new_touch = fn_text(SRC, 'f_fillTry'); new_touch = new_touch[new_touch.index('    bool touch'):]
-    new_touch = new_touch.replace(', qty = md.qty, plannedR = md.plannedR, tgtType = md.tgtType, riskUsd = math.abs(lim - stp) * syminfo.pointvalue * md.qty, note = md.slot == 4 ? md.trigNm + " | plan " + str.tostring(md.plannedR, "#.0") + "R " + md.tgtType : ""', '')
-    new_l = [l.strip() for l in new_touch.split('\n') if l.strip() and l.strip() != 'true']
-    chk('Standard fill logic (f_fillTry) identical to the old f_fillStep touch/fill logic apart from the new trade fields', old_l == new_l)
+    chk('Legacy f_fillStep no longer invalidates before a gap: it delegates to f_fillTry (execution-safety correction)', 'f_fillTry(dy, md)' in fn_text(SRC, 'f_fillStep') and 'invalidated: the candle opened beyond' not in fn_text(SRC, 'f_fillStep'))
 
 # =============================================== 2. SCENARIOS ===============================================
 from c_helpers import bar, mkday, run, tr_of, col, FIX
@@ -188,7 +182,7 @@ e2 = prec_day(extra={(10, 4): (19990, 19996, 19960, 19992)}); chk('PREC: opening
 e2 = prec_day(extra={(10, 6): (19994, 19994.5, 19991, 19993), (10, 7): (19993, 19994, 19990, 19992), (10, 8): (19992, 19994, 19990, 19991), (10, 9): (19991, 19993, 19990, 19991)})
 chk('PREC: unfilled order expires after 3 subsequent candles; counted unfilled; NO trade (excluded from win rates)', col(e2, 4, 7) == 1 and not tr_of(e2, 4) and col(e2, 4, 6) == 0)
 e2 = prec_day(extra={(10, 6): (19994, 19995, 19960, 19962)}); chk('PREC: target reached before the entry cancels the order', col(e2, 4, 7) == 1 and not tr_of(e2, 4))
-e2 = prec_day(extra={(10, 6): (20010, 20012, 20008, 20009)}); chk('PREC: a candle opening beyond the local stop cancels the order (invalidated)', col(e2, 4, 9) == 1 and not tr_of(e2, 4))
+e2 = prec_day(extra={(10, 6): (20010, 20012, 20008, 20009)}); chk('PREC (model): a candle opening beyond the stop is a flagged gap event trade (ambiguous, exit at the open), not a silent cancellation', len(tr_of(e2, 4)) == 1 and tr_of(e2, 4)[0].gap and tr_of(e2, 4)[0].outcome == 4 and tr_of(e2, 4)[0].exitPx == 20010)
 # rejection candle requirements
 e2 = prec_day(extra={(10, 5): (19994, 20001, 19992, 20000.5)}); chk('PREC: close not below the 10am open -> no trigger', col(e2, 4, 4) == 0)
 e2 = prec_day(extra={(10, 5): (20000.4, 20000.5, 19991, 19992)}); chk('PREC: wick share below 40% -> no trigger', col(e2, 4, 4) == 0)
@@ -235,7 +229,7 @@ chk('COSTS: commission per contract per side and adverse slippage reduce net R b
 # ---------------- contextual preset: text checks ----------------
 print('--- contextual / legacy-preservation checks ---')
 BASE = open(os.path.join(ROOT, 'tests', 'c_before_powell.pine'), encoding='utf-8').read()
-for f in ['f_finish', 'f_plan', 'f_cond', 'f_fillTry', 'f_fillStep', 'f_posStep', 'f_invalidate', 'f_waitB', 'f_waitC', 'f_cReject', 'f_pivotUpdate', 'f_precTrig', 'f_rejectP', 'f_planP', 'f_waitP', 'f_fillStepP', 'f_modelStep', 'f_confirm', 'f_dayStep', 'f_finalize', 'f_exceeded', 'f_fibLvl']:
+for f in ['f_finish', 'f_plan', 'f_cond', 'f_posStep', 'f_invalidate', 'f_waitB', 'f_waitC', 'f_cReject', 'f_pivotUpdate', 'f_precTrig', 'f_rejectP', 'f_planP', 'f_waitP', 'f_modelStep', 'f_confirm', 'f_dayStep', 'f_finalize', 'f_exceeded', 'f_fibLvl']:
     chk(f'Legacy 10am {f} byte-identical to the pre-contextual version', fn_text(BASE, f).strip() == fn_text(SRC, f).strip())
 chk('Legacy preset selectable; contextual is a separate preset input appended at the END of the legacy inputs', 'options = ["Contextual (Powell guide)", "Legacy 10am"]' in CODE and CODE.index('inVisOR = input') < CODE.index('inPreset = input'))
 chk('legacy slots are off when contextual is selected and vice versa', 'not isCx and stdOn' in CODE and 'isCx and stdOn, isCx and precOn' in CODE)
@@ -246,12 +240,13 @@ chk('sweep needs the level known before the sweeping candle began', 'lv.known <=
 chk('CISD cannot be confirmed by the sweep candle itself', 'st.st == 1 and st.swOpen != c0t' in CODE)
 chk('Fib formulas (long/short) use the input ratios', 'hx - inFibE * rg : lx + inFibE * rg' in CODE and 'hx - inFibS * rg : lx + inFibS * rg' in CODE)
 chk('Fib anchor only when the swing became known on THIS candle (no back-dating) and after the CISD candle', 'pvKn.get(q) == time_close and pvOp.get(q) >= st.cisdOpen' in CODE)
-chk('Fib stale rule present', 'was already traversed before the swing anchor was confirmed' in CODE)
+chk('Fib stale rule present (detection-time and continuous tracking)', 'already traversed before the swing anchor' in CODE and 'f_cxFibTrack' in CODE and 'f_cxFibDetect' in CODE and 'f_cxFibArm' in CODE)
 chk('stop cap rejects, never compresses', 'never squeezed' in CODE and 'f_cxDrop(md, "stop-cap rejection' in CODE)
 chk('target = nearest UNSWEPT level known at arming (st < 2), no substitution', 'lv.st < 2 and lv.known <= time_close' in CODE and 'no eligible unswept opposing liquidity target' in CODE)
 chk('reward checked on rounded prices', 'float tgtR = math.round_to_mintick(tgt)' in CODE and 'pR = math.abs(tgtR - entry) / dist' in CODE)
 chk('orders armed on candle N are eligible only from N+1', 'md.st == 2 and bar_index > md.armBar' in CODE)
-chk('precision stop ends the attempt, not the setup', 'precision attempt ends; the larger setup may continue' in CODE and 'st.precSt := outcome == 1 ? 2 : 0' in CODE)
+chk('precision stop ends the attempt, not the setup', 'st.precSt := outcome == 1 ? 2 : 0' in CODE)
+chk('contextual gap policy: no cancellation before a gap; gap event flagged', 'open <= md.stp' not in fn_text(CODE, 'f_cxPlanStep') and 'md.xExt' not in fn_text(CODE, 'f_cxPlanStep') and 'gap through entry AND stop' in fn_text(CODE, 'f_cxFillTry') and 't.gap := true' in fn_text(CODE, 'f_cxFillTry'))
 chk('daily sequence: 50% of first trade actual risk, whole contracts rounded down', 'math.floor(mult * firstRisk / perC)' in CODE)
 chk('SMT target role not claimed; reversal role only', '"Reversal"' in CODE and 'target role is NOT implemented' in CODE)
 chk('contextual alerts include setup id and method', 'setup #" + str.tostring(md.sid)' in CODE and 'f_msgK(4,' in CODE)
