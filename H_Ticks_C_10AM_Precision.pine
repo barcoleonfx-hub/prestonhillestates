@@ -1275,6 +1275,10 @@ f_bx(int x1, float top, int x2, float bot, color bg, color bc) =>
     dBoxes.push(box.new(left = x1, top = top, right = x2, bottom = bot, xloc = xloc.bar_time, border_color = bc, border_width = 1, bgcolor = bg))
     true
 
+f_bxs(int x1, float top, int x2, float bot, color bg, color bc, string sty) =>
+    dBoxes.push(box.new(left = x1, top = top, right = x2, bottom = bot, xloc = xloc.bar_time, border_color = bc, border_width = 1, border_style = sty, bgcolor = bg))
+    true
+
 f_lb(int x, float y, string txt, color tc, string sty, string tip) =>
     dLabels.push(label.new(x = x, y = y, text = txt, xloc = xloc.bar_time, style = sty, size = size.tiny, textcolor = tc, color = color.new(color.white, 15), tooltip = tip))
     true
@@ -1305,9 +1309,13 @@ f_drawPlan(Day dy, int slot) =>
             xe := xPre
         float distP = math.abs(ms.lim - ms.stp)
         int distT = int(math.round(distP / tk))
-        f_ln(ms.armT, ms.lim, xe, ms.lim, cE, sty, 1)
-        f_ln(ms.armT, ms.stp, xe, ms.stp, cS, sty, 1)
-        f_ln(ms.armT, ms.tgt, xe, ms.tgt, cT, sty, 1)
+        // position boxes like a trade tool: red = entry to stop, green = entry to target (dashed while only PENDING, grey when CANCELLED)
+        int xs = (done or ms.st == 3) and not na(ms.tr) ? ms.tr.fillT : ms.armT
+        color fillR = canc ? color.new(color.gray, 88) : color.new(color.red, pend ? 90 : 80)
+        color fillG = canc ? color.new(color.gray, 88) : color.new(color.green, pend ? 90 : 80)
+        f_bxs(xs, math.max(ms.lim, ms.stp), xe, math.min(ms.lim, ms.stp), fillR, cS, sty)
+        f_bxs(xs, math.max(ms.lim, ms.tgt), xe, math.min(ms.lim, ms.tgt), fillG, cT, sty)
+        f_ln(xs, ms.lim, xe, ms.lim, cE, line.style_solid, 2)
         f_lb(xe, ms.lim, pre + " ENTRY " + str.tostring(ms.lim, format.mintick) + " [" + stt + "]", cE, label.style_label_left, ms.why == "" ? stt : stt + ": " + ms.why)
         f_lb(xe, ms.stp, pre + " SL " + str.tostring(ms.stp, format.mintick) + " | " + str.tostring(distT) + " ticks / " + str.tostring(distP, "#.00") + " pts", cS, label.style_label_left, "planned stop distance")
         f_lb(xe, ms.tgt, pre + " TP " + str.tostring(ms.tgt, format.mintick) + " | plan " + str.tostring(ms.plannedR, "#.0") + "R " + ms.tgtType, cT, label.style_label_left, "planned reward; target type: " + ms.tgtType)
