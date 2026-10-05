@@ -1,0 +1,2167 @@
+//@version=6
+// ────────────────────────────────────────────────────────────────────────────────────────────────────────────
+// H Ticks B — TAP + TRIGGER : a 15m / 1H / 4H gap is TAPPED in the bias direction -> a later 1m or 2m FVG inverts in that
+//                              direction -> entry at the close of the candle that processes it -> stop beyond the inversion
+//                              candle -> target exactly 1R.     (Indicator B. Indicator A is the 30s chain, a separate script.)
+// REQUIRES A STANDARD 30-SECOND CHART. Anything else shows "Switch to a standard 30-second chart" and generates nothing.
+//   1. BIAS: the chosen Bias source (15m structure / 4H structure / VWAP / EMAs), or OFF with the Relaxed tickbox.
+//   2. TAP (arms): a tracked 15m/1H/4H gap, pointing the SAME way as the bias, is first touched by price inside an enabled
+//      entry window. One tap is armed at a time. The arm ends at the window end, at a bias flip, or at an entry.
+//   3. TRIGGER: a 1m or 2m source FVG inverts (confirmed close through its far boundary, at least the minimum gap size) in the
+//      armed direction; its source candle must OPEN at/after the tap candle closed, inside the same window instance.
+//   4. CONFLUENCE (optional): VWAP side, EMA 9/21 trend, or both (see settings). A failed trigger leaves the arm in place.
+//   5. STOP = beyond the extreme of the inverting 1m/2m candle +/- max(1 tick, 0.10 x previous 30s ATR); ENTRY = close of the
+//      30s candle that processes the trigger; TARGET = same tick distance (1R). Trades with risk above the max-risk setting are skipped.
+//   6. CLEAR PATH (optional, default ON): no opposing 15m/1H/4H gap on [entry, target] and the target ends >= 1 tick before the
+//      nearest unconsumed 3m swing level. Missing coverage is UNKNOWN, never clear.
+//   Gates: same window instance, < 3 entries per instance, one unresolved setup at a time.
+// Verification: code review + text checks only. NOT compiled in TradingView, NOT Bar-Replay tested. No win-rate claim.
+// ────────────────────────────────────────────────────────────────────────────────────────────────────────────
+// INDICATOR (not a strategy). Outcomes: OPEN / TARGET_HIT / STOP_HIT / AMBIGUOUS on 30s candles strictly AFTER the entry
+// candle (opening price first, then the range). No slippage, costs or time exit; an estimate, not broker results.
+indicator("H Ticks B — Tap + Trigger", shorttitle = "H Ticks B", overlay = true, max_boxes_count = 500, max_lines_count = 500, max_labels_count = 500, max_bars_back = 500)
+
+const string GRP_CTX = "Context timeframe"
+const string GRP_WIN = "Entry windows (Asia 09:00 Tokyo -> 08:00 London, NY 09:45-11:30, NY 14:30-15:30; DST-aware; Mon-Fri)"
+const string GRP_Q   = "Setup quality"
+const string GRP_BIAS = "Directional bias"
+const string GRP_APP = "Chart appearance"
+const string GRP_ST  = "Statistics"
+const string GRP_DBG = "Debug"
+const string GRP_AL  = "Alerts"
+string inCtxSel = input.string("Auto (1m, 2m)", "Trigger timeframe", options = ["Auto (1m, 2m)", "1m only", "2m only"], group = GRP_CTX, tooltip = "Which source timeframes may supply the trigger inversion. Auto: either a 1m or a 2m inversion (whichever comes first).")
+bool   inRelaxWin = input.bool(false, "Relaxed: allow ALL hours (ignore the windows above)", group = GRP_WIN, tooltip = "OFF = original windows. ON = contexts and entries are accepted at any time Mon-Fri; the whole New York trading day (18:00 to 18:00) is ONE window instance with the usual entry limit, so a context can live until 18:00 NY. Stats then count every bar under the 'outside any window' row.")
+bool   inWinAsia = input.bool(true, "Window A: Asia open -> London open", group = GRP_WIN)
+bool   inWinAm = input.bool(true, "Window B: New York morning 09:45-11:30", group = GRP_WIN, tooltip = "Start inclusive, end exclusive. BOTH the context inversion and the entry must belong to the same window instance (max 3 entries per instance, one unresolved setup at a time).")
+bool   inWinPm = input.bool(true, "Window C: New York afternoon 14:30-15:30", group = GRP_WIN)
+int    inMinTick = input.int(1, "Minimum gap size (ticks, all gap sources)", minval = 1, group = GRP_Q, tooltip = "Gaps at least this wide are detected and may form contexts, triggers and obstacles.")
+bool   inNoBias = input.bool(false, "Relaxed: turn the directional bias OFF", group = GRP_BIAS, tooltip = "OFF = original behaviour. ON = contexts of either direction are accepted, a bias flip never cancels a context and the entry does not check the bias. The bias source below is then ignored and the stats show the bias as OFF.")
+string inBiasSrc = input.string("15m structure", "Bias source", options = ["15m structure", "4H structure", "VWAP", "EMAs"], group = GRP_BIAS, tooltip = "Which direction filter a context must agree with. 15m structure = the original swing-break bias (default). 4H structure = the same engine on 4H candles (slow; needs many days of loaded history). VWAP = daily-session VWAP: bullish above, bearish below. EMAs = on 5m: bullish when price > fast EMA > slow EMA, bearish when price < fast < slow, otherwise no bias. If the bias flips against a pending context, that context is cancelled.")
+int    inEmaF = input.int(21, "EMA fast length (5m, used by EMAs)", minval = 1, group = GRP_BIAS)
+int    inEmaS = input.int(50, "EMA slow length (5m, used by EMAs)", minval = 2, group = GRP_BIAS)
+int    inMaxRisk = input.int(80, "Maximum risk (ticks); wider setups are skipped", minval = 4, group = GRP_Q, tooltip = "Risk = entry to stop. NQ: 4 ticks = 1 point. 80 ticks = 20 points.")
+string inConf = input.string("None", "Confluence at the trigger", options = ["None", "VWAP side", "EMA 9/21 trend", "VWAP + EMA stack"], group = GRP_Q, tooltip = "None = off. VWAP side: close above (long) / below (short) the NY-09:30-anchored VWAP. EMA 9/21 trend: 1m EMA9 above/below EMA21. VWAP + EMA stack: VWAP side AND close beyond both EMAs with EMA9 beyond EMA21. Evaluated at the trigger, not at the tap.")
+bool   inClear = input.bool(true, "Require a clear path to 1R (HTF gaps + 3m swing)", group = GRP_Q, tooltip = "ON = skip the setup if an opposing 15m/1H/4H gap or an unconsumed 3m swing level sits between entry and the 1R target (unknown coverage also skips). OFF = no path check.")
+bool   inShowPair = input.bool(true, "Show the context gap + 30s trigger gap of every setup", group = GRP_APP)
+bool   inShowHtf = input.bool(false, "Show nearby HTF gap boxes (clutter; OFF by default)", group = GRP_APP, tooltip = "Display only. Obstacle checks ALWAYS use all tracked 15m/1H/4H gaps, shown or hidden.")
+bool   inShowMarkers = input.bool(false, "Show detail markers (retest, stop anchor, inversion candles)", group = GRP_APP, tooltip = "Small labels that explain how a setup formed. The same facts are always in the label tooltips.")
+bool   inShowRR = input.bool(true, "Show risk/reward shading", group = GRP_APP)
+string inTheme = input.string("Light", "Theme (labels and tables)", options = ["Light", "Dark"], group = GRP_APP, tooltip = "Light: black entry line. Dark: white entry line (black would be invisible). Tables always use opaque backgrounds.")
+bool   inStats = input.bool(true, "Show the small stats box (top-right)", group = GRP_ST)
+bool   inDaily = input.bool(false, "Optional: daily breakdown under the stats box", group = GRP_ST)
+int    inRepDays = input.int(20, "Days reported (stats box and debug counts)", minval = 1, maxval = 20, group = GRP_ST, tooltip = "How many of the latest Mon-Fri New York dates the stats box and the debug counts cover. If the chart has fewer dates loaded, everything available is used and Coverage reads Partial. TradingView limits how many 30s bars are loaded; the script cannot add more.")
+bool   inDebug = input.bool(false, "Debug panel: per-date / per-session funnel, first failed gate, lock intervals, source readiness, rejection records", group = GRP_DBG, tooltip = "Counts cover the reported NY dates (setting: Days reported). Every rejected candidate is counted once at its FIRST failed gate and written to Pine Logs with timestamps, source timeframe and measured value vs threshold.")
+bool   alEntry = input.bool(true, "Alert on each new entry", group = GRP_AL)
+bool   alTarget = input.bool(true, "Alert when a setup hits its target", group = GRP_AL)
+bool   alStop = input.bool(true, "Alert when a setup hits its stop", group = GRP_AL)
+
+// ── fixed, documented rules (not user settings) ──
+const string TZ_NY = "America/New_York"
+const int REP_MAX = 20
+int    REP_DATES = inRepDays
+const int DRAW_MAX = 40
+const int MAX_ENTRIES = 3
+const int LS = 4
+const int LVL_CAP = 200
+const int IX_CTX = 4
+const int IX_LVL = 8
+const int NCTX = 4
+const int FN = 8
+const int FB = 16
+const int NSS = 4
+const int DGN = 56
+bool   alAmb = false
+bool   alCtx = false
+bool   alJson = false
+bool   inLabels = true
+bool   inLog = false
+int    inExt = 0
+int    inBordT = 70
+color  inBull = color.rgb(46, 160, 110)
+color  inBear = color.rgb(201, 82, 77)
+int    inMaxEntries = MAX_ENTRIES
+bool   inOneActive = true
+bool   inUseMaxAge = false
+int    inMaxAgeMin = 30
+bool   inShowCtx = inDebug
+int    inCtxHorizon = 500
+int    inCtxCap = 60
+int    inCtxMinTicks = inMinTick
+int    inDeparture = 0
+int    inAsH  = 9
+int    inAsM  = 0
+string inAsTz = "Asia/Tokyo"
+int    inLoH  = 8
+int    inLoM  = 0
+string inLoTz = "Europe/London"
+int    inAmSH = 9
+int    inAmSM = 45
+int    inAmEH = 11
+int    inAmEM = 30
+string inAmTz = "America/New_York"
+int    inPmSH = 14
+int    inPmSM = 30
+int    inPmEH = 15
+int    inPmEM = 30
+string inPmTz = "America/New_York"
+string inWkd  = "Mon-Fri"
+bool   inShow30  = false
+float  inFvgAtr  = 0.10
+int    inFvgMinT = 4
+int    inChT     = 92
+bool   inNearest = true
+int    inHtfAbove = 1
+int    inHtfBelow = 1
+int    inHtfCont  = 1
+float  inHtfAtr   = 0.10
+int    inHtfMinT  = 4
+int    inHtfCap   = 300
+int    inHtfT     = 92
+int    inHtfTapT  = 95
+int    inHorizon  = 500
+bool   en1 = true
+string tf1 = "15"
+bool   en2 = true
+string tf2 = "60"
+bool   en3 = true
+string tf3 = "240"
+bool   en4 = false
+string tf4 = "1D"
+bool   darkTheme = inTheme == "Dark"
+color  inEntryCol = darkTheme ? color.white : color.black
+color  inTgtCol = color.green
+color  inStopCol = color.red
+color  cLblBg = darkTheme ? color.rgb(30, 34, 45) : color.white
+color  cLblTx = darkTheme ? color.white : color.black
+color  cHdrBg = darkTheme ? color.rgb(15, 23, 42) : color.rgb(30, 41, 59)
+color  cHdrTx = color.white
+color  cRowBg = darkTheme ? color.rgb(30, 34, 45) : color.white
+color  cRowTx = darkTheme ? color.white : color.black
+color  cTotBg = darkTheme ? color.rgb(51, 65, 85) : color.rgb(226, 232, 240)
+color  cWarnBg = color.rgb(127, 29, 29)
+color  cCtxFill = color.new(color.blue, 82)
+color  cCtxLine = color.blue
+color  cTrgFill = color.new(color.orange, 75)
+color  cTrgLine = color.rgb(230, 81, 0)
+
+const int ZS = 8
+const int HDR = 3
+const int ST_BULL_FVG  = 1
+const int ST_BEAR_FVG  = 2
+const int ST_BULL_IFVG = 3
+const int ST_BEAR_IFVG = 4
+const int ST_UNT_BULL  = 11
+const int ST_TAP_BULL  = 12
+const int ST_UNT_BEAR  = 13
+const int ST_TAP_BEAR  = 14
+
+type Zone
+    string id
+    int    src = -1
+    string tfTxt = ""
+    int    dir
+    int    state
+    float  top
+    float  bottom
+    int    formTime
+    int    confTime
+    int    availTime
+    int    formBar = -1
+    int    invBar = -1
+    int    invTime
+    int    invAvail
+    bool   tapped = false
+    int    tapTime
+    int    tapAvail
+    int    lastEvt
+    float  width
+    float  fatr
+    bool   seen = false
+    bool   endNow = false
+    int    cat = -1
+    float  dist = 0.0
+    bool   vis = false
+    int    tfMs = 0
+    int    invCb = -1
+    bool   dead = false
+    box    bx
+
+// The single pending 3-minute context. state: 0 NONE, 1 PENDING_RETEST, 2 WAITING_FOR_30S_TRIGGER.
+type Ctx
+    int    k = 0
+    string tfTxt = ""
+    int    tfSecs = 60
+    int    state = 0
+    int    dir
+    float  top
+    float  bottom
+    int    formTime
+    int    confAsOf
+    int    procTime
+    float  invPx = na
+    string zid = ""
+    string winId = ""
+    string winName = ""
+    int    winStart
+    int    winEnd
+    int    retestBar = -1
+    int    retestTime
+    int    away = 0
+    float  legExt = na
+    int    legExtT
+    float  retestPx = na
+    string lastReason = ""
+    box    bx
+
+type Setup
+    string id
+    int    dir
+    float  entry
+    float  stop
+    float  target
+    int    riskT
+    int    entryTime
+    int    entryBar
+    int    dateKey
+    string winId
+    string winName
+    string ctxZid
+    string srcs = ""
+    int    state = 0
+    int    resolveTime
+    float  ctxTop
+    float  ctxBot
+    int    ctxFormT
+    float  trgTop
+    float  trgBot
+    int    trgFormT
+    float  legExt
+    int    stopAnchorT
+    int    retestT
+    float  retestPx
+    int    ctxConfT
+    string ctxTf = ""
+    string ctxId = ""
+    int    ctxInvT
+    float  ctxInvPx
+    string trgId = ""
+    string trgTf = "30s"
+    int    trgInvT
+    float  trgInvPx
+    string tip = ""
+    int    blkCtx = 0
+    int    blkEnt = 0
+    line   lE
+    line   lS
+    line   lT
+    line   lR
+    box    rbx
+    box    gbx
+    box    ctxBx
+    box    trgBx
+    label  lbE
+    label  lbS
+    label  lbT
+    label  lbRt
+    label  lbAn
+    label  lbX
+    label  lbCx
+    label  lbTg
+    label  lbCm
+    label  lbTm
+
+// One pending context evaluated against ONE trigger bar. stage = gates passed in order (impulse, stop/risk, clear path,
+// admission); fail = code of the first failed gate (7 impulse, 8 stop/risk, 9 coverage unknown, 10 obstacle,
+// 11 window instance, 12 session limit, 13 unresolved setup, 14 bias).
+type Cand
+    int    k
+    Zone   trg
+    int    stage = 0
+    int    fail = -1
+    string why = ""
+    float  entry = na
+    float  stop = na
+    float  target = na
+    float  legX = na
+    int    legT
+    int    riskT = 0
+    int    bufT = 1
+    float  bodyAtr = na
+    string srcTxt = ""
+    string nearTxt = "none within tracked history"
+    bool   ok = false
+    int    sub = 0
+    int    impFirst = -1
+    int    impMask = 0
+
+// A confirmed 3m swing level (strength 2/2) tracked on the chart. consumed = a later candle reached it.
+type Lvl
+    float  price
+    int    dir
+    int    pivotT
+    int    confT
+    bool   consumed = false
+    bool   seen = false
+
+f_tk(float x) =>
+    math.round(x / syminfo.mintick)
+
+// Closed-interval overlap of a candle range with the ORIGINAL zone boundaries.
+f_overlap(float hi, float lo, float zb, float zt) =>
+    f_tk(hi) >= f_tk(zb) and f_tk(lo) <= f_tk(zt)
+
+f_tfText(int s) =>
+    string r = ""
+    if s >= 604800 and s % 604800 == 0
+        r := str.tostring(int(s / 604800)) + "W"
+    else if s >= 86400 and s % 86400 == 0
+        r := str.tostring(int(s / 86400)) + "D"
+    else if s >= 3600 and s % 3600 == 0
+        r := str.tostring(int(s / 3600)) + "H"
+    else if s >= 60 and s % 60 == 0
+        r := str.tostring(int(s / 60)) + "m"
+    else
+        r := str.tostring(s) + "s"
+    r
+
+// Engine zone record (8 floats): formTime, code (+-1 live, +-2 inverted-this-bar; sign = direction),
+// top, bottom, confTime, tapTime (0 = untapped), formation candle index, formation ATR (-1 = n/a).
+f_push(array<float> z, int ft, int dir, float tp, float bt, int conf, int fidx, float atr) =>
+    z.push(float(ft))
+    z.push(float(dir))
+    z.push(tp)
+    z.push(bt)
+    z.push(float(conf))
+    z.push(0.0)
+    z.push(float(fidx))
+    z.push(na(atr) ? -1.0 : atr)   // frozen formation ATR of this source candle, -1 = unavailable
+    true
+
+// ═══════════════════════ SOURCE-CONTEXT LIFECYCLE ENGINE (runs inside request.security) ════════
+// Returns the published snapshot (array<float>): header [truncated flag, readyTime (0 = still warming up)], then 8 floats
+// per zone, oldest first. The same array object is returned on every bar on which nothing changed; a published array is
+// never mutated. While warming up only the header is published (no zones are ever used from a partial history).
+// History policy (NO wall-clock cutoff, identical in normal loading and Bar Replay):
+//   * every source candle the platform supplies is processed, oldest first; nothing depends on the computer's current time;
+//   * a live zone expires once (candle open - formation time) >= `horizonMs` (silent, documented horizon);
+//   * READY = the processed history spans a full horizon after the FIRST candle the platform supplied, so no zone inside the
+//     horizon can be unknown. The header also reports that first-candle time so a late start can be explained;
+//   * capacity: the OLDEST live zone is dropped and truncation stays flagged (coverage UNKNOWN) until that zone would have
+//     expired anyway. No relevance shortcut: a dropped gap is never assumed irrelevant.
+f_engine(int cap, int minTicks, int horizonMs) =>
+    var array<float> Z = array.new_float(0)
+    var array<float> pub = array.from(0.0, 0.0, 0.0)
+    var float maxPruned = -1.0
+    var bool lastTrunc = false
+    var bool lastReady = false
+    var float lastProc = 0.0
+    var int firstProcT = 0
+    array<float> out = na
+    float atrS = ta.atr(14)      // source-timeframe ATR, evaluated every bar
+    float fatr1 = atrS[1]        // ATR on the SAME completed candle [1] as the formation OHLC
+    float h1 = high[1]
+    float l1 = low[1]
+    float c1 = close[1]
+    float h2 = high[2]
+    float l2 = low[2]
+    float h3 = high[3]
+    float l3 = low[3]
+    int   t1 = time[1]
+    int   tc1 = time_close[1]
+    int   cidx = bar_index - 1
+    bool  valid = not na(h1) and not na(l1) and not na(c1) and not na(t1) and not na(tc1)
+    bool  active = valid
+    if active
+        if t1 > lastProc
+            lastProc := t1
+            if firstProcT == 0
+                firstProcT := t1
+            bool dirty = false
+            // 1) drop zones flagged inverted on the previous source bar
+            int n0 = int(Z.size() / ZS)
+            if n0 > 0
+                for i = n0 - 1 to 0
+                    if math.abs(Z.get(i * ZS + 1)) == 2.0
+                        for k = 1 to ZS
+                            Z.remove(i * ZS)
+                        dirty := true
+            // 2) lifecycle of existing zones on the completed candle. Only candles that OPEN at/after the
+            //    formation confirmation are eligible (the formation candle never touches/inverts itself).
+            int n1 = int(Z.size() / ZS)
+            if n1 > 0
+                for i = 0 to n1 - 1
+                    int b = i * ZS
+                    if t1 >= int(Z.get(b + 4))
+                        float cd = Z.get(b + 1)
+                        float zt = Z.get(b + 2)
+                        float zb = Z.get(b + 3)
+                        bool inv = cd > 0 ? f_tk(c1) < f_tk(zb) : f_tk(c1) > f_tk(zt)
+                        if inv
+                            Z.set(b + 1, cd * 2.0)   // source CLOSE strictly beyond the opposite boundary
+                            dirty := true
+                        else if Z.get(b + 5) == 0.0 and f_overlap(h1, l1, zb, zt)
+                            Z.set(b + 5, float(tc1)) // first touch (monotonic)
+                            dirty := true
+            // 3) formation: candle 3 = [1], candle 1 = [3]; candle 2 only has to exist
+            if not na(h2) and not na(l2) and not na(h3) and not na(l3)
+                int bullGap = f_tk(l1) - f_tk(h3)
+                int bearGap = f_tk(l3) - f_tk(h1)
+                if bullGap >= minTicks
+                    f_push(Z, t1, 1, l1, h3, tc1, cidx, fatr1)
+                    dirty := true
+                else if bearGap >= minTicks
+                    f_push(Z, t1, -1, l3, h1, tc1, cidx, fatr1)
+                    dirty := true
+            // 4) horizon expiry (silent, never an inversion). Flagged zones are left so the inversion is published.
+            int n2 = int(Z.size() / ZS)
+            if n2 > 0
+                for i = n2 - 1 to 0
+                    if math.abs(Z.get(i * ZS + 1)) == 1.0 and t1 - int(Z.get(i * ZS)) >= horizonMs
+                        for k = 1 to ZS
+                            Z.remove(i * ZS)
+                        dirty := true
+            // 5) capacity: drop the OLDEST unflagged live zone (Z is chronological); truncation is flagged, never ignored
+            int n3 = int(Z.size() / ZS)
+            int nFlag = 0
+            if n3 > 0
+                for i = 0 to n3 - 1
+                    if math.abs(Z.get(i * ZS + 1)) == 2.0
+                        nFlag += 1
+            int over = n3 - nFlag - cap
+            while over > 0
+                int pIdx = -1
+                int nn = int(Z.size() / ZS)
+                for i = 0 to nn - 1
+                    if pIdx < 0 and math.abs(Z.get(i * ZS + 1)) == 1.0
+                        pIdx := i
+                if pIdx >= 0
+                    maxPruned := math.max(maxPruned, Z.get(pIdx * ZS))
+                    for k = 1 to ZS
+                        Z.remove(pIdx * ZS)
+                    dirty := true
+                over -= 1
+            // 6) truncation flag: a capacity-dropped zone could still be live inside the horizon => coverage unknown
+            bool truncNow = maxPruned >= 0 and t1 - maxPruned < horizonMs
+            if truncNow != lastTrunc
+                lastTrunc := truncNow
+                dirty := true
+            // 7) READY once the processed history spans a full horizon; flip is published
+            bool nowReady = t1 - firstProcT >= horizonMs
+            if nowReady != lastReady
+                lastReady := nowReady
+                dirty := true
+            // 8) publish a NEW array only if something changed (header only while warming up)
+            if dirty
+                array<float> tmp = array.from(truncNow ? 1.0 : 0.0, nowReady ? float(tc1) : 0.0, float(firstProcT))
+                if nowReady
+                    tmp.concat(Z)
+                pub := tmp
+        out := pub
+    out
+
+// 3m swing-level engine (inside request.security on the 3m series). Strict pivots 2 left / 2 right; a pivot becomes
+// available only when its second right-side candle completes. A level is consumed by the first LATER completed candle that
+// reaches it (high >= level / low <= level); the pivot candle and the confirming candles never consume it (strict pivot).
+// Published like the zone engine: header [truncated, readyTime], then 4 floats per level (price, +1 high / -1 low,
+// pivot candle open time, confirmation time). Horizon expiry and capacity are time/size bounded; capacity drops the OLDEST
+// level and flags coverage UNKNOWN until it would have expired.
+f_lvlEngine(int cap, int horizonMs) =>
+    var array<float> L = array.new_float(0)
+    var array<float> pub = array.from(0.0, 0.0, 0.0)
+    var float maxPruned = -1.0
+    var bool lastTrunc = false
+    var bool lastReady = false
+    var float lastProc = 0.0
+    var int firstProcT = 0
+    array<float> out = na
+    float h1 = high[1]
+    float l1 = low[1]
+    float h2 = high[2]
+    float l2 = low[2]
+    float h3 = high[3]
+    float l3 = low[3]
+    float h4 = high[4]
+    float l4 = low[4]
+    float h5 = high[5]
+    float l5 = low[5]
+    int   t1 = time[1]
+    int   tc1 = time_close[1]
+    int   t3 = time[3]
+    bool  valid = not na(h1) and not na(l1) and not na(t1) and not na(tc1)
+    bool  active = valid
+    if active
+        if t1 > lastProc
+            lastProc := t1
+            if firstProcT == 0
+                firstProcT := t1
+            bool dirty = false
+            int n0 = int(L.size() / LS)
+            if n0 > 0
+                for i = n0 - 1 to 0
+                    int b = i * LS
+                    bool hit = false
+                    if t1 >= int(L.get(b + 3))
+                        hit := L.get(b + 1) > 0 ? f_tk(h1) >= f_tk(L.get(b)) : f_tk(l1) <= f_tk(L.get(b))
+                    bool old = t1 - int(L.get(b + 2)) >= horizonMs
+                    if hit or old
+                        for k = 1 to LS
+                            L.remove(b)
+                        dirty := true
+            if not na(h5) and not na(l5) and not na(t3)
+                bool ph = f_tk(h3) > f_tk(h4) and f_tk(h3) > f_tk(h5) and f_tk(h3) > f_tk(h2) and f_tk(h3) > f_tk(h1)
+                bool pl = f_tk(l3) < f_tk(l4) and f_tk(l3) < f_tk(l5) and f_tk(l3) < f_tk(l2) and f_tk(l3) < f_tk(l1)
+                if ph
+                    L.push(h3)
+                    L.push(1.0)
+                    L.push(float(t3))
+                    L.push(float(tc1))
+                    dirty := true
+                if pl
+                    L.push(l3)
+                    L.push(-1.0)
+                    L.push(float(t3))
+                    L.push(float(tc1))
+                    dirty := true
+            int over = int(L.size() / LS) - cap
+            while over > 0
+                maxPruned := math.max(maxPruned, L.get(2))
+                for k = 1 to LS
+                    L.remove(0)
+                dirty := true
+                over -= 1
+            bool truncNow = maxPruned >= 0 and t1 - maxPruned < horizonMs
+            if truncNow != lastTrunc
+                lastTrunc := truncNow
+                dirty := true
+            bool nowReady = t1 - firstProcT >= horizonMs
+            if nowReady != lastReady
+                lastReady := nowReady
+                dirty := true
+            if dirty
+                array<float> tmp = array.from(truncNow ? 1.0 : 0.0, nowReady ? float(tc1) : 0.0, float(firstProcT))
+                if nowReady
+                    tmp.concat(L)
+                pub := tmp
+        out := pub
+    out
+
+// 15m directional bias engine (inside request.security on the 15m series; completed candle [1] only).
+// 1) the break test uses only pivots that were confirmed on EARLIER candles (available before the breaking candle began);
+// 2) only afterwards is the pivot confirmed by this candle stored (never backdated). A level breaks at most once.
+// Returns [bias +1/-1/0, broken level, pivot candle open time, break-confirmation time].
+f_bias15() =>
+    var float swH = na
+    var float swHT = na
+    var float swHA = na
+    var bool  swHB = true
+    var float swL = na
+    var float swLT = na
+    var float swLA = na
+    var bool  swLB = true
+    var float bias = 0.0
+    var float bLvl = na
+    var float bLvlT = na
+    var float bAv = na
+    var float lastProc = 0.0
+    float h1 = high[1]
+    float l1 = low[1]
+    float c1 = close[1]
+    float h2 = high[2]
+    float l2 = low[2]
+    float h3 = high[3]
+    float l3 = low[3]
+    float h4 = high[4]
+    float l4 = low[4]
+    float h5 = high[5]
+    float l5 = low[5]
+    int   t1 = time[1]
+    int   tc1 = time_close[1]
+    int   t3 = time[3]
+    bool  valid = not na(c1) and not na(t1) and not na(tc1)
+    if valid
+        if t1 > lastProc
+            lastProc := t1
+            if not na(swH) and not swHB and swHA <= t1 and f_tk(c1) > f_tk(swH)
+                bias := 1.0
+                bLvl := swH
+                bLvlT := swHT
+                bAv := float(tc1)
+                swHB := true
+            else if not na(swL) and not swLB and swLA <= t1 and f_tk(c1) < f_tk(swL)
+                bias := -1.0
+                bLvl := swL
+                bLvlT := swLT
+                bAv := float(tc1)
+                swLB := true
+            if not na(h5) and not na(l5) and not na(t3)
+                if f_tk(h3) > f_tk(h4) and f_tk(h3) > f_tk(h5) and f_tk(h3) > f_tk(h2) and f_tk(h3) > f_tk(h1)
+                    swH := h3
+                    swHT := float(t3)
+                    swHA := float(tc1)
+                    swHB := false
+                if f_tk(l3) < f_tk(l4) and f_tk(l3) < f_tk(l5) and f_tk(l3) < f_tk(l2) and f_tk(l3) < f_tk(l1)
+                    swL := l3
+                    swLT := float(t3)
+                    swLA := float(tc1)
+                    swLB := false
+    [bias, bLvl, bLvlT, bAv]
+
+// ═════════════════════════════ CHART SUPPORT, SOURCES, REQUESTS ═════════════════════════════
+bool stdChart  = chart.is_standard and not timeframe.isticks
+bool supported = stdChart and timeframe.isseconds and timeframe.multiplier == 30
+int  chartSecs = supported ? timeframe.in_seconds() : 0
+int  chartMs   = chartSecs * 1000
+
+int  sec1 = timeframe.in_seconds(tf1)
+int  sec2 = timeframe.in_seconds(tf2)
+int  sec3 = timeframe.in_seconds(tf3)
+int  sec4 = timeframe.in_seconds(tf4)
+bool ok1 = supported and en1 and sec1 > chartSecs
+bool ok2 = supported and en2 and sec2 > chartSecs and not (ok1 and sec2 == sec1)
+bool ok3 = supported and en3 and sec3 > chartSecs and not (ok1 and sec3 == sec1) and not (ok2 and sec3 == sec2)
+bool ok4 = supported and en4 and sec4 > chartSecs and not (ok1 and sec4 == sec1) and not (ok2 and sec4 == sec2) and not (ok3 and sec4 == sec3)
+bool al1 = chartSecs > 0 and sec1 % chartSecs == 0
+bool al2 = chartSecs > 0 and sec2 % chartSecs == 0
+bool al3 = chartSecs > 0 and sec3 % chartSecs == 0
+bool al4 = chartSecs > 0 and sec4 % chartSecs == 0
+bool act1 = ok1 and al1
+bool act2 = ok2 and al2
+bool act3 = ok3 and al3
+bool act4 = ok4 and al4
+
+int  secL = 180
+bool actL = supported and chartSecs > 0 and secL % chartSecs == 0
+bool sel1 = inCtxSel == "Auto (1m, 2m)" or inCtxSel == "1m only"
+bool sel2 = inCtxSel == "Auto (1m, 2m)" or inCtxSel == "2m only"
+bool actC0 = supported and sel1 and chartSecs > 0 and 60 % chartSecs == 0
+bool actC1 = supported and sel2 and chartSecs > 0 and 120 % chartSecs == 0
+bool actC2 = false
+bool actC3 = false
+array<bool> actCtxA = array.from(actC0, actC1, actC2, actC3)
+int  hrzC0 = inCtxHorizon * 60 * 1000
+int  hrzC1 = inCtxHorizon * 120 * 1000
+int  hrzC2 = inCtxHorizon * 180 * 1000
+int  hrzC3 = inCtxHorizon * 300 * 1000
+int  hrzL = inCtxHorizon * secL * 1000
+int  hrz1 = inHorizon * sec1 * 1000
+int  hrz2 = inHorizon * sec2 * 1000
+int  hrz3 = inHorizon * sec3 * 1000
+int  hrz4 = inHorizon * sec4 * 1000
+
+array<float> snapC0 = na
+array<float> snapC1 = na
+array<float> snapC2 = na
+array<float> snapC3 = na
+array<float> snap1 = na
+array<float> snap2 = na
+array<float> snap3 = na
+array<float> snap4 = na
+array<float> snapL = na
+float bzR = na
+float blR = na
+float btR = na
+float baR = na
+int   asOfC0 = na
+int   asOfC1 = na
+int   asOfC2 = na
+int   asOfC3 = na
+float clsC0 = na
+float clsC1 = na
+float clsC2 = na
+float clsC3 = na
+float hiC0 = na
+float loC0 = na
+float hiC1 = na
+float loC1 = na
+int   asOfL = na
+int asOf1 = na
+int asOf2 = na
+int asOf3 = na
+int asOf4 = na
+if actC0
+    snapC0 := request.security(syminfo.tickerid, "1", f_engine(inCtxCap, inMinTick, hrzC0), lookahead = barmerge.lookahead_on)
+    [aC0_, cC0_, hC0_, lC0_] = request.security(syminfo.tickerid, "1", [time_close[1], close[1], high[1], low[1]], lookahead = barmerge.lookahead_on)
+    asOfC0 := aC0_
+    clsC0 := cC0_
+    hiC0 := hC0_
+    loC0 := lC0_
+if actC1
+    snapC1 := request.security(syminfo.tickerid, "2", f_engine(inCtxCap, inMinTick, hrzC1), lookahead = barmerge.lookahead_on)
+    [aC1_, cC1_, hC1_, lC1_] = request.security(syminfo.tickerid, "2", [time_close[1], close[1], high[1], low[1]], lookahead = barmerge.lookahead_on)
+    asOfC1 := aC1_
+    clsC1 := cC1_
+    hiC1 := hC1_
+    loC1 := lC1_
+if actL
+    snapL := request.security(syminfo.tickerid, "3", f_lvlEngine(LVL_CAP, hrzL), lookahead = barmerge.lookahead_on)
+    asOfL := request.security(syminfo.tickerid, "3", time_close[1], lookahead = barmerge.lookahead_on)
+bool   biasStruct = inBiasSrc == "15m structure" or inBiasSrc == "4H structure"
+string biasTxt = inBiasSrc == "15m structure" ? "15m" : (inBiasSrc == "4H structure" ? "4H" : (inBiasSrc == "VWAP" ? "VWAP" : "EMA"))
+float  vwapV = ta.vwap(hlc3, timeframe.change("D"))
+if supported
+    if inBiasSrc == "15m structure"
+        [bz_, bl_, bt_, ba_] = request.security(syminfo.tickerid, "15", f_bias15(), lookahead = barmerge.lookahead_on)
+        bzR := bz_
+        blR := bl_
+        btR := bt_
+        baR := ba_
+    else if inBiasSrc == "4H structure"
+        [bz4_, bl4_, bt4_, ba4_] = request.security(syminfo.tickerid, "240", f_bias15(), lookahead = barmerge.lookahead_on)
+        bzR := bz4_
+        blR := bl4_
+        btR := bt4_
+        baR := ba4_
+    else if inBiasSrc == "VWAP"
+        bzR := na(vwapV) ? 0.0 : (close > vwapV ? 1.0 : (close < vwapV ? -1.0 : 0.0))
+        blR := vwapV
+        btR := time
+        baR := time_close
+    else
+        [ef_, es_] = request.security(syminfo.tickerid, "5", [ta.ema(close, inEmaF)[1], ta.ema(close, inEmaS)[1]], lookahead = barmerge.lookahead_on)
+        bzR := na(ef_) or na(es_) ? 0.0 : (close > ef_ and ef_ > es_ ? 1.0 : (close < ef_ and ef_ < es_ ? -1.0 : 0.0))
+        blR := ef_
+        btR := time
+        baR := time_close
+int   hmNy = hour(time, TZ_NY) * 60 + minute(time, TZ_NY)
+bool  vwAnchor = hmNy >= 570 and hmNy[1] < 570
+float vwapNy = ta.vwap(hlc3, vwAnchor)
+float em9 = na
+float em21 = na
+if supported
+    [e9_, e21_] = request.security(syminfo.tickerid, "1", [ta.ema(close, 9)[1], ta.ema(close, 21)[1]], lookahead = barmerge.lookahead_on)
+    em9 := e9_
+    em21 := e21_
+if act1
+    snap1 := request.security(syminfo.tickerid, tf1, f_engine(inHtfCap, inMinTick, hrz1), lookahead = barmerge.lookahead_on)
+    asOf1 := request.security(syminfo.tickerid, tf1, time_close[1], lookahead = barmerge.lookahead_on)
+if act2
+    snap2 := request.security(syminfo.tickerid, tf2, f_engine(inHtfCap, inMinTick, hrz2), lookahead = barmerge.lookahead_on)
+    asOf2 := request.security(syminfo.tickerid, tf2, time_close[1], lookahead = barmerge.lookahead_on)
+if act3
+    snap3 := request.security(syminfo.tickerid, tf3, f_engine(inHtfCap, inMinTick, hrz3), lookahead = barmerge.lookahead_on)
+    asOf3 := request.security(syminfo.tickerid, tf3, time_close[1], lookahead = barmerge.lookahead_on)
+if act4
+    snap4 := request.security(syminfo.tickerid, tf4, f_engine(inHtfCap, inMinTick, hrz4), lookahead = barmerge.lookahead_on)
+    asOf4 := request.security(syminfo.tickerid, tf4, time_close[1], lookahead = barmerge.lookahead_on)
+var array<Zone>   hz1 = array.new<Zone>()
+var array<Zone>   hz2 = array.new<Zone>()
+var array<Zone>   hz3 = array.new<Zone>()
+var array<Zone>   hz4 = array.new<Zone>()
+var array<int>    lastAsOf = array.new_int(10, 0)
+var array<int>    wm       = array.new_int(10, 0)
+var array<int>    srcRT    = array.new_int(10, 0)
+var array<int>    srcFT    = array.new_int(10, 0)
+var array<int>    srcSkip  = array.new_int(10, 0)
+var array<bool>   srcSeen  = array.new_bool(10, false)
+var array<bool>   srcInit  = array.new_bool(10, false)
+var array<bool>   srcTrunc = array.new_bool(10, false)
+var array<bool>   srcReady = array.new_bool(10, false)
+var array<string> warnArr  = array.new_string(0)
+var array<int>    ev   = array.new_int(12, 0)         // 7 target hit, 8 stop hit, 9 long entry, 10 short entry, 11 ambiguous
+var array<string> evTf = array.new_string(12, "")
+var array<string> aMsgs = array.new_string(0)         // alert lines of the current confirmed bar (sent as ONE alert())
+var int   firstTime = time
+var int   lastConfClose = na
+var float refPrice = na
+float chartAtr = ta.atr(14)
+int   prevCloseT = time_close[1]
+float h2c = high[2]
+float l2c = low[2]
+var array<Ctx>    cxs = array.from(Ctx.new(k = 0, tfTxt = "1m", tfSecs = 60), Ctx.new(k = 1, tfTxt = "2m", tfSecs = 120), Ctx.new(k = 2, tfTxt = "3m", tfSecs = 180), Ctx.new(k = 3, tfTxt = "5m", tfSecs = 300))
+var array<int>    fnl = array.new_int(NCTX * FN, 0)    // per-timeframe funnel: inversions, admitted, retests, eligible 30s inversions, impulse, stop/risk, clear path, entries
+var array<int>    fnb = array.new_int(NCTX * FB, 0)
+// Diagnostic matrix: for each NY reporting date (same order as dKey) x session (0 Asia, 1 NY morning, 2 NY afternoon, 3 outside any
+// window) x DGN columns. Layout: 0 eligible bars, 1 bars fully covered, 2 bars with 15m bias UNKNOWN, 3-6 context inversions 1m/2m/3m/5m,
+// 7 contexts admitted, 8 retested, 9 candidates, 10 formed-after-context, 11 overlap, 12 impulse, 13 stop/risk, 14 clear path,
+// 15 admission, 16 entries, 17-29 first failed gate (17 formed-before, 18 no overlap, 19 impulse, 20 stop/risk, 21 HTF coverage,
+// 22 3m structure not ready, 23 HTF gap, 24 3m swing, 25 window instance, 26 session limit, 27 unresolved setup, 28 bias, 29 outranked),
+// 30 inversion before retest, 31 inversion on retest candle, 32-37 inversion rejected (32 bias unknown, 33 bias opposite, 34 narrow,
+// 35 other inversion chosen, 36 unresolved-setup lock, 37 no window), 38-42 context lost (38 replaced, 39 discarded at another entry,
+// 40 window expiry, 41 closed through, 42 bias flip), 43 informational (candle-1 before confirmation), 44-49 impulse FIRST failed
+// sub-check (dir, body/ATR, body/range, close position, extension, unavailable), 50-54 impulse sub-check failed at all, 55 bars with an open setup.
+var array<int>    dg = array.new_int(0)
+var array<string> fbNames = array.from("replaced", "expired", "closed through", "bias flip", "inv: no window", "inv: bias/narrow", "inv: unresolved block", "impulse fail", "stop/risk fail", "coverage unknown", "obstacle", "window instance", "session limit", "unresolved setup", "bias at entry", "outranked")    // per-timeframe first-failed-gate / block counters (each candidate counted once)
+var array<int>    armI = array.new_int(5, 0)         // 0 armed, 1 direction, 2 tap candle close, 3 window end, 4 tapped gap formation time
+var array<float>  armF = array.new_float(3, na)      // 0 tapped gap top, 1 tapped gap bottom, 2 tap candle extreme
+var array<string> armS = array.new_string(2, "")     // 0 tapped gap timeframe, 1 tapped gap id
+var array<int>    bc = array.new_int(12, 0)          // funnel counters since load
+var array<string> bcNames = array.from("taps", "armed", "tap: bias mismatch", "tap: no window", "tap: already armed", "inversions while armed", "inv: timing / window", "inv: confluence", "risk too wide", "path blocked / unknown", "lock / window limit", "ENTRIES")
+var array<Setup>  setups = array.new<Setup>()
+var array<string> wKeys = array.new_string(0)         // entries per window instance
+var array<int>    wCnt  = array.new_int(0)
+var int  lastResolveAt = 0
+var array<int>    dKey    = array.new_int(0)          // NY calendar dates with chart data (yyyymmdd), oldest first
+var array<int>    dDow    = array.new_int(0)
+var array<int>    dWinN   = array.new_int(0)          // confirmed bars inside an enabled entry window
+var array<int>    dWinBad = array.new_int(0)          // ... of which qualification coverage was incomplete
+var array<int>    dSetN   = array.new_int(0)          // setups entered on that date
+var int  firstDateKey = na
+var int  covStart = na
+var bool needPrune = false
+var array<Lvl> lvStore = array.new<Lvl>()
+int   biasDir = na(bzR) ? 0 : int(bzR)
+bool  noBias = inNoBias
+bool okWinAs = not (inAsTz == inLoTz and inAsH == inLoH and inAsM == inLoM)
+bool okWinAm = not (inAmSH == inAmEH and inAmSM == inAmEM)
+bool okWinPm = not (inPmSH == inPmEH and inPmSM == inPmEM)
+
+// ───────────── entry windows (calendar-aware; named IANA timezones; never the chart display timezone) ─────────────
+// Local timestamp for the calendar date `dayShift` days from ref's local date in tz. Stepping is anchored at local
+// NOON so a DST day (23h/25h) can never skip or repeat a date; hh:mm is then built with timestamp(tz, ...).
+f_localTs(int ref, string tz, int dayShift, int hh, int mm) =>
+    int noon = timestamp(tz, year(ref, tz), month(ref, tz), dayofmonth(ref, tz), 12, 0, 0)
+    int shifted = noon + dayShift * 86400000
+    timestamp(tz, year(shifted, tz), month(shifted, tz), dayofmonth(shifted, tz), hh, mm, 0)
+
+// One window candidate containing T (start inclusive, end exclusive). Instances starting on T's local start-date
+// and the previous start-date are checked, so overnight windows are found. Returns [start, end] or [na, na].
+f_winCand(int T, bool en, bool valid, int sh, int sm, string stz, int eh, int em, string etz) =>
+    int bs = na
+    int be = na
+    if en and valid
+        for s = 0 to 1
+            int st = f_localTs(T, stz, -s, sh, sm)
+            int e0 = f_localTs(st, etz, 0, eh, em)
+            int eEnd = e0 > st ? e0 : f_localTs(st, etz, 1, eh, em)   // first end strictly after the start
+            int dw = dayofweek(st, stz)
+            bool dayOk = inWkd == "Every day" or (dw >= dayofweek.monday and dw <= dayofweek.friday)
+            if dayOk and T >= st and T < eEnd
+                if na(bs) or st > bs
+                    bs := st
+                    be := eEnd
+    [bs, be]
+
+// Deterministic assignment: latest start wins; equal starts: NY morning, then NY afternoon, then Asia -> London.
+f_selectWindow(int T) =>
+    [sA, eA] = f_winCand(T, inWinAsia, okWinAs, inAsH, inAsM, inAsTz, inLoH, inLoM, inLoTz)
+    [sM, eM] = f_winCand(T, inWinAm, okWinAm, inAmSH, inAmSM, inAmTz, inAmEH, inAmEM, inAmTz)
+    [sP, eP] = f_winCand(T, inWinPm, okWinPm, inPmSH, inPmSM, inPmTz, inPmEH, inPmEM, inPmTz)
+    string bn = ""
+    int bs = na
+    int be = na
+    if not na(sM)
+        bn := "New York morning"
+        bs := sM
+        be := eM
+    if not na(sP) and (na(bs) or sP > bs)
+        bn := "New York afternoon"
+        bs := sP
+        be := eP
+    if not na(sA) and (na(bs) or sA > bs)
+        bn := "Asia -> London"
+        bs := sA
+        be := eA
+    if inRelaxWin
+        // relaxed: ONE all-hours instance per NY trading day (18:00 -> 18:00 NY), Mon-Fri
+        bn := ""
+        bs := na
+        be := na
+        int dwR = dayofweek(T, TZ_NY)
+        if inWkd == "Every day" or (dwR >= dayofweek.monday and dwR <= dayofweek.friday)
+            int st0 = f_localTs(T, TZ_NY, 0, 18, 0)
+            int stR = T >= st0 ? st0 : f_localTs(T, TZ_NY, -1, 18, 0)
+            bn := "Relaxed (all hours)"
+            bs := stR
+            be := f_localTs(stR, TZ_NY, 1, 18, 0)
+    [bn, bs, be]
+
+// ═════════════════════════════════════════ ACTIONS ════════════════════════════════════════════
+f_destroy(Zone z) =>
+    if not na(z.bx)
+        box.delete(z.bx)
+        z.bx := na
+    true
+
+f_evInc(int i, string tf) =>
+    ev.set(i, ev.get(i) + 1)
+    if tf != ""
+        string cur = evTf.get(i)
+        array<string> toks = str.split(cur, ",")
+        if not toks.includes(tf)
+            evTf.set(i, cur == "" ? tf : cur + "," + tf)
+    true
+
+f_resetEv() =>
+    for i = 0 to 11
+        ev.set(i, 0)
+        evTf.set(i, "")
+    true
+
+f_addWhy(string a, string b) =>
+    b == "" ? a : (a == "" ? b : a + "; " + b)
+
+
+
+
+f_log(string txt) =>
+    if inLog
+        log.info("H Ticks | " + txt)
+    true
+
+// Reconcile one source slot against the engine snapshot (HTF layer). Chronological two-pointer merge.
+// `gen` = false during the slot's first (bootstrap) reconciliation: nothing is announced then.
+// The watermark only gates creation of zones that have no store match; matched zones always update.
+f_reconcile(array<Zone> store, int idx, string tfTxt, array<float> snap, int asOf) =>
+    bool gen = srcInit.get(idx)
+    srcTrunc.set(idx, snap.get(0) == 1.0)
+    srcReady.set(idx, snap.get(1) > 0.0)
+    srcRT.set(idx, int(snap.get(1)))
+    srcFT.set(idx, int(snap.get(2)))
+    int cnt = int((snap.size() - HDR) / ZS)
+    int m = store.size()
+    if m > 0
+        for i = 0 to m - 1
+            Zone z0 = store.get(i)
+            z0.seen := false
+            z0.endNow := false
+    int j = 0
+    if cnt > 0
+        for k = 0 to cnt - 1
+            int base = HDR + k * ZS
+            int ft = int(snap.get(base))
+            float cd = snap.get(base + 1)
+            int d = cd > 0 ? 1 : -1
+            bool flg = math.abs(cd) == 2.0
+            float zt = snap.get(base + 2)
+            float zb = snap.get(base + 3)
+            int conf = int(snap.get(base + 4))
+            int tp = int(snap.get(base + 5))
+            float fa = snap.get(base + 7)
+            bool adv = true
+            while adv
+                adv := false
+                if j < store.size()
+                    if store.get(j).formTime < ft
+                        j += 1
+                        adv := true
+            bool isMatch = false
+            if j < store.size()
+                isMatch := store.get(j).formTime == ft
+            if isMatch
+                Zone z = store.get(j)
+                z.seen := true
+                z.lastEvt := asOf
+                j += 1
+                if flg
+                    z.endNow := true
+                else if tp > 0 and not z.tapped
+                    z.tapped := true          // monotonic: never reverted by a snapshot
+                    z.state := z.dir > 0 ? ST_TAP_BULL : ST_TAP_BEAR
+                    z.tapTime := tp
+                    z.tapAvail := time_close
+                    if gen
+                        f_evInc(5, tfTxt)
+            else if not flg and ft > wm.get(idx)
+                bool tpd = tp > 0
+                int st = d > 0 ? (tpd ? ST_TAP_BULL : ST_UNT_BULL) : (tpd ? ST_TAP_BEAR : ST_UNT_BEAR)
+                Zone nz = Zone.new(id = syminfo.tickerid + "|" + tfTxt + "|" + str.tostring(ft) + "|" + str.tostring(d), src = idx, tfTxt = tfTxt, dir = d, state = st, top = zt, bottom = zb, formTime = ft, confTime = conf, availTime = time_close, width = zt - zb, fatr = fa < 0 ? na : fa, tapped = tpd, tapTime = tp, tapAvail = time_close, lastEvt = asOf, seen = true)
+                store.push(nz)
+                wm.set(idx, ft)
+                // genuine formation = confirmed by the source candle that just completed, after bootstrap
+                if gen and conf == asOf
+                    f_evInc(4, tfTxt)
+    // zones missing from the snapshot are gone (expired, capacity-pruned, or already removed): silent.
+    // zones the engine flagged inverted: removal dominates any tap in the same step.
+    int n2 = store.size()
+    if n2 > 0
+        for i = n2 - 1 to 0
+            Zone z = store.get(i)
+            if z.endNow
+                f_destroy(z)
+                store.remove(i)
+                if gen
+                    f_evInc(6, tfTxt)
+            else if not z.seen
+                f_destroy(z)
+                store.remove(i)
+    srcInit.set(idx, true)
+    true
+
+// Obstacle zones come from SOURCE candles only (existence, source-close inversion), so no chart history is needed to use them;
+// chart taps are display-only. A chart candle straddling a source boundary only skips that single update (counted), never
+// disables the source: the next snapshot carries the complete state.
+f_sync(array<Zone> store, int idx, string tfTxt, array<float> snap, int asOf) =>
+    if not na(snap) and not na(asOf)
+        srcSeen.set(idx, true)
+        if asOf > lastAsOf.get(idx)
+            lastAsOf.set(idx, asOf)
+            if not na(prevCloseT) and prevCloseT > asOf
+                srcSkip.set(idx, srcSkip.get(idx) + 1)
+            else
+                f_reconcile(store, idx, tfTxt, snap, asOf)
+    true
+f_tapStore(array<Zone> a) =>
+    int n = a.size()
+    if n > 0
+        for i = 0 to n - 1
+            Zone z = a.get(i)
+            if not z.tapped and time >= z.confTime and f_overlap(high, low, z.bottom, z.top)
+                z.tapped := true
+                z.state := z.dir > 0 ? ST_TAP_BULL : ST_TAP_BEAR
+                z.tapTime := time
+                z.tapAvail := time_close
+                f_evInc(5, z.tfTxt)
+    true
+
+// ───────────── HTF obstacle / coverage ─────────────
+// Opposing active tracked HTF FVGs whose ORIGINAL boundaries intersect the closed interval [lo, hi].
+// Deliberately ignores every display filter (size, budgets, nearest sets, visibility).
+f_scanObs(array<Zone> a, bool bull, float lo, float hi) =>
+    int cnt = 0
+    string nm = ""
+    int n = a.size()
+    if n > 0
+        float loT = lo / syminfo.mintick
+        float hiT = hi / syminfo.mintick
+        for i = 0 to n - 1
+            Zone z = a.get(i)
+            bool opp = bull ? z.dir < 0 : z.dir > 0
+            if opp and f_tk(z.top) >= loT - 0.000001 and f_tk(z.bottom) <= hiT + 0.000001
+                cnt += 1
+                if nm == ""
+                    nm := z.tfTxt + (z.dir < 0 ? " bearish" : " bullish") + " FVG, " + str.tostring(z.bottom, format.mintick) + "–" + str.tostring(z.top, format.mintick)
+    [cnt, nm]
+
+f_scanAll(bool bull, float lo, float hi) =>
+    [ca, na_] = f_scanObs(hz1, bull, lo, hi)
+    [cb, nb_] = f_scanObs(hz2, bull, lo, hi)
+    [cc, nc_] = f_scanObs(hz3, bull, lo, hi)
+    [cd, nd_] = f_scanObs(hz4, bull, lo, hi)
+    string nm = na_ != "" ? na_ : (nb_ != "" ? nb_ : (nc_ != "" ? nc_ : nd_))
+    [ca + cb + cc + cd, nm]
+
+// 0 = not applicable (disabled / equal / lower / duplicate), 1 = valid, 2 = UNKNOWN (never "clear")
+f_slotState(bool en, bool okS, bool actS, int idx) =>
+    int st = 0
+    if en and okS
+        st := actS and srcSeen.get(idx) and srcInit.get(idx) and srcReady.get(idx) and not srcTrunc.get(idx) ? 1 : 2
+    st
+
+// Why a source is not valid (empty when valid / not applicable). Names the source and the limitation.
+f_slotWhy(bool en, bool okS, bool actS, int idx, string nm) =>
+    string r = ""
+    if en and okS
+        if not actS
+            r := nm + ": inactive (not an integer multiple of the chart timeframe)"
+        else if not srcSeen.get(idx)
+            r := nm + ": no source data returned"
+        else if not srcInit.get(idx)
+            r := nm + ": chart history does not yet cover the source period"
+        else if srcTrunc.get(idx)
+            r := nm + ": tracking capacity exceeded (an omitted gap may still be live)"
+        else if not srcReady.get(idx)
+            r := nm + ": history warming up (obstacle horizon not yet covered)"
+    r
+
+// cov: 0 complete, 1 unknown (some applicable source not valid), 2 no applicable source
+f_coverage() =>
+    int s1 = f_slotState(en1, ok1, act1, 0)
+    int s2 = f_slotState(en2, ok2, act2, 1)
+    int s3 = f_slotState(en3, ok3, act3, 2)
+    int s4 = f_slotState(en4, ok4, act4, 3)
+    int nValid = (s1 == 1 ? 1 : 0) + (s2 == 1 ? 1 : 0) + (s3 == 1 ? 1 : 0) + (s4 == 1 ? 1 : 0)
+    int nUnk = (s1 == 2 ? 1 : 0) + (s2 == 2 ? 1 : 0) + (s3 == 2 ? 1 : 0) + (s4 == 2 ? 1 : 0)
+    string txt = ""
+    if s1 == 1
+        txt := f_tfText(sec1)
+    if s2 == 1
+        txt := txt == "" ? f_tfText(sec2) : txt + "," + f_tfText(sec2)
+    if s3 == 1
+        txt := txt == "" ? f_tfText(sec3) : txt + "," + f_tfText(sec3)
+    if s4 == 1
+        txt := txt == "" ? f_tfText(sec4) : txt + "," + f_tfText(sec4)
+    string why = ""
+    if nUnk > 0
+        why := f_addWhy(why, f_slotWhy(en1, ok1, act1, 0, f_tfText(sec1)))
+        why := f_addWhy(why, f_slotWhy(en2, ok2, act2, 1, f_tfText(sec2)))
+        why := f_addWhy(why, f_slotWhy(en3, ok3, act3, 2, f_tfText(sec3)))
+        why := f_addWhy(why, f_slotWhy(en4, ok4, act4, 3, f_tfText(sec4)))
+    [nUnk > 0 ? 1 : (nValid > 0 ? 0 : 2), txt, why]
+
+// 3m context source: usable only when data is present, aligned, initialised and warmed up. Capacity truncation can only
+// MISS contexts (never create one), so it is reported but does not make the source unusable.
+f_ctxReadyK(int k) =>
+    bool r = false
+    if actCtxA.get(k)
+        int ix = IX_CTX + k
+        r := srcSeen.get(ix) and srcInit.get(ix) and srcReady.get(ix)
+    r
+
+// every ACTIVE context timeframe is usable (used only to label date coverage; each context works as soon as ITS source is ready)
+f_ctxReadyAll() =>
+    bool r = true
+    for k = 0 to NCTX - 1
+        if actCtxA.get(k) and not f_ctxReadyK(k)
+            r := false
+    r
+
+f_lvlReady() =>
+    actL and srcSeen.get(IX_LVL) and srcInit.get(IX_LVL) and srcReady.get(IX_LVL) and not srcTrunc.get(IX_LVL)
+
+f_lvlWhy() =>
+    string r = ""
+    if supported and actL
+        if not srcSeen.get(IX_LVL)
+            r := "3m structure: no source data returned"
+        else if not srcInit.get(IX_LVL)
+            r := "3m structure: chart history does not yet cover the source period"
+        else if srcTrunc.get(IX_LVL)
+            r := "3m structure: level capacity exceeded (an omitted level may still be live)"
+        else if not srcReady.get(IX_LVL)
+            r := "3m structure: history warming up (level horizon not yet covered)"
+    r
+
+f_ctxWhyK(int k) =>
+    string nm = cxs.get(k).tfTxt + " context"
+    int ix = IX_CTX + k
+    string r = ""
+    if supported and actCtxA.get(k)
+        if not srcSeen.get(ix)
+            r := nm + ": no source data returned"
+        else if not srcInit.get(ix)
+            r := nm + ": chart history does not yet cover the source period"
+        else if not srcReady.get(ix)
+            r := nm + ": history warming up (gap-age horizon not yet covered)"
+        else if srcTrunc.get(ix)
+            r := nm + ": gap capacity exceeded (older gaps omitted; contexts may be missed)"
+    r
+
+f_ctxWhy() =>
+    string r = ""
+    for k = 0 to NCTX - 1
+        r := f_addWhy(r, f_ctxWhyK(k))
+    r
+
+// ───────────── display selection (never touches lifecycle state or array order) ─────────────
+// Size filter on FROZEN width and FROZEN formation ATR. Tick-aware, so a width exactly at the threshold qualifies.
+f_sizeOk(float width, float fatr, int minT, float mult) =>
+    bool ok = true
+    if mult > 0 and na(fatr)
+        ok := false              // ATR qualification unknown: hide (still tracked)
+    else
+        float thrT = float(minT)
+        if mult > 0
+            float atrT = mult * fatr / syminfo.mintick
+            thrT := atrT > thrT ? atrT : thrT
+        ok := f_tk(width) >= thrT - 0.000001
+    ok
+
+// Nearest-EDGE distance (0 when price is inside or on a boundary).
+f_dist(Zone z, float ref) =>
+    float d = 0.0
+    if f_tk(ref) < f_tk(z.bottom)
+        d := z.bottom - ref
+    else if f_tk(ref) > f_tk(z.top)
+        d := ref - z.top
+    d
+
+// ═════════════════════════════════════════ DRAWING ════════════════════════════════════════════
+// Persistent handles, mutated only on confirmed bars (drawNow). Hidden/removed items are deleted; state is untouched.
+f_syncDraw(Zone z, bool htf, bool want) =>
+    if not want
+        f_destroy(z)
+    else
+        bool bull = z.state == ST_BULL_FVG or z.state == ST_BULL_IFVG or z.state == ST_UNT_BULL or z.state == ST_TAP_BULL
+        bool ifvg = z.state == ST_BULL_IFVG or z.state == ST_BEAR_IFVG
+        bool tap  = z.state == ST_TAP_BULL or z.state == ST_TAP_BEAR
+        color base = bull ? inBull : inBear
+        int fillT = htf ? (tap ? inHtfTapT : inHtfT) : inChT
+        string txt = ""
+        if inLabels
+            txt := htf ? z.tfTxt + " FVG · " + (tap ? "Tapped" : "Untapped") : (ifvg ? "iFVG" : "FVG")
+        int l = z.formTime > firstTime ? z.formTime : firstTime
+        int r = lastConfClose + inExt * chartMs
+        if r <= l
+            r := l + chartMs
+        if na(z.bx)
+            z.bx := box.new(left = l, top = z.top, right = r, bottom = z.bottom, xloc = xloc.bar_time, border_color = color.new(base, inBordT), border_width = 1, border_style = ifvg ? line.style_dashed : line.style_solid, bgcolor = color.new(base, fillT), text = txt, text_size = size.small, text_color = color.new(base, 15), text_halign = text.align_right, text_valign = text.align_center)
+        else
+            box.set_left(z.bx, l)
+            box.set_top(z.bx, z.top)
+            box.set_right(z.bx, r)
+            box.set_bottom(z.bx, z.bottom)
+            box.set_bgcolor(z.bx, color.new(base, fillT))
+            box.set_border_color(z.bx, color.new(base, inBordT))
+            box.set_border_style(z.bx, ifvg ? line.style_dashed : line.style_solid)
+            box.set_text(z.bx, txt)
+            box.set_text_color(z.bx, color.new(base, 15))
+    true
+
+f_classify(array<Zone> a, bool htf) =>
+    int n = a.size()
+    if n > 0
+        for i = 0 to n - 1
+            Zone z = a.get(i)
+            z.vis := false
+            z.cat := -1
+            z.dist := f_dist(z, refPrice)
+            if htf
+                if inShowHtf and f_sizeOk(z.width, z.fatr, inHtfMinT, inHtfAtr)
+                    z.cat := f_tk(z.bottom) > f_tk(refPrice) ? 2 : (f_tk(z.top) < f_tk(refPrice) ? 3 : 4)
+            else
+                bool isI = z.state == ST_BULL_IFVG or z.state == ST_BEAR_IFVG
+                if inShow30 and f_sizeOk(z.width, z.fatr, inFvgMinT, inFvgAtr)
+                    z.cat := isI ? 1 : 0
+    true
+
+f_pickCat(array<Zone> a, int cat, int limit) =>
+    int n = a.size()
+    if n > 0 and limit > 0
+        for pick = 1 to limit
+            int best = -1
+            for i = 0 to n - 1
+                Zone z = a.get(i)
+                if z.cat == cat and not z.vis
+                    if best < 0
+                        best := i
+                    else
+                        Zone bz = a.get(best)
+                        bool better = false
+                        if inNearest and z.dist != bz.dist
+                            better := z.dist < bz.dist
+                        else
+                            better := z.formTime >= bz.formTime
+                        if better
+                            best := i
+            if best >= 0
+                Zone sel = a.get(best)
+                sel.vis := true
+    true
+
+f_drawHtf(array<Zone> a) =>
+    f_classify(a, true)
+    f_pickCat(a, 2, inHtfAbove)
+    f_pickCat(a, 3, inHtfBelow)
+    f_pickCat(a, 4, inHtfCont)
+    int n = a.size()
+    if n > 0
+        for i = 0 to n - 1
+            Zone z = a.get(i)
+            f_syncDraw(z, true, z.vis)
+    true
+
+f_nyT(int t) =>
+    str.format_time(t, "MM-dd HH:mm:ss", TZ_NY)
+
+f_delSetupDraw(Setup s) =>
+    if not na(s.lE)
+        line.delete(s.lE)
+        s.lE := na
+    if not na(s.lS)
+        line.delete(s.lS)
+        s.lS := na
+    if not na(s.lT)
+        line.delete(s.lT)
+        s.lT := na
+    if not na(s.lR)
+        line.delete(s.lR)
+        s.lR := na
+    if not na(s.rbx)
+        box.delete(s.rbx)
+        s.rbx := na
+    if not na(s.gbx)
+        box.delete(s.gbx)
+        s.gbx := na
+    if not na(s.ctxBx)
+        box.delete(s.ctxBx)
+        s.ctxBx := na
+    if not na(s.trgBx)
+        box.delete(s.trgBx)
+        s.trgBx := na
+    if not na(s.lbE)
+        label.delete(s.lbE)
+        s.lbE := na
+    if not na(s.lbS)
+        label.delete(s.lbS)
+        s.lbS := na
+    if not na(s.lbT)
+        label.delete(s.lbT)
+        s.lbT := na
+    if not na(s.lbRt)
+        label.delete(s.lbRt)
+        s.lbRt := na
+    if not na(s.lbAn)
+        label.delete(s.lbAn)
+        s.lbAn := na
+    if not na(s.lbX)
+        label.delete(s.lbX)
+        s.lbX := na
+    if not na(s.lbCx)
+        label.delete(s.lbCx)
+        s.lbCx := na
+    if not na(s.lbTg)
+        label.delete(s.lbTg)
+        s.lbTg := na
+    if not na(s.lbCm)
+        label.delete(s.lbCm)
+        s.lbCm := na
+    if not na(s.lbTm)
+        label.delete(s.lbTm)
+        s.lbTm := na
+    true
+
+// Create-or-update helpers: every property is (re)applied so a handle can never keep stale values.
+f_boxUp(box b, int l, float tp, int r, float bt, color bg, color bc, string txt, color tc, string sty, int bw) =>
+    box h = b
+    if na(h)
+        h := box.new(left = l, top = tp, right = r, bottom = bt, xloc = xloc.bar_time, border_color = bc, border_width = bw, border_style = sty, bgcolor = bg, text = txt, text_size = size.tiny, text_color = tc, text_halign = text.align_right, text_valign = text.align_top)
+    else
+        box.set_left(h, l)
+        box.set_top(h, tp)
+        box.set_right(h, r)
+        box.set_bottom(h, bt)
+        box.set_bgcolor(h, bg)
+        box.set_border_color(h, bc)
+        box.set_border_width(h, bw)
+        box.set_border_style(h, sty)
+        box.set_text(h, txt)
+        box.set_text_color(h, tc)
+    h
+
+f_lineUp(line ln, int x1, float y1, int x2, float y2, color c, string sty) =>
+    line h = ln
+    if na(h)
+        h := line.new(x1 = x1, y1 = y1, x2 = x2, y2 = y2, xloc = xloc.bar_time, color = c, style = sty, width = 2)
+    else
+        line.set_xy1(h, x1, y1)
+        line.set_xy2(h, x2, y2)
+        line.set_color(h, c)
+    h
+
+f_lblUp(label lb, int x, float y, string txt, color tc, string sty, string tip) =>
+    label h = lb
+    if na(h)
+        h := label.new(x = x, y = y, text = txt, xloc = xloc.bar_time, style = sty, size = size.tiny, textcolor = tc, color = cLblBg, tooltip = tip)
+    else
+        label.set_xy(h, x, y)
+        label.set_text(h, txt)
+        label.set_textcolor(h, tc)
+        label.set_color(h, cLblBg)
+        label.set_tooltip(h, tip)
+    h
+
+// Every setup owns its OWN frozen handles and its OWN copy of both gaps (context gap + 30s trigger gap), so clearing a pending
+// context or removing a live iFVG never touches setup evidence. Z-order = creation order: R/R shading first, then the two gap
+// boxes (they end where the shading begins, so they are never covered), then lines and labels.
+// The position look-alike (NOT TradingView's native tool) starts at the entry confirmation; while OPEN it extends to the latest
+// confirmed close; once resolved the shading ends at the actual resolution time, widened to a display-only minimum width
+// when needed. The TRUE exit time has its own dotted marker + label and is what the statistics use.
+f_syncSetupDraw(Setup s, bool want) =>
+    if not want
+        f_delSetupDraw(s)
+    else
+        bool bull = s.dir > 0
+        string dirW = bull ? "LONG" : "SHORT"
+        int actualR = s.state != 0 ? s.resolveTime : lastConfClose
+        int rv = math.max(actualR + inExt * chartMs, s.entryTime + 20 * chartMs)
+        string outTxt = s.state == 1 ? "Target hit" : (s.state == 2 ? "Stop hit" : (s.state == 3 ? "Ambiguous" : "Open"))
+        string tipTxt = s.tip + (rv > actualR + inExt * chartMs ? "\n(Shaded width is display-only; the true exit time is the dotted marker.)" : "")
+        string tipCtx = s.ctxTf + " TAPPED gap " + str.tostring(s.ctxBot, format.mintick) + " - " + str.tostring(s.ctxTop, format.mintick) + " · " + s.ctxId + "\nformation (candle 1 open): " + f_nyT(s.ctxFormT) + " NY\ntapped (candle close): " + f_nyT(s.ctxConfT) + " NY\nsetup " + s.id
+        string tipTrg = s.trgTf + " TRIGGER gap " + str.tostring(s.trgBot, format.mintick) + " - " + str.tostring(s.trgTop, format.mintick) + " · " + s.trgId + "\nformation (candle 1 open): " + f_nyT(s.trgFormT) + " NY\ninversion confirmed: " + f_nyT(s.entryTime) + " NY\nsetup " + s.id
+        if inShowRR
+            float rTop = bull ? s.entry : s.stop
+            float rBot = bull ? s.stop : s.entry
+            float gTop = bull ? s.target : s.entry
+            float gBot = bull ? s.entry : s.target
+            s.rbx := f_boxUp(s.rbx, s.entryTime, rTop, rv, rBot, color.new(color.red, 85), color.new(color.red, 100), "", color.red, line.style_solid, 1)
+            s.gbx := f_boxUp(s.gbx, s.entryTime, gTop, rv, gBot, color.new(color.green, 85), color.new(color.green, 100), "", color.green, line.style_solid, 1)
+        else
+            if not na(s.rbx)
+                box.delete(s.rbx)
+                s.rbx := na
+            if not na(s.gbx)
+                box.delete(s.gbx)
+                s.gbx := na
+        if inShowPair
+            s.ctxBx := f_boxUp(s.ctxBx, s.ctxFormT, s.ctxTop, s.entryTime, s.ctxBot, cCtxFill, cCtxLine, "", cCtxLine, line.style_solid, 2)
+            s.trgBx := f_boxUp(s.trgBx, s.trgFormT, s.trgTop, s.entryTime, s.trgBot, cTrgFill, cTrgLine, "", cTrgLine, line.style_dashed, 3)
+        else
+            if not na(s.ctxBx)
+                box.delete(s.ctxBx)
+                s.ctxBx := na
+            if not na(s.trgBx)
+                box.delete(s.trgBx)
+                s.trgBx := na
+        s.lE := f_lineUp(s.lE, s.entryTime, s.entry, rv, s.entry, inEntryCol, line.style_solid)
+        s.lS := f_lineUp(s.lS, s.entryTime, s.stop, rv, s.stop, inStopCol, line.style_solid)
+        s.lT := f_lineUp(s.lT, s.entryTime, s.target, rv, s.target, inTgtCol, line.style_solid)
+        if s.state != 0
+            float yLo = math.min(s.stop, s.target)
+            float yHi = math.max(s.stop, s.target)
+            s.lR := f_lineUp(s.lR, s.resolveTime, yLo, s.resolveTime, yHi, color.gray, line.style_dotted)
+            float yX = s.state == 1 ? s.target : (s.state == 2 ? s.stop : s.entry)
+            s.lbX := f_lblUp(s.lbX, s.resolveTime, yX, outTxt + " " + str.format_time(s.resolveTime, "HH:mm:ss", TZ_NY) + " NY", cLblTx, label.style_label_down, tipTxt)
+        else
+            if not na(s.lR)
+                line.delete(s.lR)
+                s.lR := na
+            if not na(s.lbX)
+                label.delete(s.lbX)
+                s.lbX := na
+        s.lbE := f_lblUp(s.lbE, rv, s.entry, "Entry " + str.tostring(s.entry, format.mintick), inEntryCol, label.style_label_left, tipTxt)
+        s.lbS := f_lblUp(s.lbS, rv, s.stop, "Stop " + str.tostring(s.stop, format.mintick), inStopCol, label.style_label_left, tipTxt)
+        s.lbT := f_lblUp(s.lbT, rv, s.target, "Target 1R " + str.tostring(s.target, format.mintick), inTgtCol, label.style_label_left, tipTxt)
+        if inShowMarkers
+            s.lbRt := f_lblUp(s.lbRt, s.retestT, s.retestPx, "tap", cLblTx, bull ? label.style_label_up : label.style_label_down, tipTxt)
+            s.lbAn := f_lblUp(s.lbAn, s.stopAnchorT, s.legExt, "stop anchor (trigger candle)", inStopCol, bull ? label.style_label_up : label.style_label_down, tipTxt)
+        else
+            if not na(s.lbRt)
+                label.delete(s.lbRt)
+                s.lbRt := na
+            if not na(s.lbAn)
+                label.delete(s.lbAn)
+                s.lbAn := na
+        if inShowPair
+            s.lbCx := f_lblUp(s.lbCx, s.ctxFormT, s.ctxTop, s.ctxTf + " TAPPED · " + dirW + " · " + s.id, cCtxLine, label.style_label_right, tipCtx)
+            s.lbTg := f_lblUp(s.lbTg, s.trgFormT, s.trgBot, s.trgTf + " TRIGGER · " + dirW + " · " + s.id, cTrgLine, label.style_label_right, tipTrg)
+            if inShowMarkers
+                s.lbCm := f_lblUp(s.lbCm, s.ctxInvT, s.ctxInvPx, s.ctxTf + " tap", cCtxLine, bull ? label.style_label_up : label.style_label_down, tipCtx)
+                s.lbTm := f_lblUp(s.lbTm, s.trgInvT, s.trgInvPx, s.trgTf + " inv", cTrgLine, bull ? label.style_label_up : label.style_label_down, tipTrg)
+            else
+                if not na(s.lbCm)
+                    label.delete(s.lbCm)
+                    s.lbCm := na
+                if not na(s.lbTm)
+                    label.delete(s.lbTm)
+                    s.lbTm := na
+        else
+            if not na(s.lbCx)
+                label.delete(s.lbCx)
+                s.lbCx := na
+            if not na(s.lbTg)
+                label.delete(s.lbTg)
+                s.lbTg := na
+            if not na(s.lbCm)
+                label.delete(s.lbCm)
+                s.lbCm := na
+            if not na(s.lbTm)
+                label.delete(s.lbTm)
+                s.lbTm := na
+    true
+
+f_drawSetups() =>
+    int n = setups.size()
+    int drawn = 0
+    if n > 0
+        for pass = 0 to 1
+            for ii = 0 to n - 1
+                int i = pass == 0 ? ii : n - 1 - ii
+                Setup s = setups.get(i)
+                if (pass == 0) == (s.state == 0)
+                    bool want = drawn < DRAW_MAX
+                    if want
+                        drawn += 1
+                    f_syncSetupDraw(s, want)
+    true
+
+f_drawAll() =>
+    if not na(lastConfClose) and not na(refPrice)
+        f_drawHtf(hz1)
+        f_drawHtf(hz2)
+        f_drawHtf(hz3)
+        f_drawHtf(hz4)
+        f_drawSetups()
+    true
+
+// ───────────── 3m context, entry, outcome ─────────────
+// ───────────── 3m structural levels on the chart ─────────────
+f_lvlReconcile(array<float> snap) =>
+    int cnt = int((snap.size() - HDR) / LS)
+    int m = lvStore.size()
+    if m > 0
+        for i = 0 to m - 1
+            Lvl q0 = lvStore.get(i)
+            q0.seen := false
+    if cnt > 0
+        for k = 0 to cnt - 1
+            int b = HDR + k * LS
+            float pr = snap.get(b)
+            int dr = snap.get(b + 1) > 0 ? 1 : -1
+            int pt = int(snap.get(b + 2))
+            int ct = int(snap.get(b + 3))
+            bool found = false
+            int n = lvStore.size()
+            if n > 0
+                for i = 0 to n - 1
+                    Lvl q = lvStore.get(i)
+                    if q.pivotT == pt and q.dir == dr
+                        q.seen := true
+                        found := true
+            if not found
+                lvStore.push(Lvl.new(price = pr, dir = dr, pivotT = pt, confT = ct, seen = true))
+    int n2 = lvStore.size()
+    if n2 > 0
+        for i = n2 - 1 to 0
+            if not lvStore.get(i).seen
+                lvStore.remove(i)
+    true
+
+f_lvlSync(array<float> snap, int asOf) =>
+    if not na(snap) and not na(asOf)
+        srcSeen.set(IX_LVL, true)
+        if asOf > lastAsOf.get(IX_LVL)
+            lastAsOf.set(IX_LVL, asOf)
+            if firstTime <= asOf
+                if not na(prevCloseT) and prevCloseT > asOf
+                    srcSkip.set(IX_LVL, srcSkip.get(IX_LVL) + 1)
+                else
+                    srcInit.set(IX_LVL, true)
+                    srcTrunc.set(IX_LVL, snap.get(0) == 1.0)
+                    srcReady.set(IX_LVL, snap.get(1) > 0.0)
+                    srcRT.set(IX_LVL, int(snap.get(1)))
+                    srcFT.set(IX_LVL, int(snap.get(2)))
+                    f_lvlReconcile(snap)
+    true
+f_lvlConsume() =>
+    int n = lvStore.size()
+    if n > 0
+        for i = 0 to n - 1
+            Lvl q = lvStore.get(i)
+            if not q.consumed and time >= q.confT
+                bool hit = q.dir > 0 ? f_tk(high) >= f_tk(q.price) : f_tk(low) <= f_tk(q.price)
+                if hit
+                    q.consumed := true
+    true
+
+// Nearest remaining (unconsumed, available before this candle began) level in the target direction.
+// Blocks unless the target ends at least one tick before it. Returns [blocked, nearest level or na].
+f_structCheck(bool bull, int tT) =>
+    float near = na
+    int n = lvStore.size()
+    if n > 0
+        for i = 0 to n - 1
+            Lvl q = lvStore.get(i)
+            if not q.consumed and q.confT <= time and q.dir == (bull ? 1 : -1)
+                if na(near)
+                    near := q.price
+                else
+                    near := bull ? math.min(near, q.price) : math.max(near, q.price)
+    bool blocked = false
+    if not na(near)
+        blocked := bull ? tT > f_tk(near) - 1 : tT < f_tk(near) + 1
+    [blocked, near]
+
+
+f_winIdx(string nm) =>
+    nm == "Relaxed (all hours)" ? 3 : (nm == "Asia -> London" ? 0 : (nm == "New York morning" ? 1 : 2))
+
+// Diagnostic counter for the CURRENT reporting date (last dKey entry). Counting only; never read by any trading decision.
+f_dgN(int w, int col, int n) =>
+    int nd = dKey.size()
+    if nd > 0 and n > 0 and w >= 0 and w < NSS
+        int ix = ((nd - 1) * NSS + w) * DGN + col
+        dg.set(ix, dg.get(ix) + n)
+    true
+
+f_dg(int w, int col) =>
+    f_dgN(w, col, 1)
+
+f_openSetup() =>
+    bool o = false
+    int n = setups.size()
+    if n > 0
+        for i = 0 to n - 1
+            if setups.get(i).state == 0
+                o := true
+    o
+
+f_winCount(string id) =>
+    int c = 0
+    int n = wKeys.size()
+    if n > 0
+        for i = 0 to n - 1
+            if wKeys.get(i) == id
+                c := wCnt.get(i)
+    c
+
+f_winInc(string id) =>
+    bool found = false
+    int n = wKeys.size()
+    if n > 0
+        for i = 0 to n - 1
+            if wKeys.get(i) == id
+                wCnt.set(i, wCnt.get(i) + 1)
+                found := true
+    if not found
+        wKeys.push(id)
+        wCnt.push(1)
+    while wKeys.size() > 60
+        wKeys.shift()
+        wCnt.shift()
+    true
+
+// ───────────── reporting calendar: New York entry dates ─────────────
+f_dateKey(int t) =>
+    year(t, TZ_NY) * 10000 + month(t, TZ_NY) * 100 + dayofmonth(t, TZ_NY)
+
+f_dateIdx(int k) =>
+    int r = -1
+    int n = dKey.size()
+    if n > 0
+        for i = n - 1 to 0
+            if r < 0 and dKey.get(i) == k
+                r := i
+    r
+
+// The reported dates: the latest REP_DATES Mon-Fri NY dates that have chart data (plus any weekend date that holds setups,
+// so no setup is ever silently left out). Oldest first.
+f_reportDates() =>
+    array<int> r = array.new_int(0)
+    int n = dKey.size()
+    if n > 0
+        for i = n - 1 to 0
+            if r.size() < REP_DATES
+                bool wk = dDow.get(i) >= dayofweek.monday and dDow.get(i) <= dayofweek.friday
+                if wk or dSetN.get(i) > 0
+                    r.unshift(dKey.get(i))
+    r
+
+// Retention: an UNRESOLVED setup is never pruned. A RESOLVED setup is pruned only when its entry date is older than the
+// oldest reported date. Statistics are computed from these records and never from drawings.
+f_pruneSetups() =>
+    array<int> rd = f_reportDates()
+    int cut = rd.size() > 0 ? rd.first() : 0
+    int n = setups.size()
+    if n > 0
+        for i = n - 1 to 0
+            Setup s = setups.get(i)
+            if s.state != 0 and s.dateKey < cut
+                f_delSetupDraw(s)
+                setups.remove(i)
+    true
+
+f_dateCount(int k, int st) =>
+    int c = 0
+    int n = setups.size()
+    if n > 0
+        for i = 0 to n - 1
+            Setup s = setups.get(i)
+            if s.dateKey == k and (st < 0 or s.state == st)
+                c += 1
+    c
+
+f_dgBars(int idx, int w, int col) =>
+    dg.get((idx * NSS + w) * DGN + col)
+
+// An enabled entry window that received NO eligible bar on a Mon-Fri date means that window was NOT EVALUATED on that date.
+f_dateWinZero(int idx) =>
+    bool z = false
+    bool wk = dDow.get(idx) >= dayofweek.monday and dDow.get(idx) <= dayofweek.friday
+    if wk
+        if not inRelaxWin and inWinAsia and okWinAs and f_dgBars(idx, 0, 0) == 0
+            z := true
+        if not inRelaxWin and inWinAm and okWinAm and f_dgBars(idx, 1, 0) == 0
+            z := true
+        if not inRelaxWin and inWinPm and okWinPm and f_dgBars(idx, 2, 0) == 0
+            z := true
+    z
+
+// 0 fully evaluated (every eligible bar had every required source ready and a known 15m bias), 1 partial,
+// 2 unavailable (never complete), 3 unavailable (an enabled window received no eligible bar)
+f_dateStatus(int idx) =>
+    int st = 0
+    int wn = dWinN.get(idx)
+    int bad = dWinBad.get(idx)
+    if f_dateWinZero(idx)
+        st := 3
+    else if wn > 0 and bad == wn
+        st := 2
+    else if bad > 0 or dKey.get(idx) == firstDateKey
+        st := 1
+    st
+
+f_dateTxt(int k) =>
+    string t = str.tostring(k)
+    str.substring(t, 4, 6) + "-" + str.substring(t, 6, 8)
+
+// ═════════════ INDICATOR B: HTF gap tapped in the bias direction -> 1m / 2m inversion in that direction ═════════════
+f_vwapOk(int dir) =>
+    not na(vwapNy) and (dir > 0 ? close > vwapNy : close < vwapNy)
+
+f_trendOk(int dir) =>
+    not na(em9) and not na(em21) and (dir > 0 ? em9 > em21 : em9 < em21)
+
+f_confOk(int dir) =>
+    bool ok = true
+    if inConf == "VWAP side"
+        ok := f_vwapOk(dir)
+    else if inConf == "EMA 9/21 trend"
+        ok := f_trendOk(dir)
+    else if inConf == "VWAP + EMA stack"
+        ok := f_vwapOk(dir) and not na(em9) and not na(em21) and (dir > 0 ? close > em9 and close > em21 and em9 > em21 : close < em9 and close < em21 and em9 < em21)
+    ok
+
+f_bc(int i) =>
+    bc.set(i, bc.get(i) + 1)
+    true
+
+// One rejected trigger (the arm stays in place). Counted once per reason; the full text goes to Pine Logs when Debug is ON.
+f_rejB(int col, string why) =>
+    f_bc(col)
+    if inDebug
+        log.info("H Ticks B | REJECT " + why + " | candle closes " + f_nyT(time_close) + " NY | armed " + (armI.get(1) > 0 ? "LONG " : "SHORT ") + armS.get(0) + " gap tapped " + f_nyT(armI.get(2)) + " NY")
+    true
+
+// Entry decision for ONE trigger inversion. Returns true if a setup was created. Gates in order: risk, window instance / limit /
+// unresolved setup, clear path. The first failed gate is recorded once and the arm stays.
+f_tryEnter(int k, int d, float sHi, float sLo, float iT, float iB, int iF, int asOf, int tfMs) =>
+    bool entered = false
+    bool bull = d > 0
+    string tfT = k == 0 ? "1m" : "2m"
+    float atrP = chartAtr[1]
+    int bufT = na(atrP) ? 1 : math.max(1, int(math.ceil(0.10 * atrP / syminfo.mintick - 0.000001)))
+    int eT = f_tk(close)
+    float anchor = bull ? sLo : sHi
+    int sT = 0
+    int rT = 0
+    if not na(anchor)
+        sT := bull ? int(math.floor(anchor / syminfo.mintick + 0.000001)) - bufT : int(math.ceil(anchor / syminfo.mintick - 0.000001)) + bufT
+        rT := bull ? eT - sT : sT - eT
+    [wn, ws, we] = f_selectWindow(time_close)
+    string wid = na(ws) ? "" : wn + "|" + str.tostring(ws)
+    if na(anchor) or rT < 1
+        f_rejB(8, "RISK invalid: stop is not beyond the entry (trigger candle extreme " + str.tostring(anchor, format.mintick) + ", entry " + str.tostring(close, format.mintick) + ")")
+    else if rT > inMaxRisk
+        f_rejB(8, "RISK " + str.tostring(rT) + " ticks > maximum " + str.tostring(inMaxRisk))
+    else if na(ws) or we != armI.get(3)
+        f_rejB(6, "entry outside the armed window instance")
+    else if f_winCount(wid) >= inMaxEntries
+        f_rejB(10, "window entry limit reached (" + str.tostring(f_winCount(wid)) + " of " + str.tostring(inMaxEntries) + ")")
+    else if inOneActive and f_openSetup()
+        f_rejB(10, "another setup is unresolved")
+    else
+        float entry = eT * syminfo.mintick
+        int tT = bull ? eT + rT : eT - rT
+        float target = tT * syminfo.mintick
+        float stop = sT * syminfo.mintick
+        bool pathOk = true
+        string pathWhy = ""
+        string srcTxt = "not checked"
+        string nearTxt = "not checked"
+        if inClear
+            [cov, srcT, covWhy] = f_coverage()
+            srcTxt := srcT
+            if cov != 0
+                pathOk := false
+                pathWhy := cov == 2 ? "no applicable HTF source" : "HTF coverage unknown (" + covWhy + ")"
+            else
+                float lo = bull ? entry : target
+                float hi = bull ? target : entry
+                [obs, obsName] = f_scanAll(bull, lo, hi)
+                if obs > 0
+                    pathOk := false
+                    pathWhy := "blocked: " + obsName + " intersects the entry-to-1R path " + str.tostring(lo, format.mintick) + "-" + str.tostring(hi, format.mintick)
+                else if not f_lvlReady()
+                    pathOk := false
+                    pathWhy := "3m structure coverage unknown (" + f_lvlWhy() + ")"
+                else
+                    [stBlk, stNear] = f_structCheck(bull, tT)
+                    if not na(stNear)
+                        nearTxt := str.tostring(stNear, format.mintick) + (bull ? " (3m swing high)" : " (3m swing low)")
+                    if stBlk
+                        pathOk := false
+                        pathWhy := "blocked: 3m swing " + (bull ? "high " : "low ") + str.tostring(stNear, format.mintick) + " lies inside the 1R target " + str.tostring(target, format.mintick)
+        if not pathOk
+            f_rejB(9, "PATH " + pathWhy)
+        else
+            string sid = str.format_time(time_close, "yyyyMMdd-HHmmss", TZ_NY) + (bull ? "-L" : "-S")
+            int dk = f_dateKey(time_close)
+            string dirW = bull ? "LONG" : "SHORT"
+            string tip = "Setup " + sid + " " + dirW + " · " + wn + " · B (tap + trigger)\n" + (noBias ? "Bias: OFF (relaxed)" : biasTxt + " bias agrees") + "\n" + armS.get(0) + " gap " + str.tostring(armF.get(1), format.mintick) + " - " + str.tostring(armF.get(0), format.mintick) + " tapped, candle closed " + f_nyT(armI.get(2)) + " NY\n" + tfT + " inversion confirmed: " + f_nyT(asOf) + " NY\n" + "Processed on the candle closing " + f_nyT(time_close) + " NY\n" + "Confluence (" + inConf + "): met\n" + "Stop anchor (" + tfT + " inversion candle " + (bull ? "low " : "high ") + str.tostring(anchor, format.mintick) + " +" + str.tostring(bufT) + " tick buffer)\n" + "Risk: " + str.tostring(rT) + " ticks (1:1)\n" + "HTF sources checked: " + srcTxt + "\n" + "Nearest 3m structural obstacle: " + nearTxt
+            Setup s = Setup.new(id = sid, dateKey = dk, dir = d, entry = entry, stop = stop, target = target, riskT = rT, entryTime = time_close, entryBar = bar_index, winId = wid, winName = wn, ctxZid = armS.get(1), srcs = srcTxt, ctxTop = armF.get(0), ctxBot = armF.get(1), ctxFormT = armI.get(4), trgTop = iT, trgBot = iB, trgFormT = iF - 2 * tfMs, legExt = anchor, stopAnchorT = asOf - tfMs, retestT = armI.get(2), retestPx = armF.get(2), ctxConfT = armI.get(2), ctxTf = armS.get(0), ctxId = armS.get(1), ctxInvT = armI.get(2), ctxInvPx = armF.get(2), trgId = tfT + "|" + str.tostring(iF) + "|" + str.tostring(d), trgTf = tfT, trgInvT = time, trgInvPx = close, tip = tip)
+            setups.push(s)
+            f_winInc(wid)
+            int dxi = f_dateIdx(dk)
+            if dxi >= 0
+                dSetN.set(dxi, dSetN.get(dxi) + 1)
+            f_evInc(bull ? 9 : 10, "")
+            f_bc(11)
+            if alEntry
+                aMsgs.push("H Ticks B ENTRY " + dirW + " " + syminfo.ticker + " " + timeframe.period + " | ID " + sid + " | Tapped " + armS.get(0) + " gap, trigger " + tfT + " | Entry " + str.tostring(entry, format.mintick) + " | Stop " + str.tostring(stop, format.mintick) + " | Target 1R " + str.tostring(target, format.mintick) + " | Risk " + str.tostring(rT) + " ticks | Session " + wn)
+            f_log("ENTRY " + dirW + " " + tfT + " E=" + str.tostring(entry) + " S=" + str.tostring(stop) + " T=" + str.tostring(target) + " rT=" + str.tostring(rT))
+            armI.set(0, 0)
+            entered := true
+    entered
+
+// A source inversion in the armed direction. Strictly after the tap = the source candle OPENED at/after the tap candle closed;
+// the same window instance is required.
+f_armInv(int k, int asOf, int d, float sHi, float sLo, float iT, float iB, int iF) =>
+    if armI.get(0) == 1 and d == armI.get(1)
+        int tfMs = k == 0 ? 60000 : 120000
+        f_bc(5)
+        [wnI, wsI, weI] = f_selectWindow(asOf)
+        if asOf - tfMs < armI.get(2)
+            f_rejB(6, "inversion source candle opened before the tap candle closed")
+        else if na(wsI) or weI != armI.get(3)
+            f_rejB(6, "inversion outside the armed window instance")
+        else if not f_confOk(d)
+            f_rejB(7, "confluence (" + inConf + ") not met")
+        else
+            f_tryEnter(k, d, sHi, sLo, iT, iB, iF, asOf, tfMs)
+    true
+
+f_ctxUpdateB(int k, array<float> snap, int asOf, float sHi, float sLo) =>
+    int cnt = int((snap.size() - HDR) / ZS)
+    if cnt > 0
+        for kk = 0 to cnt - 1
+            int base = HDR + kk * ZS
+            if math.abs(snap.get(base + 1)) == 2.0
+                bool wideOk = f_tk(snap.get(base + 2)) - f_tk(snap.get(base + 3)) >= inMinTick
+                if wideOk
+                    int d = snap.get(base + 1) > 0 ? -1 : 1
+                    f_armInv(k, asOf, d, sHi, sLo, snap.get(base + 2), snap.get(base + 3), int(snap.get(base)))
+    true
+
+f_ctxSync(int k, array<float> snap, int asOf, float cCl, float sHi, float sLo) =>
+    int ix = IX_CTX + k
+    if not na(snap) and not na(asOf) and not na(cCl)
+        srcSeen.set(ix, true)
+        if asOf > lastAsOf.get(ix)
+            lastAsOf.set(ix, asOf)
+            if firstTime <= asOf
+                if not na(prevCloseT) and prevCloseT > asOf
+                    srcSkip.set(ix, srcSkip.get(ix) + 1)
+                else
+                    srcInit.set(ix, true)
+                    srcTrunc.set(ix, snap.get(0) == 1.0)
+                    srcReady.set(ix, snap.get(1) > 0.0)
+                    srcRT.set(ix, int(snap.get(1)))
+                    srcFT.set(ix, int(snap.get(2)))
+                    if srcReady.get(ix)
+                        f_ctxUpdateB(k, snap, asOf, sHi, sLo)
+    true
+
+// Taps are recorded by f_tapStore on the chart candle that first overlaps a tracked HTF gap. A tap arms only when the gap points
+// the same way as the bias (or the bias is OFF), inside an enabled window, and nothing is armed yet.
+f_tapScanB(array<Zone> a, int ws, int we) =>
+    int n = a.size()
+    if n > 0
+        for i = 0 to n - 1
+            Zone z = a.get(i)
+            if z.tapped and z.tapTime == time and z.tapAvail == time_close
+                f_bc(0)
+                string why = "ARMED"
+                if not noBias and biasDir != z.dir
+                    f_bc(2)
+                    why := biasDir == 0 ? "not armed: bias unknown" : "not armed: gap points against the bias"
+                else if na(ws)
+                    f_bc(3)
+                    why := "not armed: outside every entry window"
+                else if armI.get(0) == 1
+                    f_bc(4)
+                    why := "not armed: an earlier tap is still armed"
+                else
+                    f_bc(1)
+                    armI.set(0, 1)
+                    armI.set(1, z.dir)
+                    armI.set(2, time_close)
+                    armI.set(3, we)
+                    armI.set(4, z.formTime)
+                    armF.set(0, z.top)
+                    armF.set(1, z.bottom)
+                    armF.set(2, z.dir > 0 ? low : high)
+                    armS.set(0, z.tfTxt)
+                    armS.set(1, z.id)
+                if inDebug
+                    log.info("H Ticks B | TAP " + z.tfTxt + (z.dir > 0 ? " bullish" : " bearish") + " gap " + str.tostring(z.bottom, format.mintick) + "-" + str.tostring(z.top, format.mintick) + " | candle closes " + f_nyT(time_close) + " NY | " + (noBias ? "bias OFF" : biasTxt + " bias " + (biasDir > 0 ? "bullish" : (biasDir < 0 ? "bearish" : "unknown"))) + " | " + why)
+    true
+
+f_armStep() =>
+    if armI.get(0) == 1
+        if time_close >= armI.get(3) or (not noBias and biasDir != armI.get(1))
+            armI.set(0, 0)
+    [wnT, wsT, weT] = f_selectWindow(time_close)
+    f_tapScanB(hz1, wsT, weT)
+    f_tapScanB(hz2, wsT, weT)
+    f_tapScanB(hz3, wsT, weT)
+    f_tapScanB(hz4, wsT, weT)
+    true
+
+f_trackSetups() =>
+    int rt = 0
+    int n = setups.size()
+    if n > 0
+        int oTk = f_tk(open)
+        int hTk = f_tk(high)
+        int lTk = f_tk(low)
+        for i = 0 to n - 1
+            Setup s = setups.get(i)
+            if s.state == 0 and bar_index > s.entryBar
+                int sTk = f_tk(s.stop)
+                int tTk = f_tk(s.target)
+                int res = 0
+                if s.dir > 0
+                    if oTk >= tTk
+                        res := 1
+                    else if oTk <= sTk
+                        res := 2
+                    else
+                        bool th = hTk >= tTk
+                        bool sh = lTk <= sTk
+                        res := th and sh ? 3 : (th ? 1 : (sh ? 2 : 0))
+                else
+                    if oTk <= tTk
+                        res := 1
+                    else if oTk >= sTk
+                        res := 2
+                    else
+                        bool th = lTk <= tTk
+                        bool sh = hTk >= sTk
+                        res := th and sh ? 3 : (th ? 1 : (sh ? 2 : 0))
+                if res != 0
+                    s.state := res
+                    s.resolveTime := time_close
+                    rt := time_close
+                    f_evInc(res == 1 ? 7 : (res == 2 ? 8 : 11), "")
+                    bool want = res == 1 ? alTarget : (res == 2 ? alStop : alAmb)
+                    if want
+                        string what = res == 1 ? "TARGET HIT" : (res == 2 ? "STOP HIT" : "AMBIGUOUS (target and stop both reachable within one candle)")
+                        aMsgs.push("H Ticks " + what + " | ID " + s.id + " | " + (s.dir > 0 ? "LONG" : "SHORT") + " " + syminfo.ticker + " | Session " + s.winName + " | Entry " + str.tostring(s.entry, format.mintick) + " Stop " + str.tostring(s.stop, format.mintick) + " Target " + str.tostring(s.target, format.mintick))
+                    f_log("resolved " + s.id + " state=" + str.tostring(res))
+    rt
+
+// ═════════════════════════════ MAIN: confirmed-bar processing ═════════════════════════════════
+if supported and barstate.isfirst
+    if en1 and sec1 > chartSecs and not al1
+        warnArr.push(f_tfText(sec1) + " obstacle source disabled: not an integer multiple of the chart timeframe")
+    if en2 and sec2 > chartSecs and not al2
+        warnArr.push(f_tfText(sec2) + " obstacle source disabled: not an integer multiple of the chart timeframe")
+    if en3 and sec3 > chartSecs and not al3
+        warnArr.push(f_tfText(sec3) + " obstacle source disabled: not an integer multiple of the chart timeframe")
+    if en4 and sec4 > chartSecs and not al4
+        warnArr.push(f_tfText(sec4) + " obstacle source disabled: not an integer multiple of the chart timeframe")
+    if inWinAsia and not okWinAs
+        warnArr.push("Entry window A disabled: start equals end")
+    if inWinAm and not okWinAm
+        warnArr.push("Entry window B disabled: start equals end")
+    if inWinPm and not okWinPm
+        warnArr.push("Entry window C disabled: start equals end")
+
+bool drawNow = supported and barstate.isconfirmed and (barstate.islast or barstate.islastconfirmedhistory or barstate.isrealtime)
+
+if supported and barstate.isconfirmed
+    f_resetEv()
+    aMsgs.clear()
+    lastConfClose := time_close
+    refPrice := close
+    needPrune := false
+    // reporting calendar: NY date of this confirmed bar's close (entry dates use the same basis)
+    int dkNow = f_dateKey(time_close)
+    if dKey.size() == 0 or dKey.last() != dkNow
+        dKey.push(dkNow)
+        dDow.push(dayofweek(time_close, TZ_NY))
+        dWinN.push(0)
+        dWinBad.push(0)
+        dSetN.push(0)
+        for ii = 1 to NSS * DGN
+            dg.push(0)
+        if na(firstDateKey)
+            firstDateKey := dkNow
+        while dKey.size() > 40
+            dKey.shift()
+            dDow.shift()
+            dWinN.shift()
+            dWinBad.shift()
+            dSetN.shift()
+            for ii = 1 to NSS * DGN
+                dg.shift()
+        needPrune := true
+
+    // 1) HTF sources: confirmed source inversions / taps are applied first; taps are stored on the chart candle that touches a gap
+    if act1
+        f_sync(hz1, 0, f_tfText(sec1), snap1, asOf1)
+    if act2
+        f_sync(hz2, 1, f_tfText(sec2), snap2, asOf2)
+    if act3
+        f_sync(hz3, 2, f_tfText(sec3), snap3, asOf3)
+    if act4
+        f_sync(hz4, 3, f_tfText(sec4), snap4, asOf4)
+    f_tapStore(hz1)
+    f_tapStore(hz2)
+    f_tapStore(hz3)
+    f_tapStore(hz4)
+
+    // 2) arm expiry / bias flip, then arm on a bias-direction tap
+    f_armStep()
+
+    // 3) outcome tracking of entered setups (resolution precedes any new entry)
+    int rt = f_trackSetups()
+    if rt > 0
+        lastResolveAt := rt
+        needPrune := true
+
+    // 4) 3m structure for the path check, then the 1m / 2m source inversions (the trigger is evaluated inside f_ctxSync)
+    if actL
+        f_lvlSync(snapL, asOfL)
+    f_lvlConsume()
+    int nBefore = setups.size()
+    if actC0
+        f_ctxSync(0, snapC0, asOfC0, clsC0, hiC0, loC0)
+    if actC1
+        f_ctxSync(1, snapC1, asOfC1, clsC1, hiC1, loC1)
+    if setups.size() > nBefore
+        needPrune := true
+    // qualification coverage of THIS bar (counted per NY date, only inside an enabled entry window)
+    [cvQ, txQ, whQ] = f_coverage()
+    bool qualOk = f_ctxReadyAll() and f_lvlReady() and cvQ == 0 and (noBias or biasDir != 0)
+    if qualOk and na(covStart)
+        covStart := time_close
+    [wnQ, wsQ, weQ] = f_selectWindow(time_close)
+    if not na(wsQ)
+        int wiQ = f_winIdx(wnQ)
+        f_dg(wiQ, 0)
+        if qualOk
+            f_dg(wiQ, 1)
+        if biasDir == 0 and not noBias
+            f_dg(wiQ, 2)
+        if f_openSetup()
+            f_dg(wiQ, 55)
+        int dq = dKey.size() - 1
+        dWinN.set(dq, dWinN.get(dq) + 1)
+        if not qualOk
+            dWinBad.set(dq, dWinBad.get(dq) + 1)
+
+    if needPrune
+        f_pruneSetups()
+
+    // 6) drawings follow the committed state
+    if drawNow
+        f_drawAll()
+
+var table stBox = table.new(position.top_right, 1, 6 + REP_MAX, bgcolor = na, border_width = 0)
+var table dbgTbl = table.new(position.bottom_left, 1, 100, bgcolor = na, border_width = 1, border_color = color.gray)
+f_bx(int r, string txt, string tip) =>
+    table.cell(stBox, 0, r, txt, text_color = color.black, text_size = size.small, text_halign = text.align_left, bgcolor = na, tooltip = tip)
+    true
+
+f_dl(int r, string txt, bool hdr) =>
+    table.cell(dbgTbl, 0, r, txt, text_color = hdr ? cHdrTx : cRowTx, text_size = size.small, text_halign = text.align_left, bgcolor = hdr ? cHdrBg : cRowBg)
+    true
+
+f_srcLine(int idx, string nm, bool act) =>
+    string r = nm + ": "
+    if not act
+        r += "off"
+    else if not srcSeen.get(idx)
+        r += "no data returned"
+    else
+        r += (srcFT.get(idx) > 0 ? "data from " + f_nyT(srcFT.get(idx)) + " NY" : "data start n/a") + ", " + (srcReady.get(idx) ? "ready since " + f_nyT(srcRT.get(idx)) + " NY" : "WARMING UP") + (srcTrunc.get(idx) ? ", CAPACITY-TRUNCATED" : "") + (srcSkip.get(idx) > 0 ? ", skipped updates " + str.tostring(srcSkip.get(idx)) : "")
+    r
+
+if barstate.islast
+    if not supported
+        f_bx(0, "Switch to a standard 30-second chart", "")
+        table.clear(stBox, 0, 1, 0, 5 + REP_MAX)
+    else if inStats
+        array<int> rd = f_reportDates()
+        int nr = rd.size()
+        int tW = 0
+        int tL = 0
+        int tO = 0
+        int tA = 0
+        string miss = ""
+        if nr > 0
+            for r = 0 to nr - 1
+                int k = rd.get(r)
+                int di = f_dateIdx(k)
+                int stx = di >= 0 ? f_dateStatus(di) : 1
+                tW += f_dateCount(k, 1)
+                tL += f_dateCount(k, 2)
+                tO += f_dateCount(k, 0)
+                tA += f_dateCount(k, 3)
+                if stx != 0
+                    miss += f_dateTxt(k) + (stx >= 2 ? " not evaluated; " : " partial; ")
+        int oldOpen = 0
+        if nr > 0 and setups.size() > 0
+            for i = 0 to setups.size() - 1
+                Setup so = setups.get(i)
+                if so.state == 0 and so.dateKey < rd.first()
+                    oldOpen += 1
+        bool covFull = nr == REP_DATES and miss == ""
+        string covTip = covFull ? "Every one of the " + str.tostring(REP_DATES) + " reported dates was fully evaluated." : "Only RECORDED setups are counted. " + (nr < REP_DATES ? "Only " + str.tostring(nr) + " date(s) of chart data. " : "") + (miss == "" ? "" : "Not fully evaluated: " + miss) + "Zero setups on such a date is NOT proof that none qualified."
+        f_bx(0, "Last " + str.tostring(nr) + " days" + (nr < REP_DATES ? " (all loaded)" : ""), "NY entry dates; outcomes follow the entry date")
+        f_bx(1, "Setups: " + str.tostring(tW + tL + tO + tA), oldOpen > 0 ? str.tostring(oldOpen) + " older unresolved setup(s) are retained but not in this count" : "")
+        f_bx(2, "Wins: " + str.tostring(tW) + " | Losses: " + str.tostring(tL), "")
+        f_bx(3, "Open: " + str.tostring(tO) + " | Ambiguous: " + str.tostring(tA), "Ambiguous = target and stop both reachable in one candle with the order unknown")
+        f_bx(4, "Win rate: " + ((tW + tL) > 0 ? str.tostring(100.0 * tW / (tW + tL), "#") + "%" : "—"), "Wins / (Wins + Losses); Open and Ambiguous excluded")
+        f_bx(5, "Coverage: " + (covFull ? "Full" : "Partial"), covTip)
+        if inDaily
+            for r = 0 to REP_DATES - 1
+                if r < nr
+                    int k2 = rd.get(r)
+                    int di2 = f_dateIdx(k2)
+                    int st2 = di2 >= 0 ? f_dateStatus(di2) : 1
+                    string rowTxt = f_dateTxt(k2) + (st2 >= 2 ? "  not evaluated" : "  S" + str.tostring(f_dateCount(k2, -1)) + " W" + str.tostring(f_dateCount(k2, 1)) + " L" + str.tostring(f_dateCount(k2, 2)) + " O" + str.tostring(f_dateCount(k2, 0)) + " A" + str.tostring(f_dateCount(k2, 3)) + (st2 == 1 ? "  partial" : ""))
+                    f_bx(6 + r, rowTxt, "")
+                else
+                    table.clear(stBox, 0, 6 + r, 0, 6 + r)
+        else
+            table.clear(stBox, 0, 6, 0, 5 + REP_MAX)
+    else
+        table.clear(stBox, 0, 0, 0, 5 + REP_MAX)
+    if supported and inDebug
+        int dr = 0
+        string bl = ""
+        for j = 0 to 11
+            bl += bcNames.get(j) + " " + str.tostring(bc.get(j)) + (j < 11 ? " | " : "")
+        f_dl(dr, "B FUNNEL (since load): " + bl, true)
+        dr += 1
+        f_dl(dr, armI.get(0) == 1 ? "ARMED " + (armI.get(1) > 0 ? "LONG " : "SHORT ") + armS.get(0) + " gap " + str.tostring(armF.get(1), format.mintick) + "-" + str.tostring(armF.get(0), format.mintick) + " tapped " + f_nyT(armI.get(2)) + " NY, window ends " + f_nyT(armI.get(3)) + " NY" : "Not armed", false)
+        dr += 1
+        f_dl(dr, noBias ? "Bias: OFF (relaxed)" : biasTxt + " bias: " + (biasDir == 0 ? "UNKNOWN (no qualifying signal yet) - no taps arm" : (biasDir > 0 ? "BULLISH above " : "BEARISH below ") + str.tostring(blR, format.mintick) + (biasStruct ? " (pivot " + f_nyT(int(btR)) + " NY)" : "")), false)
+        dr += 1
+        f_dl(dr, "Confluence: " + inConf + " | VWAP " + str.tostring(vwapNy, format.mintick) + " | EMA9 " + str.tostring(em9, format.mintick) + " | EMA21 " + str.tostring(em21, format.mintick) + " | max risk " + str.tostring(inMaxRisk) + " ticks | clear path " + (inClear ? "required" : "off"), false)
+        dr += 1
+        f_dl(dr, "SOURCES: first data -> ready", true)
+        dr += 1
+        f_dl(dr, f_srcLine(IX_CTX, "1m trigger", actCtxA.get(0)), false)
+        dr += 1
+        f_dl(dr, f_srcLine(IX_CTX + 1, "2m trigger", actCtxA.get(1)), false)
+        dr += 1
+        f_dl(dr, f_srcLine(IX_LVL, "3m swing levels", actL), false)
+        dr += 1
+        f_dl(dr, f_srcLine(0, f_tfText(sec1) + " gaps", act1), false)
+        dr += 1
+        f_dl(dr, f_srcLine(1, f_tfText(sec2) + " gaps", act2), false)
+        dr += 1
+        f_dl(dr, f_srcLine(2, f_tfText(sec3) + " gaps", act3), false)
+        dr += 1
+        string lockTxt = "none"
+        if setups.size() > 0
+            for i = 0 to setups.size() - 1
+                Setup sl2 = setups.get(i)
+                if sl2.state == 0 and lockTxt == "none"
+                    lockTxt := sl2.id + " (" + sl2.winName + ") OPEN since " + f_nyT(sl2.entryTime) + " NY - blocks new entries until it resolves"
+        f_dl(dr, "UNRESOLVED-SETUP LOCK: " + lockTxt, true)
+        dr += 1
+        string nowWhy = ""
+        nowWhy := f_addWhy(nowWhy, f_ctxWhy())
+        nowWhy := f_addWhy(nowWhy, f_lvlWhy())
+        nowWhy := f_addWhy(nowWhy, f_slotWhy(en1, ok1, act1, 0, f_tfText(sec1)))
+        nowWhy := f_addWhy(nowWhy, f_slotWhy(en2, ok2, act2, 1, f_tfText(sec2)))
+        nowWhy := f_addWhy(nowWhy, f_slotWhy(en3, ok3, act3, 2, f_tfText(sec3)))
+        nowWhy := f_addWhy(nowWhy, f_slotWhy(en4, ok4, act4, 3, f_tfText(sec4)))
+        f_dl(dr, "BLOCKING NOW: " + (nowWhy == "" ? "none" : nowWhy), false)
+        dr += 1
+        if warnArr.size() > 0
+            f_dl(dr, "CONFIG: " + array.join(warnArr, " | "), false)
+            dr += 1
+        if setups.size() > DRAW_MAX
+            f_dl(dr, "Drawings limited to " + str.tostring(DRAW_MAX) + " setups; records and statistics are unaffected", false)
+            dr += 1
+        table.clear(dbgTbl, 0, dr, 0, 99)
+    else
+        table.clear(dbgTbl, 0, 0, 0, 99)
+
+// ═════════════════════════════════════════ ALERTS ═════════════════════════════════════════════
+// Only genuine events on a confirmed REALTIME bar; never from history / bootstrap. Every event of the bar is collected in
+// aMsgs while the state machine runs (each event is created once, at its single state transition) and sent as ONE alert().
+// Drawing happens independently and can never produce an alert.
+bool evNow = supported and barstate.isrealtime and barstate.isconfirmed
+if evNow and aMsgs.size() > 0
+    alert(array.join(aMsgs, "\n"), alert.freq_once_per_bar_close)
+alertcondition(evNow and ev.get(9) > 0, "Long entry (tap -> 1m/2m trigger, 1R)", "H Ticks B: LONG entry on {{ticker}} {{interval}}")
+alertcondition(evNow and ev.get(10) > 0, "Short entry (tap -> 1m/2m trigger, 1R)", "H Ticks B: SHORT entry on {{ticker}} {{interval}}")
+alertcondition(evNow and ev.get(7) > 0, "Target hit", "H Ticks B: setup TARGET HIT on {{ticker}} {{interval}}")
+alertcondition(evNow and ev.get(8) > 0, "Stop hit", "H Ticks B: setup STOP HIT on {{ticker}} {{interval}}")
+alertcondition(evNow and ev.get(11) > 0, "Ambiguous outcome", "H Ticks B: setup AMBIGUOUS on {{ticker}} {{interval}}")

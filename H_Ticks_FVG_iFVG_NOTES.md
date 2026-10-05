@@ -237,3 +237,8 @@ New setting "Days reported (stats box and debug counts)", default 20 (1-20), rep
 - `inRelaxWin` (Entry windows group): ignores the A/B/C windows. Every Mon-Fri bar belongs to ONE instance per NY trading day (18:00 -> 18:00 NY), id "Relaxed (all hours)", mapped to the "outside any window" stats row (idx 3). Entry limit (3) therefore applies per trading day; a context lives until 18:00 NY.
 - `inNoBias` (Directional bias group): bias is not used. Context direction accepted either way, no bias-flip cancel, no entry bias gate, "bias unknown" counters stay 0, stats/tooltip say "Bias: OFF (relaxed)".
 - Not compiled or replayed by me.
+
+## Indicator B built as its own script (H_Ticks_B_Tap_Trigger.pine, paste file *_paste.pine)
+- Derived from A's master by removing A's chain (30s gaps, contexts, retest, impulse test) and adding: tap (15m/1H/4H gap touched, bias direction, inside a window) arms -> later 1m/2m inversion in that direction (source candle opened at/after the tap candle closed, same window instance) -> optional confluence (VWAP / EMA9-21 / both) -> entry at the 30s candle close, stop beyond the inverting 1m/2m candle +/- max(1 tick, 0.10 ATR), 1R, max-risk cap (default 80 ticks), optional clear-path check (default ON).
+- Inherits Bias source, Relaxed windows and Relaxed bias-off tickboxes. Debug panel = B funnel counters (taps, armed, rejects by reason, entries).
+- Checks: tests/b_check.py (text + model only). NOT compiled in TradingView.
