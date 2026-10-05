@@ -1364,7 +1364,7 @@ f_drawDay(Day dy) =>
     true
 
 // ───────────────────────────────────────────── TABLES ─────────────────────────────────────────────
-var table tbInfo = table.new(position.middle_left, 1, 18, bgcolor = color.new(color.white, 8), border_width = 1, border_color = color.gray)
+var table tbInfo = table.new(position.middle_left, 1, 19, bgcolor = color.new(color.white, 8), border_width = 1, border_color = color.gray)
 var table tbFun = table.new(position.top_right, 6, 17, bgcolor = color.new(color.white, 8), border_width = 1, border_color = color.gray)
 var table tbPerf = table.new(position.bottom_right, 6, 29, bgcolor = color.new(color.white, 8), border_width = 1, border_color = color.gray)
 var table tbLed = table.new(position.bottom_left, 13, 13, bgcolor = color.new(color.white, 8), border_width = 1, border_color = color.gray)
@@ -1431,6 +1431,7 @@ f_drawTables() =>
                 f_cell(tbFun, k + 1, r + 1, slotOn.get(k) ? str.tostring(fnl.get(k * NF + r)) : "off", blk, bgN)
     else
         table.clear(tbFun, 0, 0, 5, 16)
+    f_cell(tbInfo, 0, 18, "Draw progress: funnel " + (inFunnel ? "written" : "off") + " ...", blk, bgN)
     // performance
     if inPerf
         matrix<float> pf = matrix.new<float>(NS, 32, 0.0)
@@ -1485,6 +1486,7 @@ f_drawTables() =>
         f_cell(tbPerf, 0, 28, "Wins/losses by outcome; win rate = filled trades with net R > 0.", blk, bgN)
     else
         table.clear(tbPerf, 0, 0, 5, 28)
+    f_cell(tbInfo, 0, 18, "Draw progress: funnel " + (inFunnel ? "written" : "off") + " | performance " + (inPerf ? "written" : "off") + " ...", blk, bgN)
     // ledger (newest first), paginated
     if inLedger
         int perPage = 10
@@ -1514,6 +1516,7 @@ f_drawTables() =>
         f_cell(tbLed, 0, 12, "Net R includes the configured costs; zero costs = gross.", blk, bgN)
     else
         table.clear(tbLed, 0, 0, 12, 12)
+    f_cell(tbInfo, 0, 18, "Draw progress: funnel " + (inFunnel ? "written" : "off") + " | performance " + (inPerf ? "written" : "off") + " | ledger " + (inLedger ? "written" : "off") + " (tables sit top-right, bottom-right, bottom-left)", blk, bgN)
     true
 
 bool drawNow = barstate.islastconfirmedhistory or (barstate.isrealtime and barstate.isconfirmed)
