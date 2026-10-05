@@ -18,7 +18,7 @@ def cond_lines(t):
 # ---- 1. no trading condition changed -------------------------------------------------------------
 same = ['f_pickTrigger', 'f_selectWindow', 'f_winCand', 'f_localTs', 'f_structCheck', 'f_scanObs', 'f_scanAll', 'f_coverage', 'f_slotState',
         'f_trackSetups', 'f_enter', 'f_bias15', 'f_engine', 'f_lvlEngine', 'f_stepChart', 'f_ctxReadyK', 'f_lvlReady', 'f_overlap', 'f_tk',
-        'f_openSetup', 'f_winCount', 'f_winInc', 'f_setupExists', 'f_lvlConsume', 'f_ctxSync', 'f_lvlSync']
+        'f_tapStore', 'f_openSetup', 'f_winCount', 'f_winInc', 'f_setupExists', 'f_lvlConsume', 'f_ctxSync', 'f_lvlSync']
 for n in same:
     chk(f'{n}: body byte-identical to the previous commit', fn(OLD, n) == fn(NEW, n), 'TEXT DIFF vs HEAD')
 ev_o, ev_n = fn(OLD, 'f_evalCand'), fn(NEW, 'f_evalCand')
@@ -104,6 +104,51 @@ for _ in range(20000):
     ent = 1 if adm else 0
     if ev != fform + fovl + ovl or ovl != later + adm or adm != ent + outr: bad += 1
 chk('model: candidates == formed-fails + overlap-fails + passed-overlap; passed-overlap == later fails + admitted; admitted == entry + outranked (20000 bars)', bad == 0, 'MODEL')
+# ---- 4. tap + bias confluence diagnostic (counting only) ------------------------------------------
+_owners = set(); _cur = 'top'
+for l in NEW.split('\n'):
+    m = re.match(r'^(f_\w+)\(', l)
+    if m: _cur = m.group(1)
+    elif re.match(r'^\S', l) and not l.startswith('//'): _cur = 'top:' + l.split('(')[0].split(' ')[0] + ('/islast' if l.startswith('if barstate.islast') else '')
+    if re.search(r'\barmI\b', l): _owners.add(_cur)
+chk('tap diagnostic: armI is read / written only by f_armInv, f_tapScan, f_armStep, its declaration and the debug panel: ' + str(sorted(_owners)),
+    _owners <= {'f_armInv', 'f_tapScan', 'f_armStep', 'top:var', 'top:if/islast'}, 'TEXT')
+chk('tap diagnostic: only chart-observed taps (tapTime == time and tapAvail == time_close) count; bias direction = gap direction; inside a window',
+    'z.tapped and z.tapTime == time and z.tapAvail == time_close' in NEW and 'biasDir != 0 and z.dir == biasDir' in NEW and 'f_tapScan(hz1, wT, not na(wsT), weT)' in NEW, 'TEXT')
+chk('tap diagnostic: inversion strictly after the tap = source candle OPENED at/after the tap candle closed; same window instance; first valid one ends the arm',
+    'if asOf - tfMs < armI.get(2)' in NEW and 'weI != armI.get(3)' in NEW and 'armI.set(0, 0)' in fn(NEW, 'f_armInv') and 'f_armInv(k, asOf, c.tfSecs * 1000)' in fn(NEW, 'f_ctxUpdate') and 'if k <= 1 and dirOk and wideOk' in NEW, 'TEXT')
+chk('tap diagnostic: VWAP anchored NY 09:30 (hmNy >= 570 and hmNy[1] < 570), EMA 9/21 from the confirmed 1m candle [1] (no repaint)',
+    'bool  vwAnchor = hmNy >= 570 and hmNy[1] < 570' in NEW and 'ta.ema(close, 9)[1], ta.ema(close, 21)[1]' in NEW and 'lookahead = barmerge.lookahead_on' in NEW.split('ta.ema(close, 9)')[1][:200], 'TEXT')
+chk('tap diagnostic: no new entry path (still exactly one f_enter call, no new Setup.new)', NEW.count('f_enter(') == 2 and NEW.count('Setup.new(') == 1, 'TEXT')
+def run_tap(events):
+    arm = None; c = dict(tapB=0, armed=0, vw=0, ema=0, na=0, already=0, trig=0, ended=0)
+    for e in events:
+        if e['kind'] == 'bar':
+            if arm and (e['t'] >= arm['wend'] or e['bias'] != arm['dir']): c['ended'] += 1; arm = None
+        elif e['kind'] == 'tap' and e['bias'] != 0 and e['zdir'] == e['bias'] and e['inwin']:
+            c['tapB'] += 1
+            if e['cf'] == 3: c['na'] += 1
+            elif e['cf'] == 1: c['vw'] += 1
+            elif e['cf'] == 2: c['ema'] += 1
+            elif arm: c['already'] += 1
+            else: c['armed'] += 1; arm = dict(dir=e['bias'], t=e['t'], wend=e['wend'])
+        elif e['kind'] == 'inv' and arm:
+            if e['asof'] - e['tf'] < arm['t']: continue
+            if e['wend'] != arm['wend']: continue
+            c['trig'] += 1; arm = None
+    return c, arm
+random.seed(5); bad = 0
+for _ in range(5000):
+    ev = []; t = 0
+    for _ in range(random.randint(5, 40)):
+        t += random.randint(1, 4) * 30
+        ev.append(dict(kind='bar', t=t, bias=random.choice([1, 1, 1, -1, 0])))
+        r = random.random()
+        if r < .25: ev.append(dict(kind='tap', t=t, bias=ev[-1]['bias'], zdir=random.choice([1, -1]), inwin=random.random() < .8, cf=random.choice([0, 0, 0, 1, 2, 3]), wend=600))
+        elif r < .5: ev.append(dict(kind='inv', asof=t, tf=random.choice([60, 120]), wend=random.choice([600, 600, 900])))
+    c, arm = run_tap(ev)
+    if c['tapB'] != c['armed'] + c['vw'] + c['ema'] + c['na'] + c['already'] or c['armed'] != c['trig'] + c['ended'] + (1 if arm else 0): bad += 1
+chk('model: bias-direction in-window taps == armed + not armed; armed == triggered + ended + still armed (5000 random sequences)', bad == 0, 'MODEL')
 w = sum(1 for r in res if r[1]); 
 for n, ok, b in res: print(f'{n[:150]:150s} {"PASS" if ok else "FAIL":5s} {b}')
 print(f'{w} / {len(res)} passed'); sys.exit(0 if w == len(res) else 1)
