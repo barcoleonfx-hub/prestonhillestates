@@ -3243,48 +3243,8 @@ f_cxPrbTxt(int ix, string nm) =>
     s
 
 f_perfStr(array<float> a, int r) =>
-    string v = ""
-    if r == 0
-        v := str.tostring(a.get(0), "#") + (a.get(26) > 0 ? " (+" + str.tostring(a.get(26), "#") + " excl.)" : "")
-    else if r == 1
-        v := str.tostring(a.get(1), "#") + " / " + str.tostring(a.get(2), "#") + " / " + str.tostring(a.get(3), "#") + " / " + str.tostring(a.get(4), "#")
-    else if r == 2
-        v := f_fmt(a.get(5), "#.0")
-    else if r == 3
-        v := f_fmt(a.get(27), "#.00") + " / " + f_fmt(a.get(6), "#.00")
-    else if r == 4
-        v := f_fmt(a.get(7), "#.00")
-    else if r == 5
-        v := f_fmt(a.get(8), "#.00") + " / " + f_fmt(a.get(9), "#.00")
-    else if r == 6
-        v := str.tostring(a.get(10), "#")
-    else if r == 7
-        v := f_fmt(a.get(11), "#.00") + " / " + f_fmt(a.get(12), "#")
-    else if r == 8
-        v := f_fmt(a.get(13), "#.00") + " / " + f_fmt(a.get(25), "#")
-    else if r == 9
-        v := f_fmt(a.get(14), "#.0") + " / " + f_fmt(a.get(15), "#.00")
-    else if r == 10
-        v := f_fmt(a.get(16), "#.0") + " / " + f_fmt(a.get(17), "#.00")
-    else if r == 11
-        v := f_fmt(a.get(18), "#.0") + " / " + f_fmt(a.get(19), "#.00")
-    else if r == 12
-        v := f_fmt(a.get(20), "#")
-    else if r == 13
-        v := f_fmt(a.get(21), "#.0") + " / " + f_fmt(a.get(22), "#.00")
-    else if r == 14
-        v := str.tostring(a.get(23), "#") + " / " + str.tostring(a.get(24), "#")
-    else if r == 15
-        v := f_fmt(a.get(28), "#.0")
-    else if r == 16
-        v := f_fmt(a.get(29), "#.0") + " / " + f_fmt(a.get(6), "#.00")
-    else if r == 17
-        v := f_fmt(a.get(30), "#")
-    else if r == 18
-        v := str.tostring(a.get(31), "#") + " / " + str.tostring(a.get(32), "#")
-    else
-        v := str.tostring(a.get(33), "#")
-    v
+    array<string> v = array.from(str.tostring(a.get(0), "#") + (a.get(26) > 0 ? " (+" + str.tostring(a.get(26), "#") + " excl.)" : ""), str.tostring(a.get(1), "#") + " / " + str.tostring(a.get(2), "#") + " / " + str.tostring(a.get(3), "#") + " / " + str.tostring(a.get(4), "#"), f_fmt(a.get(5), "#.0"), f_fmt(a.get(27), "#.00") + " / " + f_fmt(a.get(6), "#.00"), f_fmt(a.get(7), "#.00"), f_fmt(a.get(8), "#.00") + " / " + f_fmt(a.get(9), "#.00"), str.tostring(a.get(10), "#"), f_fmt(a.get(11), "#.00") + " / " + f_fmt(a.get(12), "#"), f_fmt(a.get(13), "#.00") + " / " + f_fmt(a.get(25), "#"), f_fmt(a.get(14), "#.0") + " / " + f_fmt(a.get(15), "#.00"), f_fmt(a.get(16), "#.0") + " / " + f_fmt(a.get(17), "#.00"), f_fmt(a.get(18), "#.0") + " / " + f_fmt(a.get(19), "#.00"), f_fmt(a.get(20), "#"), f_fmt(a.get(21), "#.0") + " / " + f_fmt(a.get(22), "#.00"), str.tostring(a.get(23), "#") + " / " + str.tostring(a.get(24), "#"), f_fmt(a.get(28), "#.0"), f_fmt(a.get(29), "#.0") + " / " + f_fmt(a.get(6), "#.00"), f_fmt(a.get(30), "#"), str.tostring(a.get(31), "#") + " / " + str.tostring(a.get(32), "#"), str.tostring(a.get(33), "#"))
+    v.get(r)
 
 f_cxTables() =>
     color blk = color.black

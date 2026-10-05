@@ -22,7 +22,7 @@ def run(bars, src=NEW, inputs=None, inject=(), draw=False):
         if i == 0 and inject:
             for (ty, side, px) in inject:
                 cx = it.g('cxN'); cx[0] += 1
-                it.g('lvls').append(it.construct('Lvl', [], dict(id=cx[0], ty=ty, side=side, px=px, origin=0, known=0), it.G))
+                it.g('lvls').append(it.construct('Lvl', [], dict(id=cx[0], ty=ty, side=side, px=px, origin=b['t'], known=b['t']), it.G))
     return it
 def L(it, name): return list(it.g(name))
 def trades(it, slot=None): return [t for t in L(it, 'trades') if slot is None or t.f['slot'] == slot]

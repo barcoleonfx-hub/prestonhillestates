@@ -29,7 +29,7 @@ def chunks_of(src):
         if st == '' or st.startswith('//'):
             if cur: cur.append('')
             continue
-        if not l[0].isspace():
+        if not l[0].isspace() and not l.startswith('else'):
             if cur: out.append('\n'.join(cur).rstrip() + '\n')
             cur = [l]
         else:
@@ -44,15 +44,24 @@ def strip_comments_line(l):
         if not q and l[i:i + 2] == '//': return l[:i].rstrip()
     return l
 
-def parse_chunks(src):
+SKIP = ('f_drawTables', 'f_cxTables')   # display-only functions: 10 KB each, the third-party parser needs tens of minutes; stubbed unless draw tests are requested
+
+_MEMO = {}
+def parse_chunks(src, skip=SKIP):
+    key = (hashlib.md5(src.encode()).hexdigest(), tuple(skip))
+    if key in _MEMO: return _MEMO[key]
     src = '\n'.join(strip_comments_line(l) for l in src.split('\n'))
     res = []
     for c in chunks_of(src):
+        nm = c.split('(')[0]
+        if nm in skip:
+            c = c.split('\n')[0] + '\n    true\n'
         h = hashlib.md5(c.encode()).hexdigest(); p = os.path.join(CACHE, h + '.pkl')
         if os.path.exists(p): node = pickle.load(open(p, 'rb'))
         else:
             node = A.parse(c); pickle.dump(node, open(p, 'wb'))
         res.extend(node.body)
+    _MEMO[key] = res
     return res
 
 NY = ZoneInfo('America/New_York')
@@ -67,8 +76,8 @@ class Env:
         return None
 
 class Interp:
-    def __init__(self, src, inputs=None):
-        self.body = parse_chunks(src); self.inputs = inputs or {}
+    def __init__(self, src, inputs=None, skip=SKIP):
+        self.body = parse_chunks(src, skip); self.inputs = inputs or {}
         self.G = Env(); self.types = {}; self.funcs = {}; self.varDone = set(); self.alerts = []; self.stubs = []
         self.hist = []; self.bar = None; self.atr = {}; self.state_ids = {}
         for n in self.body:

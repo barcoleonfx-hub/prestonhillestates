@@ -40,3 +40,13 @@ def engine(bars, levels=(), **kw):
         e.lid += 1; l = X.Lvl(e.lid, ty, side, px, 0, 0); e.levels.append(l)
     for i, b in enumerate(bars): e.onBar(b, i)
     return e
+
+def stream(t0, t1, fn=None, base=20000.0, skip_break=True):
+    out = []; t = t0
+    while t < t1:
+        d = dt.datetime.fromtimestamp(t / 1000.0, NYZ)
+        if not (skip_break and d.hour == 17):
+            o, h, l, c = fn(t) if fn else (base, base + 0.5, base - 0.5, base)
+            out.append(bar(t, o, h, l, c))
+        t += 60000
+    return out
