@@ -26,7 +26,7 @@ class FakeIt:
 def run(bars, src=NEW, inputs=None, inject=(), draw=False, inject_at=None):
     if src is OLD: return FakeIt()   # the pre-audit source takes >30 min to parse with the third-party parser; old behaviour is shown by the Python legacy model + text diff instead
     inputs = dict(inputs or {})
-    if src is NEW: inputs.setdefault('inCmpVar', True)   # simulate Standard AND Precision
+    if src is NEW: inputs.setdefault('inCmpVar', True); inputs.setdefault('inGuide', False)   # legacy tests: guide mode off; simulate Standard AND Precision
     it = Interp(src, inputs)
     for i, b in enumerate(bars):
         it.feed(b, i, last=(draw and i == len(bars) - 1))

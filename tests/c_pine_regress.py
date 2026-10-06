@@ -344,7 +344,7 @@ RET = [(5, (20006, 20006.5, 20003, 20003.5)), (5, (20003.5, 20004, 19998, 19998.
 TRIG = (5, (19996, 20009, 19995.5, 20008))     # 10:30 bullish candle closing through the run's open (20006)
 def gd_bars(extra=(), trig=TRIG):
     return seq((*D, 9, 0), G15 + RET + [trig] + list(extra))
-GDI = dict(inCmpVar=False, inGdH1=False)
+GDI = dict(inCmpVar=False, inGdH1=False, inGuide=True)
 b = gd_bars()
 it = run(b, inject=LV, inputs=GDI)
 st1 = setups(it)[0]; md = [m for m in plans(it, 5)]
