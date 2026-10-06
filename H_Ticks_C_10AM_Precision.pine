@@ -130,6 +130,8 @@ int inCxNDone = input.int(10, "Completed trade boxes kept on the chart (per vari
 bool inCxVisLevels = input.bool(false, "Draw live liquidity levels (clutter)", group = G16)
 bool inCxHistCtx = input.bool(false, "Historical context: also draw ended / superseded setups, truncated at their end", group = G16)
 bool inAlExit = input.bool(true, "Alert: simulated stop / target / time exit", group = G8)
+bool inCxMacro = input.bool(false, "MACRO MODE: the sweep (manipulation) must occur inside the macro window", group = G10, tooltip = "OFF = any time. ON = a level sweep only starts a setup if the sweeping candle OPENED inside the window below (default 09:50-10:10 NY). Everything else (CISD, areas, entry window, target) is unchanged. This is a restriction: it can only remove setups.")
+string inCxMacroWin = input.session("0950-1010", "Macro window (NY, candle open times, end exclusive)", group = G10)
 int inCxMiss = input.int(0, "Aggregation: missing 1m candles tolerated per higher-timeframe candle (0 = strict)", minval = 0, maxval = 30, group = G10, tooltip = "A synthetic 5m/15m/30m/1H/4H/Daily candle is published only when all its expected 1m candles are present (scheduled 17:00-18:00 break excluded). TradingView has no bar for a minute without trades, so thin sessions can lose candles; this tolerance trades strictness for availability. Dropped candles are counted in the info panel.")
 
 // ───────────────────────────────────────── TIME AND CHART ─────────────────────────────────────────
@@ -146,6 +148,8 @@ int orE = f_mins(inORs, 5)
 int winS = f_mins(inCxWin, 0)
 int cutM = f_mins(inCxWin, 5)
 int exitM = f_hhmm(inCxHard)
+int macS = f_mins(inCxMacroWin, 0)
+int macE = f_mins(inCxMacroWin, 5)
 bool cxCfgOk = winS < cutM and cutM <= exitM and orS < orE
 bool cfgAll = cxCfgOk
 
@@ -1099,6 +1103,10 @@ f_cxSource(Agg A) =>
         if lv.side != 0 and lv.st == 2 and not lv.proc
             lv.proc := true
             bool elig = lv.swOpen >= c0t and lv.known <= lv.swOpen
+            // macro mode: the sweeping candle must have OPENED inside the macro window (a restriction only)
+            if elig and inCxMacro and not f_inWin(hour(lv.swOpen, TZ) * 60 + minute(lv.swOpen, TZ), macS, macE)
+                elig := false
+                rcN.set(14, rcN.get(14) + 1)
             if elig
                 if na(best)
                     best := lv
@@ -2407,6 +2415,8 @@ f_cxDbgRec() =>
         f_cell(tbRec, 1, b + 17, str.tostring(blkC.get(b)), blk, na)
     f_cell(tbRec, 0, 21, "Setup counters are exclusive; funnel candidate/order counters are per variant.", blk, na)
     f_cell(tbRec, 1, 21, "", blk, na)
+    f_cell(tbRec, 0, 22, "Macro mode: level sweeps outside the macro window (ignored, no setup)", blk, na)
+    f_cell(tbRec, 1, 22, str.tostring(rcN.get(14)), blk, na)
     true
 
 f_cxDbgSet() =>

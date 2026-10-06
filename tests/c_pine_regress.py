@@ -264,6 +264,19 @@ it = run(b + stream(b[-1]['t'] + 60000, T(*D, 18, 5), lambda t: (20006, 20006.5,
 st1 = setups(it)[0]
 ok('funnel: pre-window stale Fib is NOT a candidate; setup attributed to the entry window (rolled); stale still counted as a reason', st1.f['candN'] == 0 and rc(it)[3] == 0 and rc(it)[10] == 1 and 'stale fib' in list(it.g('rjK')), (st1.f['candN'], rc(it), list(it.g('rjK'))))
 
+# =============================================================== 9b. macro mode (sweep must occur inside 09:50-10:10)
+b, lv = sc(BASE)      # the sweep candle opens at 09:40
+it = run(b, inject=lv, inputs=dict(inCmpVar=False))
+ok('macro: OFF (default) - the 09:40 sweep starts a setup', len(setups(it)) == 1, len(setups(it)))
+it = run(b, inject=lv, inputs=dict(inCmpVar=False, inCxMacro=True))
+ok('macro: ON with 09:50-10:10 - a 09:40 sweep is ignored (no setup), counted as outside the macro', len(setups(it)) == 0 and rc(it)[14] >= 1, (len(setups(it)), rc(it)[14]))
+it = run(b, inject=lv, inputs=dict(inCmpVar=False, inCxMacro=True, inCxMacroWin='0935-0950'))
+ok('macro: ON with a window containing 09:40 - the setup is created and reaches its CISD', len(setups(it)) == 1 and setups(it)[0].f['st'] == 2, [(s.f['st'], s.f['why']) for s in setups(it)])
+it = run(b, inject=lv, inputs=dict(inCmpVar=False, inCxMacro=True, inCxMacroWin='0940-0941'))
+ok('macro: the window start is inclusive and the end exclusive (09:40-09:41 admits the 09:40 candle)', len(setups(it)) == 1, len(setups(it)))
+it = run(b, inject=lv, inputs=dict(inCmpVar=False, inCxMacro=True, inCxMacroWin='0930-0940'))
+ok('macro: a window ending at 09:40 excludes the 09:40 candle', len(setups(it)) == 0, len(setups(it)))
+
 # =============================================================== 10. target audit
 b, lv = sc(BASE)
 it = run(b, inject=lv + [('ORH', 1, 20050.0)], inject_at={5: [('EQH', 1, 20040.0, at(23, 0) + 86400000)]}, inputs=dict(inCmpVar=False))
