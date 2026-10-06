@@ -266,15 +266,15 @@ ok('funnel: pre-window stale Fib is NOT a candidate; setup attributed to the ent
 
 # =============================================================== 9b. macro mode (sweep must occur inside 09:50-10:10)
 b, lv = sc(BASE)      # the sweep candle opens at 09:40
-it = run(b, inject=lv, inputs=dict(inCmpVar=False))
+it = run(b, inject=lv, inputs=dict(inCmpVar=False, inCxLvCS=False))
 ok('macro: OFF (default) - the 09:40 sweep starts a setup', len(setups(it)) == 1, len(setups(it)))
-it = run(b, inject=lv, inputs=dict(inCmpVar=False, inCxMacro=True))
+it = run(b, inject=lv, inputs=dict(inCmpVar=False, inCxLvCS=False, inCxMacro=True))
 ok('macro: ON with 09:50-10:10 - a 09:40 sweep is ignored (no setup), counted as outside the macro', len(setups(it)) == 0 and rc(it)[14] >= 1, (len(setups(it)), rc(it)[14]))
-it = run(b, inject=lv, inputs=dict(inCmpVar=False, inCxMacro=True, inCxMacroWin='0935-0950'))
+it = run(b, inject=lv, inputs=dict(inCmpVar=False, inCxLvCS=False, inCxMacro=True, inCxMacroWin='0935-0950'))
 ok('macro: ON with a window containing 09:40 - the setup is created and reaches its CISD', len(setups(it)) == 1 and setups(it)[0].f['st'] == 2, [(s.f['st'], s.f['why']) for s in setups(it)])
-it = run(b, inject=lv, inputs=dict(inCmpVar=False, inCxMacro=True, inCxMacroWin='0940-0941'))
+it = run(b, inject=lv, inputs=dict(inCmpVar=False, inCxLvCS=False, inCxMacro=True, inCxMacroWin='0940-0941'))
 ok('macro: the window start is inclusive and the end exclusive (09:40-09:41 admits the 09:40 candle)', len(setups(it)) == 1, len(setups(it)))
-it = run(b, inject=lv, inputs=dict(inCmpVar=False, inCxMacro=True, inCxMacroWin='0930-0940'))
+it = run(b, inject=lv, inputs=dict(inCmpVar=False, inCxLvCS=False, inCxMacro=True, inCxMacroWin='0930-0940'))
 ok('macro: a window ending at 09:40 excludes the 09:40 candle', len(setups(it)) == 0, len(setups(it)))
 
 # =============================================================== 10. target audit
@@ -340,12 +340,12 @@ ok('boxes: raising the setting to 3 keeps all three', len(exits) == 3, len(exits
 
 # =============================================================== 12. guide-faithful mode
 G15 = [(15, (20000, 20001, 19994, 19995)), (15, (19995, 19996, 19990.5, 19991)), (15, (19991, 19992, 19985, 19987)), (15, (19987, 19999.5, 19987, 19999)), (15, (19999, 20008, 19999, 20006))]   # 09:00-10:15: sweep of 19990, CISD at 10:15
-RET = [(5, (20006, 20006.5, 20003, 20003.5)), (5, (20003.5, 20004, 19998, 19998.5)), (5, (19998.5, 19999, 19995, 19996))]   # retracement run into the 15m FVG
-TRIG = (5, (19996, 20009, 19995.5, 20008))     # 10:30 bullish candle closing through the run's open (20006)
+RET = [(5, (20006, 20007, 20005.5, 20006.5)), (5, (20006.5, 20006.5, 19998, 19998.5)), (5, (19998.5, 19999, 19995, 19996))]   # retracement run into the 15m FVG
+TRIG = (5, (19996, 20009, 19995.5, 20008))     # 10:30 bullish candle closing through the run's open (20006.5)
 def gd_bars(extra=(), trig=TRIG):
     return seq((*D, 9, 0), G15 + RET + [trig] + list(extra))
 GDI = dict(inCmpVar=False, inGdH1=False, inGuide=True)
-b = gd_bars()
+b = gd_bars([(5, (20008, 20009, 20007, 20008))])
 it = run(b, inject=LV, inputs=GDI)
 st1 = setups(it)[0]; md = [m for m in plans(it, 5)]
 ok('guide: the sweep and CISD are read on 15m (CISD confirmed at 10:15)', st1.f['dir'] == 1 and st1.f['st'] == 2 and st1.f['cisdT'] == at(10, 15), (st1.f['st'], st1.f['why'], st1.f['cisdT']))
@@ -357,7 +357,7 @@ it2 = run(b, inject=LV, inputs=dict(GDI, inGdCap=80)); m2 = plans(it2, 5)
 ok('guide: stop too wide -> the local-structure stop (retracement extreme 19995 - buffer)', len(m2) == 1 and abs(m2[0].f['stp'] - 19994.5) < 1e-9, [(m.f['stp'], m.f['why']) for m in m2])
 it3 = run(b, inject=LV, inputs=dict(GDI, inGdCap=40)); m3 = plans(it3, 5)
 ok('guide: still too wide -> rejected (never squeezed), no trade', len(m3) == 1 and m3[0].f['st'] == 4 and 'stop-cap' in m3[0].f['why'] and not trades(it3, 5), [(m.f['st'], m.f['why']) for m in m3])
-it4 = run(b, inject=LV, inputs=dict(inCmpVar=False))
+it4 = run(b, inject=LV, inputs=dict(inCmpVar=False, inGuide=True))
 m4 = plans(it4, 5)
 ok('guide: by default the 1H CISD must agree - with none available the candidate is rejected with that reason', len(m4) == 1 and m4[0].f['st'] == 4 and '1H CISD' in m4[0].f['why'], [(m.f['st'], m.f['why']) for m in m4])
 bad = (5, (19996, 19999, 19994, 19995))
@@ -366,8 +366,9 @@ ok('guide: a non-confirming candle (bearish / no close through the run open) is 
 it6 = run(b, inject=LV, inputs=dict(GDI, inGuide=False))
 ok('guide: OFF restores the previous behaviour (limit-at-CE Standard, no Close trigger plans)', not any(m.f['meth'] == 'Close trigger' for m in plans(it6, 5)), [(m.f['meth']) for m in plans(it6, 5)])
 # trailing: +1R then back -> stopped at -0.5R; +2R then back -> break-even; trail OFF -> still open
-UP1 = [(5, (20011, 20035, 20010, 20034)), (5, (20034, 20034.5, 19990, 19992))]
-UP2 = [(5, (20011, 20060, 20010, 20058)), (5, (20058, 20058.5, 19990, 19992))]
+FIL = (5, (20008, 20009, 20007, 20008))
+UP1 = [FIL, (5, (20011, 20035, 20010, 20034)), (5, (20034, 20034.5, 19990, 19992))]
+UP2 = [FIL, (5, (20011, 20060, 20010, 20058)), (5, (20058, 20058.5, 19990, 19992))]
 it7 = run(gd_bars(UP1), inject=LV, inputs=GDI); t7 = trades(it7, 5)
 ok('guide trail: +1R then a pullback is stopped at -0.5R (trailed stop, effective from the next candle)', len(t7) == 1 and abs(t7[0].f['exitPx'] - 19996.25) < 1e-9 and 'trailed' in t7[0].f['note'] and -0.6 < t7[0].f['netR'] < -0.4, [(t.f['exitPx'], t.f['netR'], t.f['note']) for t in t7])
 it8 = run(gd_bars(UP2), inject=LV, inputs=GDI); t8 = trades(it8, 5)
@@ -380,7 +381,7 @@ ig = run(flat_bars, inputs=dict(inGuide=True)); ng = run(flat_bars, inputs=dict(
 ok('guide: current-session levels are not created in guide mode (they are otherwise)', not any(l.f['ty'] in ('CSH', 'CSL') for l in L(ig, 'lvls')) and any(l.f['ty'] in ('CSH', 'CSL') for l in L(ng, 'lvls')), ([l.f['ty'] for l in L(ig, 'lvls')], [l.f['ty'] for l in L(ng, 'lvls')]))
 # CISD tracker on the 1H timeframe
 def hourly(t):
-    hh = (t - T(*D, 8, 0)) / 3600000.0
+    hh = 8 + (t - T(*D, 8, 0)) / 3600000.0
     path = [(8, 20000.0), (9, 20000.0), (10, 19980.0), (11, 19960.0), (12, 20010.0)]
     for (h0, p0), (h1, p1) in zip(path, path[1:]):
         if h0 <= hh < h1:
@@ -389,7 +390,7 @@ def hourly(t):
             return (a, max(a, b2), min(a, b2), b2)
     return (20010.0, 20010.5, 20009.5, 20010.0)
 hb = stream(T(*D, 8, 0), T(*D, 12, 5), hourly)
-ith = run(hb, inputs=dict(inCmpVar=False))
+ith = run(hb, inputs=dict(inCmpVar=False, inGuide=True))
 ok('guide: the 1H CISD tracker flips bullish when a 1H candle closes through the open of the opposing run, stamped at that candle\'s close', list(ith.g('ctS'))[4] == 1 and list(ith.g('ctT'))[4] == T(*D, 12, 0), (list(ith.g('ctS')), list(ith.g('ctT'))))
 
 

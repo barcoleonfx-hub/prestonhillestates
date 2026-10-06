@@ -1470,8 +1470,11 @@ f_cxTryTrig(Setup st, Agg T) =>
             float ext = bull ? f_ag(T.L, 0) : f_ag(T.H, 0)
             for k = j to n - 2
                 ext := bull ? math.min(ext, T.L.get(k)) : math.max(ext, T.H.get(k))
-            Area par = f_cxPick(st, false, f_agI(T.T0, 0))
-            if not na(par) and (bull ? c0 > ref and ext <= par.hi and c0 >= par.lo and ext > st.ext : c0 < ref and ext >= par.lo and c0 <= par.hi and ext < st.ext)
+            Area par = na
+            for a in st.areas
+                if not a.dead and a.known <= f_agI(T.T0, 0) and (bull ? ext <= a.hi and c0 >= a.lo : ext >= a.lo and c0 <= a.hi) and (na(par) or math.abs(a.ce - ext) < math.abs(par.ce - ext))
+                    par := a
+            if not na(par) and (bull ? c0 > ref and ext > st.ext : c0 < ref and ext < st.ext)
                 [mult, firstRisk, why] = f_cxSeq(SC_STD)
                 if mult == 0.0
                     if why != "busy"
