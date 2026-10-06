@@ -437,9 +437,21 @@ class Interp:
         if d in ('array.new', 'array.new_float', 'array.new_int', 'array.new_string', 'array.new_bool'):
             if d == 'array.new' or not a: return PArr()
             return PArr([a[1] if len(a) > 1 else None] * int(a[0]))
-        if d in ('table.new', 'label.new', 'line.new', 'box.new'):
-            return Stub()
-        if d in ('table.cell', 'table.clear', 'line.delete', 'label.delete', 'box.delete'): self.stubs.append(d); return None
+        if d == 'table.new':
+            tb = Stub(); tb.pos = str(a[0]); tb.cells = {}; self.tables = getattr(self, 'tables', {}); self.tables[tb.pos] = tb; return tb
+        if d in ('label.new', 'line.new', 'box.new'):
+            o = Stub(); o.kind = d; o.args = a; o.kw = kw; o.dead = False
+            if not hasattr(self, 'objs'): self.objs = []
+            self.objs.append(o); return o
+        if d == 'table.cell':
+            a[0].cells[(a[1], a[2])] = a[3]; self.stubs.append(d); return None
+        if d == 'table.clear':
+            t = a[0]
+            for c in range(a[1], a[3] + 1):
+                for r in range(a[2], a[4] + 1): t.cells.pop((c, r), None)
+            self.stubs.append(d); return None
+        if d in ('line.delete', 'label.delete', 'box.delete'):
+            a[0].dead = True; self.stubs.append(d); return None
         if d.startswith('color.'): return d
         raise PineError('unsupported builtin ' + d)
 

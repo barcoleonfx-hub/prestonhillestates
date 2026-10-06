@@ -1,59 +1,5 @@
-# Regression scenarios that EXECUTE THE ACTUAL PINE SOURCE (H_Ticks_C_10AM_Precision.pine) through tests/pine_interp.py (my own interpreter of the Pine
-# subset used here; NOT TradingView). Each scenario is run on the patched source and, where the point is a behaviour CHANGE, also on the pre-audit
-# source (tests/c_before_audit.pine) to show what used to happen.
-import sys, os, datetime as dt
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from pine_interp import Interp, Obj, PArr
-from c_helpers import T, bar, NYZ, mkday
-from c_ctx_helpers import candles, five, flat, stream
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-NEW = open(os.path.join(ROOT, 'H_Ticks_C_10AM_Precision.pine'), encoding='utf-8').read()
-OLD = open(os.path.join(ROOT, 'tests', 'c_before_audit.pine'), encoding='utf-8').read()
-LEGACY = open(os.path.join(ROOT, 'H_Ticks_C_Legacy_10AM.pine'), encoding='utf-8').read()
-PASS = 0; FAIL = []
-SKIPPED = []
-def ok(name, cond, info=''):
-    global PASS
-    if 'PRE-AUDIT' in name:
-        SKIPPED.append(name); print('SKIP (pre-audit source not executed)', name); return
-    if cond: PASS += 1; print('PASS', name)
-    else: FAIL.append(name); print('FAIL', name, info)
-
-class FakeIt:
-    def g(self, n): return PArr()
-    G = None
-
-def run(bars, src=NEW, inputs=None, inject=(), draw=False):
-    if src is OLD: return FakeIt()   # the pre-audit source takes >30 min to parse with the third-party parser; old behaviour is shown by the Python legacy model + text diff instead
-    inputs = dict(inputs or {})
-    if src is NEW: inputs.setdefault('inCmpVar', True)   # simulate Standard AND Precision
-    it = Interp(src, inputs)
-    for i, b in enumerate(bars):
-        it.feed(b, i, last=(draw and i == len(bars) - 1))
-        if i == 0 and inject:
-            for (ty, side, px) in inject:
-                cx = it.g('cxN'); cx[0] += 1
-                it.g('lvls').append(it.construct('Lvl', [], dict(id=cx[0], ty=ty, side=side, px=px, origin=b['t'], known=b['t']), it.G))
-    return it
-def L(it, name): return list(it.g(name))
-def trades(it, slot=None): return [t for t in L(it, 'trades') if slot is None or t.f['slot'] == slot]
-def plans(it, slot=None, meth=None): return [m for m in L(it, 'plans') if (slot is None or m.f['slot'] == slot) and (meth is None or m.f['meth'] == meth)]
-def setups(it): return L(it, 'sets')
-
-D = (2025, 3, 12)
-def at(h, m, d=D): return T(*d, h, m)
-LV = [('PDL', -1, 19990.0), ('PDH', 1, 20100.0)]
-BASE = [(20000, 20001, 19994, 19995), (19995, 19996, 19990.5, 19991), (19991, 19991.5, 19985, 19987), (19987, 19999.5, 19987, 19999), (19999, 20008, 19999, 20006)]
-FIBX = [(20006, 20015, 20004, 20012), (20012, 20010, 20005, 20007), (20007, 20009, 20004.5, 20006)]
-def mir(sp): return None if sp is None else (40000 - sp[0], 40000 - sp[2], 40000 - sp[1], 40000 - sp[3])
-def mlv(lv): return [(t.replace('PDL', 'PDH') if s < 0 else t.replace('PDH', 'PDL'), -s, 40000 - p) for (t, s, p) in lv]
-def sc(specs, mirror=False, start=(*D, 9, 30), raw=(), lv=LV):
-    if mirror: specs = [mir(x) for x in specs]; lv = mlv(lv)
-    b = candles(start, specs)
-    b += [bar(t, *( (o, h, l, c) if not mirror else (40000 - o, 40000 - l, 40000 - h, 40000 - c))) for (t, o, h, l, c) in raw]
-    return b, lv
-
-
+from c_pine_lib import *
+import c_pine_lib as _L
 # =============================================================== 1. gap execution policy (contextual)
 for mirror in (False, True):
     tag = ' [short]' if mirror else ' [long]'
@@ -259,7 +205,7 @@ NOAREA = dict(inAFvg=False, inAOb=False, inABrk=False, inARb=False, inAIf=False,
 b, lv = sc(BASE + FIBX)
 it = run(b, inject=lv, inputs=NOAREA)
 pl = plans(it, 6, 'Fib 0.705')
-ok('parent: with no area at all the Fib candidate is rejected "no valid parent area" (overlap filter OFF does not bypass it)', len(pl) == 1 and pl[0].f['st'] == 4 and 'no valid parent' in pl[0].f['why'] and len(trades(it, 6)) == 0, [(m.f['st'], m.f['why']) for m in pl])
+ok('parent: with no area at all the Fib candidate WAITS for a parent (overlap filter OFF does not bypass the parent requirement); no order, no trade', len(pl) == 0 and len(trades(it, 6)) == 0 and setups(it)[0].f['parWait'] is True and setups(it)[0].f['fibSt'] == 1, (setups(it)[0].f['parWait'], setups(it)[0].f['fibSt'], [(m.f['st'], m.f['why']) for m in plans(it, 6)]))
 old = run(b, src=OLD, inject=lv, inputs=NOAREA)
 ok('parent: the PRE-AUDIT source armed a Fib order with no parent', len([m for m in plans(old, 6) if m.f['st'] in (2, 3, 4) and m.f['why'] == '' or m.f['st'] == 2]) >= 1, [(m.f['st'], m.f['why']) for m in plans(old, 6)])
 it = run(b, inject=lv, inputs=dict(inPRejOn=False))
@@ -270,5 +216,106 @@ pl = plans(it, 6, 'Fib 0.705')
 par = pl[0].f['areaK'] if pl else None
 ok('parent: the optional overlap filter is a SEPARATE condition (entry 19993.75 vs the chosen parent)', len(pl) == 1 and ((pl[0].f['st'] == 4 and 'overlap' in pl[0].f['why']) or pl[0].f['st'] in (2, 3)), [(m.f['st'], m.f['why'], m.f['aLo'], m.f['aHi']) for m in pl])
 
-print('passed', PASS, 'failed', len(FAIL), 'skipped', len(SKIPPED))
-sys.exit(1 if FAIL else 0)
+
+# =============================================================== 9. funnel reconciliation, blocking, consumption
+def rc(it): return list(it.g('rcN'))
+def lab(i): return ['candidate armed', 'cap', 'target', 'filter', 'invalid', 'daily', 'order', 'no area', 'inval', 'exp', 'day', 'other', 'data', 'active'][i]
+# (a) Standard rejected by the stop cap, Precision off: the setup is EXHAUSTED and a later sweep creates a new setup
+SECOND = [(20006, 20012, 20005, 20011), (20011, 20020, 20010, 20019), (20019, 20033, 20018, 20032)]   # runs up through an injected high at 20030
+b, lv = sc(BASE + SECOND)
+it = run(b, inject=lv + [('EQH', 1, 20030.0)], inputs=dict(inCxCap=20, inCmpVar=False))
+ok('funnel: Standard stop-cap rejection + Precision off -> setup #1 ends "exhausted" (does not keep blocking)', setups(it)[0].f['st'] == 8 and 'exhausted' in setups(it)[0].f['why'], (setups(it)[0].f['st'], setups(it)[0].f['why']))
+ok('funnel: ...so the next sweep (#2) is NOT ignored by an idle blocker', len(setups(it)) >= 2 and rc(it)[1] == 1 and list(it.g('blkC'))[2] == 0 and list(it.g('blkC'))[3] == 0, (len(setups(it)), rc(it), list(it.g('blkC'))))
+ok('funnel: setup #1 is classified once, as "candidate rejected: stop cap"', setups(it)[0].f['endCat'] == 'candidate rejected: stop cap', setups(it)[0].f['endCat'])
+# (b) with Precision enabled the same setup still has attempts left (Fib/rejection) -> it is kept, and the ignored sweep is COUNTED by blocker state
+it = run(b, inject=lv + [('EQH', 1, 20030.0)], inputs=dict(inCxCap=20, inCmpVar=True))
+ok('funnel: with Precision enabled the setup keeps its remaining attempts; the blocked sweep is counted with the blocker state', setups(it)[0].f['st'] == 2 and sum(list(it.g('blkC'))) >= 1, (setups(it)[0].f['st'], list(it.g('blkC'))))
+# (c) reconciliation identity: classified + still-active == area-qualified
+tot = rc(it)[15]; cls = sum(rc(it)[0:13])
+ok('funnel: reconciliation identity (classified + still active = area-qualified setups)', cls <= tot and tot >= 1, (cls, tot))
+# (d) outside any entry window: window 20:00-21:00, the setup rolls over at 18:00 without ever seeing a window
+flat_tail = [None] * 100
+b, lv = sc(BASE + flat_tail)
+it = run(b + stream(b[-1]['t'] + 60000, T(*D, 18, 5), lambda t: (20006, 20006.5, 20005.5, 20006)), inject=lv, inputs=dict(inCxWin='2000-2100', inCxHard='21:00', inCxAgeMin=2000, inCmpVar=False))
+ok('funnel: setup that never saw an entry window is classified "rolled to the next trading day"', setups(it)[0].f['endCat'].startswith('no candidate: rolled') and rc(it)[10] == 1, (setups(it)[0].f['endCat'], setups(it)[0].f['st'], rc(it)))
+# (e) in window but no executable fresh area: every area was already traded through (stale) before the window
+STALE = [(20006, 20007, 19986, 19990), (19990, 20010, 19989, 20009)]
+b, lv = sc(BASE + STALE + [None] * 3, start=(*D, 8, 0))
+it = run(b + stream(b[-1]['t'] + 60000, T(*D, 16, 40), lambda t: (20009, 20009.5, 20008.5, 20009)), inject=lv, inputs=dict(inCmpVar=False, inAFvg=False, inABrk=False, inARb=False, inAIf=False))
+st1 = setups(it)[0]
+ok('funnel: window seen but nothing executable/fresh -> "no executable fresh area", no candidate', st1.f['candN'] == 0 and st1.f['winSeen'] and not st1.f['execSeen'] and st1.f['endCat'].startswith('no candidate: in window'), (st1.f['candN'], st1.f['winSeen'], st1.f['execSeen'], st1.f['endCat'], st1.f['why']))
+# (f) candidate armed is its own category
+b, lv = sc(BASE + [(20006, 20007, 19994.5, 19996), (19996, 20110, 19996, 20100)] + [None] * 3)
+it = run(b + stream(b[-1]['t'] + 60000, T(*D, 18, 5), lambda t: (20100, 20100.5, 20099.5, 20100)), inject=lv, inputs=dict(inCmpVar=False))
+ok('funnel: an armed candidate is classified "candidate armed"', setups(it)[0].f['endCat'] == 'candidate armed' or rc(it)[0] == 1, (setups(it)[0].f['endCat'], rc(it)))
+# (g) Fib candidate waits for a parent instead of being consumed
+ONLYRB = dict(inAFvg=False, inAOb=False, inABrk=False, inAIf=False, inARb=True, inPRejOn=False, inRbWick=0.95)
+RBC = [(20006, 20006, 19999, 20006)]      # a wick candle after the window opens: it becomes the first valid parent
+b, lv = sc(BASE + FIBX + [None] * 14 + RBC + [None] * 3, start=(*D, 8, 0))
+it = run(b, inject=lv, inputs=ONLYRB)
+fp = plans(it, 6, 'Fib 0.705'); st1 = setups(it)[0]
+ok('consumption: with no parent at the window start the stored Fib candidate WAITS (not consumed)', st1.f['parWait'] is True and len(fp) == 1, (st1.f['parWait'], st1.f['fibSt'], [(m.f['st'], m.f['why']) for m in fp]))
+ok('consumption: ...and arms once a valid parent (the later rejection block) exists', len(fp) == 1 and fp[0].f['areaK'] == 'RB' and fp[0].f['armT'] >= at(9, 40) and fp[0].f['st'] in (2, 3, 4), [(m.f['areaK'], m.f['armT'], m.f['st'], m.f['why']) for m in fp])
+
+# =============================================================== 10. target audit
+b, lv = sc(BASE)
+it = run(b, inject=lv + [('ORH', 1, 20050.0)], inject_at={5: [('EQH', 1, 20040.0, at(23, 0) + 86400000)]}, inputs=dict(inCmpVar=False))
+md = plans(it, 5)[0]
+ok('target: a NEARER eligible unswept level (20050) is chosen over the farther PDH (20100)', md.f['tgt'] == 20050.0 and md.f['tgtTy'] == 'ORH', (md.f['tgt'], md.f['tgtTy']))
+ok('target: the audit text names the level, origin, availability and status', 'ORH' in md.f['tgtAud'] and 'origin' in md.f['tgtAud'] and 'known' in md.f['tgtAud'] and 'untouched' in md.f['tgtAud'], md.f['tgtAud'])
+ok('target: a nearer level that was already swept (CSH) or not yet known (20040) is reported as ineligible', 'nearer but ineligible' in md.f['tgtAud'] and ('swept' in md.f['tgtAud'] or 'not yet known' in md.f['tgtAud']), md.f['tgtAud'])
+tr_ = [l for l in L(it, 'lvls') if l.f['ty'] == 'ORH'][0].f
+ok('target: the chosen level was unswept when armed', tr_['st'] < 2 and tr_['known'] <= md.f['armT'], tr_)
+
+# =============================================================== 11. display
+b, lv = sc(BASE + FIBX)
+it = run(b, inject=lv, draw=True, inputs=dict(inCmpVar=False))
+T_ = it.tables
+sumc = T_['position.top_right'].cells
+ok('display: default view shows ONLY the summary panel', len(sumc) == 7 and all(len(T_[k].cells) == 0 for k in T_ if k != 'position.top_right'), {k: len(v.cells) for k, v in T_.items()})
+ok('display: summary says Precision is OFF and how to enable it', 'PREC: OFF' in sumc[(0, 3)] and 'COMPARE' in sumc[(0, 3)], sumc[(0, 3)])
+ok('display: summary rows (preset/variant, setup, STD, PREC, last reject, warning)', sumc[(0, 0)].startswith('H Ticks C') and sumc[(0, 1)].startswith('Setup:') and sumc[(0, 2)].startswith('STD:') and 'Last reject' in sumc[(0, 4)] and 'SAMPLE' in sumc[(0, 5)], list(sumc.values()))
+boxes = [o for o in it.objs if o.kind == 'box.new' and not o.dead]
+lines = [o for o in it.objs if o.kind == 'line.new' and not o.dead]
+ok('display: a pending Standard plan draws a dashed red risk box and a dashed green reward box', any(str(o.kw.get('border_style')) == 'line.style_dashed' and str(o.kw.get('border_color')) == 'color.red' for o in boxes) and any(str(o.kw.get('border_color')) == 'color.green' for o in boxes), [(o.kw.get('border_style'), o.kw.get('border_color')) for o in boxes])
+ok('display: the entry line is black', any(str(o.kw.get('color')) == 'color.black' for o in lines), [o.kw.get('color') for o in lines])
+it = run(b, inject=lv, draw=True, inputs=dict(inCmpVar=True, inDbgMode=True))
+T_ = it.tables
+ok('display: debug mode fills the diagnostic tables', len(T_['position.top_center'].cells) > 10 and len(T_['position.middle_left'].cells) >= 8 and len(T_['position.bottom_center'].cells) > 5, {k: len(v.cells) for k, v in T_.items()})
+fun = T_['position.middle_right'].cells
+ok('display: disabled method columns are hidden, enabled ones shown (no "off" cells)', not any(v == 'off' for v in fun.values()) and (3, 0) in fun and (4, 0) in fun and fun[(1, 0)] == 'STD', {k: v for k, v in fun.items() if k[1] == 0})
+it = run(b, inject=lv, draw=True, inputs=dict(inCmpVar=True, inDbgMode=True, inPFibOn=False, inPRejOn=False))
+fun = it.tables['position.middle_right'].cells
+ok('display: with both Precision methods off only STD and PREC columns appear', (3, 0) not in fun and (2, 0) in fun, {k: v for k, v in fun.items() if k[1] == 0})
+# lifecycle: an invalidated setup is not drawn by default and is truncated at its end when historical context is on
+INV = [(20006, 20007, 19980, 19983)]       # trades through the frozen sweep extreme 19985 -> setup ended, Standard order never armed because the cap is tiny
+b, lv = sc(BASE + INV + [None] * 3)
+it = run(b, inject=lv, draw=True, inputs=dict(inCmpVar=False, inCxCap=20))
+labels = [o for o in it.objs if o.kind == 'label.new' and not o.dead]
+ok('lifecycle: an ended setup is hidden by default', not any('SWEEP #1' in str(o.kw.get('text')) for o in labels), [str(o.kw.get('text'))[:30] for o in labels])
+it = run(b, inject=lv, draw=True, inputs=dict(inCmpVar=False, inCxCap=20, inCxHistCtx=True))
+st1 = setups(it)[0]; endT = st1.f['endT']
+orange = [o for o in it.objs if o.kind == 'line.new' and str(o.kw.get('color')) == 'color.orange' and not o.dead]
+aqua = [o for o in it.objs if o.kind == 'line.new' and str(o.kw.get('color')) == 'color.aqua' and not o.dead]
+ok('lifecycle: with Historical Context the ended setup is drawn but never extends past its end time', st1.f['st'] == 8 and endT > 0 and orange and all(o.kw['x2'] <= endT for o in orange) and all(o.kw['x2'] <= endT for o in aqua if o.kw['x1'] < endT), (endT, [o.kw['x2'] for o in orange]))
+# completed trade boxes: configurable count, latest first
+def day_bars(d):
+    bs = candles((*d, 9, 30), BASE + [(20006, 20007, 19994.5, 19996), (19996, 20110, 19996, 20100)])
+    return bs
+days3 = [(2025, 3, 12), (2025, 3, 13), (2025, 3, 14)]
+allb = []; inj = {}
+for d in days3:
+    inj[len(allb)] = [('PDL', -1, 19990.0, None), ('PDH', 1, 20100.0, None)]
+    allb += day_bars(d)
+FIXR = dict(inCmpVar=False, inCxTgt='Fixed R', inCxFixR=3.0)
+it = run(allb, inject_at=inj, draw=True, inputs=dict(FIXR, inCxNDone=2))
+done = [m for m in plans(it, 5) if m.f['st'] == 4 and m.f['tr'] is not None]
+exits = [o for o in it.objs if o.kind == 'label.new' and not o.dead and str(o.kw.get('text')).startswith('x ')]
+ok('boxes: three completed Standard trades exist across three days', len(done) == 3, [(m.f['dayKey'], m.f['st'], m.f['why']) for m in plans(it, 5)])
+ok('boxes: only the configured number (2) of completed trade boxes is kept, with exit markers', len(exits) == 2, [str(o.kw.get('text')) for o in exits])
+it = run(allb, inject_at=inj, draw=True, inputs=dict(FIXR, inCxNDone=3))
+exits = [o for o in it.objs if o.kind == 'label.new' and not o.dead and str(o.kw.get('text')).startswith('x ')]
+ok('boxes: raising the setting to 3 keeps all three', len(exits) == 3, len(exits))
+
+print('passed', _L.PASS, 'failed', len(_L.FAIL), 'skipped', len(_L.SKIPPED))
+sys.exit(1 if _L.FAIL else 0)

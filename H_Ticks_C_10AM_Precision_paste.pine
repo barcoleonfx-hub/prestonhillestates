@@ -10,8 +10,7 @@ const string G7 = "7. Display"
 const string G8 = "8. Alerts"
 const string G0 = "0. Execution variant"
 string inVariant = input.string("Standard", "Execution variant (selected: alerts, planned lines)", options = ["Standard", "Precision"], group = G0)
-bool inShowBoth = input.bool(true, "Display both variants on the chart (when both are simulated)", group = G0)
-bool inCmpVar = input.bool(false, "Compare both variants' statistics (simulate Standard AND Precision)", group = G0)
+bool inCmpVar = input.bool(false, "COMPARE Standard and Precision (simulate BOTH, draw both)", group = G0)
 string inORs = input.session("0930-1000", "Opening range (candle OPEN times, end exclusive)", group = G1)
 bool inStrict = input.bool(false, "Stricter fill: require trade-through (1 tick beyond the limit)", group = G4)
 string inSizeMode = input.string("Fixed contracts", "Position sizing", options = ["Fixed contracts", "Fixed cash risk"], group = G6)
@@ -104,11 +103,13 @@ string inRejTf = input.string("5m", "Local rejection timeframe", options = ["5m"
 float inRejWick = input.float(0.40, "Local rejection: minimum wick share of the range", minval = 0.1, maxval = 0.95, step = 0.05, group = G15)
 bool inRejSweep = input.bool(false, "Local rejection: must also sweep the previous local candle's extreme", group = G15)
 string inSeq = input.string("One trade per day", "Daily sequence (each variant independently)", options = ["One trade per day", "Win ends day; one 50% retry after a non-win"], group = G16)
-bool inCxVisCtx = input.bool(true, "Draw live levels and the setup context (sweep, CISD, areas, target)", group = G16)
+bool inCxVisCtx = input.bool(true, "Draw the CURRENT setup context (sweep, CISD reference, setup extreme)", group = G16)
 bool inCxVisAreas = input.bool(false, "Draw every eligible area (otherwise only the selected parent area)", group = G16)
-bool inCxVisFib = input.bool(true, "Draw Fib anchors and levels", group = G16)
-bool inCxHist = input.bool(true, "Draw historical trades (OFF = latest day only)", group = G16)
-bool inCxCompact = input.bool(false, "Compact tables (performance + why-no-trade only)", group = G16)
+bool inCxVisFib = input.bool(false, "Draw Fib anchors and levels on Fib plans", group = G16)
+bool inDbgMode = input.bool(false, "DEBUG MODE: show the full funnel, reconciliation, ledger, coverage and diagnostic tables", group = G16)
+int inCxNDone = input.int(10, "Completed trade boxes kept on the chart (per variant)", minval = 0, maxval = 40, group = G16)
+bool inCxVisLevels = input.bool(false, "Draw live liquidity levels (clutter)", group = G16)
+bool inCxHistCtx = input.bool(false, "Historical context: also draw ended / superseded setups, truncated at their end", group = G16)
 bool inAlExit = input.bool(true, "Alert: simulated stop / target / time exit", group = G8)
 int inCxMiss = input.int(0, "Aggregation: missing 1m candles tolerated per higher-timeframe candle (0 = strict)", minval = 0, maxval = 30, group = G10)
 f_hhmm(string s) =>
@@ -200,6 +201,7 @@ type Mdl
     float rHi = na
     int rT
     int parId = 0
+    string tgtAud = ""
 type Day
     int key
     bool active = true
@@ -309,6 +311,17 @@ type Setup
     array<int> fvgUsed
     int smt = -1
     bool hadArea = false
+    int endT = 0
+    string endCat = ""
+    bool winSeen = false
+    bool execSeen = false
+    bool counted = false
+    bool parWait = false
+    int candN = 0
+    string candCat = ""
+    bool candArmed = false
+    bool seqBlock = false
+    bool busyBlock = false
     int fibSt = 0
     float fibPx = na
     int fibOp = 0
@@ -356,6 +369,9 @@ var array<float> sNqH = array.new_float(0)
 var array<string> rjK = array.new_string(0)
 var array<int> rjC = array.new_int(0)
 var array<string> dayWhy = array.new_string(0)
+var array<string> lastRsn = array.from("")
+var array<int> rcN = array.new_int(16, 0)
+var array<int> blkC = array.new_int(4, 0)
 var Rg rgAS = Rg.new()
 var Rg rgLD = Rg.new()
 var Rg rgPO = Rg.new()
@@ -438,8 +454,40 @@ f_why(string cat, string detail) =>
     else
         rjC.set(ix, rjC.get(ix) + 1)
     dayWhy.push(f_hm(time_close) + " " + detail)
+    if cat != "sweep ignored"
+        lastRsn.set(0, detail)
     while dayWhy.size() > 10
         dayWhy.shift()
+    true
+f_cxRecLabel(int c) =>
+    array<string> L = array.from("candidate armed", "candidate rejected: stop cap", "candidate rejected: no target / min-R", "candidate rejected: filter / stale / parent", "candidate rejected: sizing / invalid", "no candidate: daily trade limit", "no candidate: an existing order was active", "no candidate: in window but no executable fresh area", "no candidate: invalidated (price beyond the sweep extreme)", "no candidate: expired (age limit)", "no candidate: rolled to the next trading day (never inside an entry window / nothing executable)", "no candidate: superseded / exhausted / other", "no candidate: missing data", "still active (data ended)")
+    L.get(c)
+f_cxEnd(Setup st, string why, string kind) =>
+    if st.st != 8
+        st.st := 8
+        st.why := why
+        st.endT := time_close
+        int c = 11
+        if st.candN > 0
+            c := st.candArmed ? 0 : (st.candCat == "stop" ? 1 : (st.candCat == "target" ? 2 : (st.candCat == "filter" ? 3 : 4)))
+        else if st.seqBlock
+            c := 5
+        else if st.busyBlock
+            c := 6
+        else if kind == "data"
+            c := 12
+        else if st.winSeen and not st.execSeen
+            c := 7
+        else if kind == "inval"
+            c := 8
+        else if kind == "exp"
+            c := 9
+        else if kind == "day"
+            c := 10
+        st.endCat := f_cxRecLabel(c)
+        if st.hadArea and not st.counted
+            st.counted := true
+            rcN.set(c, rcN.get(c) + 1)
     true
 f_cxFn(Mdl md, int col) =>
     f_fn(md.slot, col)
@@ -531,6 +579,8 @@ f_newLevel(string ty, int side, float px, int origin, int known, bool sup) =>
         if lv.ty == ty
             if sup and lv.st < 2
                 lv.st := 3
+                if lv.side != 0
+                    cxN.set(5, cxN.get(5) + 1)
             else if not sup and lv.px == px
                 dup := true
     Lvl out = na
@@ -917,7 +967,10 @@ f_cxSource(Agg A) =>
         int d = -best.side
         bool replace = act and st.st == 1 and f_cxPri(best.ty) < f_cxPri(st.lvl.ty)
         if act and not replace
-            f_why("sweep ignored", "sweep of " + best.ty + " ignored: setup #" + str.tostring(st.id) + " is still active")
+            bool pendB = (not na(st.mdlS) and (st.mdlS.st == 2 or st.mdlS.st == 3)) or (not na(st.mdlP) and (st.mdlP.st == 2 or st.mdlP.st == 3))
+            int bk = st.st == 1 ? 0 : (pendB ? 3 : (st.stdSt == 2 and st.candN > 0 ? 2 : 1))
+            blkC.set(bk, blkC.get(bk) + 1)
+            f_why("sweep ignored", "sweep of " + best.ty + " ignored: setup #" + str.tostring(st.id) + " active (" + (bk == 0 ? "waiting for CISD" : (bk == 1 ? "CISD done, no order yet" : (bk == 2 ? "idle, attempts used" : "order pending/open"))) + ", age " + str.tostring(math.round((time_close - st.swT) / 60000.0)) + "m)")
         else
             [ref, refOpen] = f_cxRef(A, d)
             f_fnA2(1)
@@ -928,11 +981,9 @@ f_cxSource(Agg A) =>
             cxN.set(1, cxN.get(1) + 1)
             Setup ns = Setup.new(id = cxN.get(1), dir = d, lvl = best, swOpen = c0t, swT = time_close, ext = d > 0 ? f_ag(A.L, 0) : f_ag(A.H, 0), firstExc = fe, dayKey = dkey, areas = array.new<Area>(), rbs = array.new<Area>(), fvgUsed = array.new_int())
             if replace
-                st.st := 8
-                st.why := "superseded by a sweep of a higher-priority level"
+                f_cxEnd(st, "superseded by a sweep of a higher-priority level", "sup")
             if na(ref)
-                ns.st := 8
-                ns.why := "no opposing candle run before the sweep (CISD reference unavailable)"
+                f_cxEnd(ns, "no opposing candle run before the sweep (CISD reference unavailable)", "other")
                 f_why("CISD reference unavailable", "sweep of " + best.ty + " rejected: " + ns.why)
             else
                 ns.st := 1
@@ -951,14 +1002,12 @@ f_cxSource(Agg A) =>
         if st.dir > 0 ? cc > st.cisdRef : cc < st.cisdRef
             f_cxCisd(st, A)
         else if st.cnt >= inCxSwAge
-            st.st := 8
-            st.why := "reversal (CISD) not confirmed within " + str.tostring(inCxSwAge) + " candles"
+            f_cxEnd(st, "reversal (CISD) not confirmed within " + str.tostring(inCxSwAge) + " candles", "other")
             f_why("no CISD", "setup #" + str.tostring(st.id) + ": " + st.why)
     else if not na(st) and st.st == 2
         bool busy = (not na(st.mdlS) and (st.mdlS.st == 2 or st.mdlS.st == 3)) or (not na(st.mdlP) and (st.mdlP.st == 2 or st.mdlP.st == 3))
         if time_close - st.cisdT > inCxAgeMin * 60000 and not busy
-            st.st := 8
-            st.why := "setup expired: no order within " + str.tostring(inCxAgeMin) + " minutes of the CISD"
+            f_cxEnd(st, "setup expired: no order within " + str.tostring(inCxAgeMin) + " minutes of the CISD", "exp")
             f_why("setup expired", "setup #" + str.tostring(st.id) + ": " + st.why)
         else
             f_cxRb(st, A)
@@ -1023,12 +1072,22 @@ f_cxPick(Setup st, bool execSide, int beforeT) =>
     best
 f_cxTarget(int d, float entry) =>
     Lvl best = na
+    float rejPx = na
+    string rej = ""
     for lv in lvls
-        if lv.side == d and lv.st < 2 and lv.known <= time_close
-            if d > 0 ? lv.px > entry + tk : lv.px < entry - tk
+        if lv.side == d and (d > 0 ? lv.px > entry + tk : lv.px < entry - tk)
+            if lv.st < 2 and lv.known <= time_close
                 if na(best) or (d > 0 ? lv.px < best.px : lv.px > best.px)
                     best := lv
-    best
+            else if na(rejPx) or (d > 0 ? lv.px < rejPx : lv.px > rejPx)
+                rejPx := lv.px
+                rej := lv.ty + " " + str.tostring(lv.px, format.mintick) + (lv.st == 2 ? " swept " + f_hm(lv.swT) : " not yet known")
+    string aud = "no eligible level"
+    if not na(best)
+        aud := best.ty + " L" + str.tostring(best.id) + " " + str.tostring(best.px, format.mintick) + " origin " + str.format_time(best.origin, "MM-dd HH:mm", TZ) + " known " + str.format_time(best.known, "MM-dd HH:mm", TZ) + " " + (best.st == 1 ? "touched, unswept" : "untouched")
+        if not na(rejPx) and (d > 0 ? rejPx < best.px : rejPx > best.px)
+            aud += " | nearer but ineligible: " + rej
+    [best, aud]
 f_cxCeProx(Setup st, float ce) =>
     bool hit = false
     for lv in lvls
@@ -1107,12 +1166,16 @@ f_cxDrop(Mdl md, string why, string cat, int col) =>
     f_cxFn(md, col)
     f_why(cat, md.meth + ": " + why)
     f_msgK(3, md.slot, "REJECTED - " + md.meth + ": " + why)
+    Setup s = f_cxSetupBy(md.sid)
+    if not na(s) and s.candCat == ""
+        s.candCat := cat == "stop cap" ? "stop" : (cat == "no target" or cat == "min R" ? "target" : (cat == "filter" or cat == "stale fib" or cat == "no parent" ? "filter" : "other"))
     false
 f_cxNewMdl(int slot, Setup st, string meth) =>
     Mdl md = Mdl.new(slot = slot, dir = st.dir, dayKey = dkey, sid = st.id, xExt = st.ext, meth = meth)
     plans.push(md)
     while plans.size() > 150
         plans.shift()
+    st.candN += 1
     f_cxFn(md, 4)
     md
 f_cxPlan(Setup st, Mdl md, float entryRaw, float stopRaw, int cap, float minR, float mult, float firstRisk) =>
@@ -1139,11 +1202,14 @@ f_cxPlan(Setup st, Mdl md, float entryRaw, float stopRaw, int cap, float minR, f
             float tgt = na
             Lvl tl = na
             string tt = "liquidity"
+            string aud = "fixed R"
             if inCxTgt == "Fixed R"
                 tgt := bull ? entry + inCxFixR * dist : entry - inCxFixR * dist
                 tt := "fixed-R"
             else
-                tl := f_cxTarget(st.dir, entry)
+                [tl0, aud0] = f_cxTarget(st.dir, entry)
+                tl := tl0
+                aud := aud0
                 tgt := na(tl) ? na : tl.px
             if na(tgt)
                 f_cxDrop(md, "no eligible unswept opposing liquidity target", "no target", 11)
@@ -1161,6 +1227,8 @@ f_cxPlan(Setup st, Mdl md, float entryRaw, float stopRaw, int cap, float minR, f
                     md.tgtType := tt
                     md.tgtId := na(tl) ? 0 : tl.id
                     md.tgtTy := na(tl) ? "fixed-R" : tl.ty
+                    md.tgtAud := aud
+                    st.candArmed := true
                     md.mult := mult
                     md.st := 2
                     md.armBar := bar_index
@@ -1177,7 +1245,10 @@ f_cxTryStd(Setup st) =>
         if mult == 0.0
             if why != "busy"
                 st.stdSt := 2
+                st.seqBlock := st.candN == 0
                 f_why("daily sequence", "Standard: " + why)
+            else
+                st.busyBlock := st.candN == 0
         else
             Area area = f_cxPick(st, true, time_close)
             if not na(area)
@@ -1229,6 +1300,8 @@ f_cxFibDetect(Setup st, Agg A) =>
                 f_fn(7, 8)
             else if trav or not (bull ? eR < close : eR > close)
                 st.fibSt := 3
+                st.candN += 1
+                st.candCat := st.candCat == "" ? "filter" : st.candCat
                 f_why("stale fib", "Fib: " + str.tostring(inFibE, "#.000") + " (" + str.tostring(eR, format.mintick) + ") was already traversed before the swing anchor (confirmed " + f_hm(st.fibKn) + ") existed; no back-dated entry")
                 f_fn(SC_PRE, 12)
                 f_fn(7, 12)
@@ -1239,6 +1312,8 @@ f_cxFibTrack(Setup st) =>
         float eR = math.round_to_mintick(e)
         if st.dir > 0 ? low <= eR : high >= eR
             st.fibSt := 3
+            st.candN += 1
+            st.candCat := st.candCat == "" ? "filter" : st.candCat
             f_why("stale fib", "Fib: price traded to " + str.tostring(eR, format.mintick) + " after the anchor was confirmed (" + f_hm(st.fibKn) + ") and before an order could be armed")
             f_fn(SC_PRE, 12)
             f_fn(7, 12)
@@ -1246,10 +1321,18 @@ f_cxFibTrack(Setup st) =>
 f_cxFibArm(Setup st) =>
     if slotOn.get(SC_PRE) and st.fibSt == 1 and f_cxArmWin()
         [mult, firstRisk, why] = f_cxSeq(SC_PRE)
+        Area par = f_cxPick(st, false, time_close)
         if mult == 0.0
             if why != "busy"
                 st.fibSt := 3
+                st.seqBlock := st.candN == 0
                 f_why("daily sequence", "Precision Fib: " + why)
+            else
+                st.busyBlock := st.candN == 0
+        else if na(par)
+            if not st.parWait
+                st.parWait := true
+                f_why("no parent yet", "Fib candidate waits: no valid parent area is known and alive yet")
         else
             bool bull = st.dir > 0
             Mdl md = f_cxNewMdl(SC_PRE, st, "Fib 0.705")
@@ -1257,31 +1340,27 @@ f_cxFibArm(Setup st) =>
             st.fibSt := 3
             md.fH := bull ? st.fibPx : st.ext
             md.fL := bull ? st.ext : st.fibPx
-            Area par = f_cxPick(st, false, time_close)
-            if na(par)
-                f_cxDrop(md, "no valid parent area for Precision (none known, alive and eligible)", "no parent", 12)
+            md.areaK := par.kind
+            md.aLo := par.lo
+            md.aHi := par.hi
+            md.aCe := par.ce
+            md.parId := par.id
+            [rg, e, ref] = f_cxFibEntry(st)
+            float eR = math.round_to_mintick(e)
+            if not (bull ? eR < close : eR > close)
+                f_cxDrop(md, "stale: the entry is no longer on the executable side of the market", "stale fib", 12)
+            else if inFibArea and (eR < par.lo or eR > par.hi)
+                f_cxDrop(md, "Fib entry does not overlap the selected parent area (optional condition)", "filter", 12)
             else
-                md.areaK := par.kind
-                md.aLo := par.lo
-                md.aHi := par.hi
-                md.aCe := par.ce
-                md.parId := par.id
-                [rg, e, ref] = f_cxFibEntry(st)
-                float eR = math.round_to_mintick(e)
-                if not (bull ? eR < close : eR > close)
-                    f_cxDrop(md, "stale: the entry is no longer on the executable side of the market", "stale fib", 12)
-                else if inFibArea and (eR < par.lo or eR > par.hi)
-                    f_cxDrop(md, "Fib entry does not overlap the selected parent area (optional condition)", "filter", 12)
+                string fl = f_cxFilters(st, par)
+                if fl != ""
+                    f_cxDrop(md, fl, "filter", 12)
+                else if inFCe and f_cxCeProx(st, eR)
+                    f_cxDrop(md, "engineered-liquidity proximity beyond the entry", "filter", 12)
                 else
-                    string fl = f_cxFilters(st, par)
-                    if fl != ""
-                        f_cxDrop(md, fl, "filter", 12)
-                    else if inFCe and f_cxCeProx(st, eR)
-                        f_cxDrop(md, "engineered-liquidity proximity beyond the entry", "filter", 12)
-                    else
-                        float stopRaw = bull ? ref - inCxPBuf * tk : ref + inCxPBuf * tk
-                        if f_cxPlan(st, md, e, stopRaw, inCxPCap, inCxPMinR, mult, firstRisk)
-                            st.precSt := 1
+                    float stopRaw = bull ? ref - inCxPBuf * tk : ref + inCxPBuf * tk
+                    if f_cxPlan(st, md, e, stopRaw, inCxPCap, inCxPMinR, mult, firstRisk)
+                        st.precSt := 1
     true
 f_cxTryRej(Setup st, Agg R) =>
     int rOpen = f_agI(R.T0, 0)
@@ -1307,7 +1386,10 @@ f_cxTryRej(Setup st, Agg R) =>
                 [mult, firstRisk, why] = f_cxSeq(SC_PRE)
                 if mult == 0.0
                     if why != "busy"
+                        st.seqBlock := st.candN == 0
                         f_why("daily sequence", "Precision: " + why)
+                    else
+                        st.busyBlock := st.candN == 0
                 else
                     Mdl md = f_cxNewMdl(SC_PRE, st, "Rejection CE")
                     st.mdlP := md
@@ -1350,8 +1432,7 @@ f_cxAfterCancel(Mdl md, bool setupDead) =>
         else
             st.precSt := 0
         if setupDead
-            st.st := 8
-            st.why := md.why
+            f_cxEnd(st, md.why, "inval")
     true
 f_cxFillTry(Mdl md) =>
     bool bull = md.dir > 0
@@ -1364,7 +1445,7 @@ f_cxFillTry(Mdl md) =>
         float tgt = md.tgt
         Setup st = f_cxSetupBy(md.sid)
         float lvlPx = na(st) ? na : st.lvl.px
-        Trade t = Trade.new(slot = md.slot, dir = md.dir, dayKey = md.dayKey, lvl = lvlPx, entryPx = lim, stopPx = stp, tgtPx = tgt, riskPts = math.abs(lim - stp), armT = md.armT, fillT = time, qty = md.qty, plannedR = md.plannedR, tgtType = md.tgtType, riskUsd = math.abs(lim - stp) * syminfo.pointvalue * md.qty, note = md.meth + " | setup #" + str.tostring(md.sid) + " | plan " + str.tostring(md.plannedR, "#.0") + "R " + md.tgtType + (md.plannedR >= 4.0 ? " (4R+)" : ""), meth = md.meth, sid = md.sid)
+        Trade t = Trade.new(slot = md.slot, dir = md.dir, dayKey = md.dayKey, lvl = lvlPx, entryPx = lim, stopPx = stp, tgtPx = tgt, riskPts = math.abs(lim - stp), armT = md.armT, fillT = time, qty = md.qty, plannedR = md.plannedR, tgtType = md.tgtType, riskUsd = math.abs(lim - stp) * syminfo.pointvalue * md.qty, note = md.meth + " | setup #" + str.tostring(md.sid) + " | plan " + str.tostring(md.plannedR, "#.0") + "R " + md.tgtType + (md.plannedR >= 4.0 ? " (4R+)" : "") + " | tgt " + md.tgtAud, meth = md.meth, sid = md.sid)
         md.tr := t
         md.st := 3
         trades.push(t)
@@ -1476,9 +1557,19 @@ f_cxSrcBad() =>
         pvKn.set(q, na)
     Setup st = f_cxCur()
     if not na(st) and st.st == 1
-        st.st := 8
-        st.why := "source candle incomplete (missing 1m data): CISD tracking cannot continue"
+        f_cxEnd(st, "source candle incomplete (missing 1m data): CISD tracking cannot continue", "data")
         f_why("incomplete data", "setup #" + str.tostring(st.id) + ": " + st.why)
+    true
+f_cxExhaust(Setup st) =>
+    if st.st == 2
+        bool pend = (not na(st.mdlS) and (st.mdlS.st == 2 or st.mdlS.st == 3)) or (not na(st.mdlP) and (st.mdlP.st == 2 or st.mdlP.st == 3))
+        if not pend and (not slotOn.get(SC_STD) or st.stdSt == 2)
+            bool precDone = not slotOn.get(SC_PRE) or st.precSt == 2
+            if not precDone
+                [m6, fr6, w6] = f_cxSeq(SC_PRE)
+                precDone := (m6 == 0.0 and w6 != "busy") or (not inPRejOn and (not inPFibOn or st.fibSt == 3))
+            if precDone
+                f_cxEnd(st, "exhausted: every enabled variant used its attempt (nothing pending)", "exh")
     true
 f_cxBar(Day dy) =>
     if dy.active and mOpen >= winS and mOpen < exitM
@@ -1503,8 +1594,7 @@ f_cxBar(Day dy) =>
         cxN.set(3, tdk)
         for q in sets
             if (q.st == 1 or q.st == 2) and not ((not na(q.mdlS) and (q.mdlS.st == 2 or q.mdlS.st == 3)) or (not na(q.mdlP) and (q.mdlP.st == 2 or q.mdlP.st == 3)))
-                q.st := 8
-                q.why := "new trading day"
+                f_cxEnd(q, "new trading day", "day")
         dayWhy.clear()
     if inSmt != "Off"
         sBt.push(time)
@@ -1529,8 +1619,7 @@ f_cxBar(Day dy) =>
     if not na(st) and st.st == 2 and (st.dir > 0 ? low < st.ext : high > st.ext)
         bool busy = (not na(st.mdlS) and (st.mdlS.st == 2 or st.mdlS.st == 3)) or (not na(st.mdlP) and (st.mdlP.st == 2 or st.mdlP.st == 3))
         if not busy
-            st.st := 8
-            st.why := "setup invalidated: price exceeded the frozen sweep extreme " + str.tostring(st.ext, format.mintick)
+            f_cxEnd(st, "setup invalidated: price exceeded the frozen sweep extreme " + str.tostring(st.ext, format.mintick), "inval")
             f_why("invalidated", "setup #" + str.tostring(st.id) + ": " + st.why)
             f_fnA2(9)
     for i = 0 to 6
@@ -1552,6 +1641,7 @@ f_cxBar(Day dy) =>
         if not na(st) and st.st == 2
             if not st.hadArea and st.areas.size() > 0
                 st.hadArea := true
+                rcN.set(15, rcN.get(15) + 1)
                 f_fnA2(3)
             f_cxFibDetect(st, A)
     st := f_cxCur()
@@ -1562,7 +1652,12 @@ f_cxBar(Day dy) =>
         f_cxTryRej(st, R)
     st := f_cxCur()
     if not na(st) and st.st == 2
+        if f_cxArmWin()
+            st.winSeen := true
+            if not st.execSeen and not na(f_cxPick(st, true, time_close))
+                st.execSeen := true
         f_cxTryStd(st)
+        f_cxExhaust(st)
     true
 f_cxFinalize(Day dy, float lastC, int lastT) =>
     if dy.active
@@ -1792,197 +1887,299 @@ f_cxDrawPlan(Mdl md) =>
     if not na(md.lim)
         string pre = md.slot == SC_PRE ? "PREC" : "STD"
         bool done = md.st == 4 and not na(md.tr)
-        bool canc = md.st == 4 and na(md.tr)
         bool pend = md.st == 2
-        string stt = pend ? "PENDING" : (md.st == 3 ? "FILLED" : (done ? "DONE" : "CANCELLED"))
-        string sty = pend ? line.style_dashed : (canc ? line.style_dotted : line.style_solid)
-        color cE = canc ? color.gray : color.blue
-        color cS = canc ? color.gray : color.red
-        color cT = canc ? color.gray : color.green
-        int xEnd = f_ts(md.dayKey, exitM)
+        string sty = pend ? line.style_dashed : line.style_solid
         int xCut = f_ts(md.dayKey, cutM)
-        int xe = pend ? math.min(xCut, md.armT + inCxExp * chartMs) : xCut
-        if done
+        int xEnd = f_ts(md.dayKey, exitM)
+        int xe = xEnd
+        if pend
+            xe := math.min(xCut, md.armT + inCxExp * chartMs)
+        else if done
             xe := md.tr.exitT
-        else if md.st == 3
-            xe := xEnd
+        int xs = pend ? md.armT : md.tr.fillT
         float distP = math.abs(md.lim - md.stp)
         int distT = int(math.round(distP / tk))
-        int xs = (done or md.st == 3) and not na(md.tr) ? md.tr.fillT : md.armT
-        color fillR = canc ? color.new(color.gray, 88) : color.new(color.red, pend ? 90 : 80)
-        color fillG = canc ? color.new(color.gray, 88) : color.new(color.green, pend ? 90 : 80)
-        f_bxs(xs, math.max(md.lim, md.stp), xe, math.min(md.lim, md.stp), fillR, cS, sty)
-        f_bxs(xs, math.max(md.lim, md.tgt), xe, math.min(md.lim, md.tgt), fillG, cT, sty)
-        f_ln(xs, md.lim, xe, md.lim, cE, line.style_solid, 2)
-        string mtag = pre + " " + md.meth + " #" + str.tostring(md.sid)
-        f_lb(xe, md.lim, mtag + " ENTRY " + str.tostring(md.lim, format.mintick) + " [" + stt + "]", cE, label.style_label_left, md.why == "" ? stt : stt + ": " + md.why)
-        f_lb(xe, md.stp, mtag + " SL " + str.tostring(md.stp, format.mintick) + " | " + str.tostring(distT) + " ticks / " + str.tostring(distP, "#.00") + " pts", cS, label.style_label_left, "planned stop distance")
-        f_lb(xe, md.tgt, mtag + " TP " + str.tostring(md.tgt, format.mintick) + " | plan " + str.tostring(md.plannedR, "#.0") + "R " + md.tgtTy + (md.tgtType == "liquidity" ? " (unswept at arming)" : ""), cT, label.style_label_left, "planned reward; target liquidity frozen when the order was armed")
+        f_bxs(xs, math.max(md.lim, md.stp), xe, math.min(md.lim, md.stp), color.new(color.red, pend ? 88 : 78), color.red, sty)
+        f_bxs(xs, math.max(md.lim, md.tgt), xe, math.min(md.lim, md.tgt), color.new(color.green, pend ? 88 : 78), color.green, sty)
+        f_ln(xs, md.lim, xe, md.lim, color.black, line.style_solid, 2)
+        string head = pre + " " + md.meth + " #" + str.tostring(md.sid) + (pend ? " PENDING" : (done ? "" : " FILLED"))
+        f_lb(xe, md.lim, head + " | E " + str.tostring(md.lim, format.mintick) + " | " + str.tostring(md.plannedR, "#.0") + "R", color.black, label.style_label_left, "entry; frozen when armed. " + md.why)
+        f_lb(xe, md.stp, "SL " + str.tostring(md.stp, format.mintick) + " (" + str.tostring(distT) + "t)", color.red, label.style_label_left, "stop")
+        f_lb(xe, md.tgt, "TP " + str.tostring(md.tgt, format.mintick) + " " + md.tgtTy, color.green, label.style_label_left, "target audit: " + md.tgtAud)
         if done
-            f_lb(md.tr.exitT, md.tr.exitPx, pre + " " + (md.tr.outcome == 1 ? "target" : (md.tr.outcome == 2 ? "stop" : (md.tr.outcome == 3 ? "time exit" : "ambiguous"))) + " " + str.tostring(md.tr.netR, "#.00") + "R", color.black, label.style_label_down, md.tr.note)
-        if not na(md.aLo) and not na(md.aHi)
-            f_bxs(md.armT - 2 * chartMs, md.aHi, xe, md.aLo, color.new(color.teal, 90), color.new(color.teal, 40), line.style_dotted)
-            f_lb(md.armT, md.aCe, "parent " + md.areaK + " CE " + str.tostring(md.aCe, format.mintick), color.teal, label.style_label_right, "selected parent area (frozen when the order was armed)")
-        if inCxVisFib and md.meth == "Fib 0.705" and not na(md.fH) and not na(md.fL)
-            array<float> rs = array.from(0.5, inFibE, inFibS)
-            for i = 0 to 2
-                float lv = md.dir > 0 ? md.fH - rs.get(i) * (md.fH - md.fL) : md.fL + rs.get(i) * (md.fH - md.fL)
-                f_ln(md.armT - 3 * chartMs, lv, xe, lv, color.new(color.fuchsia, 35), line.style_dotted, 1)
-                f_lb(xe, lv, str.tostring(rs.get(i), "#.000"), color.fuchsia, label.style_label_left, "Fib level of the frozen leg")
-            f_lb(md.armT, md.dir > 0 ? md.fH : md.fL, "Fib anchor " + str.tostring(md.dir > 0 ? md.fH : md.fL, format.mintick) + " (first confirmed swing after the CISD)", color.fuchsia, md.dir > 0 ? label.style_label_down : label.style_label_up, "known only when its right-side candles closed")
+            string oc = md.tr.outcome == 1 ? "TP" : (md.tr.outcome == 2 ? "SL" : (md.tr.outcome == 3 ? "time" : "ambig"))
+            f_lb(md.tr.exitT, md.tr.exitPx, "x " + oc + " " + str.tostring(md.tr.netR, "#.00") + "R", color.black, md.dir > 0 ? label.style_label_down : label.style_label_up, md.tr.note)
+        if inCxVisFib and md.meth == "Fib 0.705" and not na(md.fH)
+            f_lb(md.armT, md.fH, "Fib H", color.fuchsia, label.style_label_down, "anchor")
+            f_lb(md.armT, md.fL, "Fib L", color.fuchsia, label.style_label_up, "anchor")
         if md.meth == "Rejection CE" and not na(md.rLo)
             f_bx(md.rT, md.rHi, md.rT + 2 * chartMs, md.rLo, color.new(color.red, 80), color.new(color.red, 20))
-            f_lb(md.rT, md.dir > 0 ? md.rLo : md.rHi, "local rejection (entry = wick midpoint)", color.red, md.dir > 0 ? label.style_label_up : label.style_label_down, "completed local candle; the stop sits beyond its extreme")
     true
 f_cxDrawSetup(Setup st) =>
-    int xCut = f_ts(st.dayKey, cutM)
+    int xe = st.endT > 0 ? st.endT : time_close
     f_ln(st.lvl.known, st.lvl.px, st.swT, st.lvl.px, color.purple, line.style_dotted, 2)
-    f_lb(st.swT, st.lvl.px, "SWEEP #" + str.tostring(st.id) + " " + st.lvl.ty + " " + str.tostring(st.lvl.px, format.mintick) + " (L" + str.tostring(st.lvl.id) + ")", color.purple, st.dir > 0 ? label.style_label_up : label.style_label_down, "pre-existing level swept; known since " + f_hm(st.lvl.known))
+    f_lb(st.swT, st.lvl.px, "SWEEP #" + str.tostring(st.id) + " " + st.lvl.ty + " " + str.tostring(st.lvl.px, format.mintick), color.purple, st.dir > 0 ? label.style_label_up : label.style_label_down, "pre-existing level swept; known since " + f_hm(st.lvl.known))
     if st.st >= 1 and not na(st.cisdRef)
-        int xr = st.cisdT > 0 ? st.cisdT : st.swT
-        f_ln(st.refOpen, st.cisdRef, xr, st.cisdRef, color.aqua, line.style_dashed, 1)
-        f_lb(xr, st.cisdRef, st.cisdT > 0 ? "CISD ref " + str.tostring(st.cisdRef, format.mintick) + " - closed through " + f_hm(st.cisdT) : "CISD ref " + str.tostring(st.cisdRef, format.mintick) + " (frozen at the sweep, awaiting a close through)", color.aqua, label.style_label_right, "first open of the opposing run into the sweep")
-    if st.st >= 2
-        f_ln(st.swOpen, st.ext, xCut, st.ext, color.orange, line.style_solid, 2)
-        f_lb(st.swOpen, st.ext, "setup extreme " + str.tostring(st.ext, format.mintick) + (st.st == 8 ? " [ended: " + st.why + "]" : ""), color.orange, st.dir > 0 ? label.style_label_up : label.style_label_down, "frozen at the CISD; Standard stops sit beyond it")
-        if inCxVisAreas
+        int xr = st.cisdT > 0 ? st.cisdT : xe
+        f_ln(st.swT, st.cisdRef, xr, st.cisdRef, color.aqua, line.style_dashed, 1)
+        f_lb(xr, st.cisdRef, st.cisdT > 0 ? "CISD ref " + str.tostring(st.cisdRef, format.mintick) + " closed through" : "CISD ref " + str.tostring(st.cisdRef, format.mintick) + " (awaiting a close through)", color.aqua, label.style_label_right, "first open of the opposing run into the sweep, frozen at the sweep")
+    if st.cisdT > 0
+        f_ln(st.cisdT, st.ext, xe, st.ext, color.orange, line.style_solid, 2)
+        f_lb(st.cisdT, st.ext, "setup extreme " + str.tostring(st.ext, format.mintick), color.orange, st.dir > 0 ? label.style_label_up : label.style_label_down, "frozen at the CISD; Standard stops sit beyond it")
+        if inCxVisAreas and st.st == 2
             for a in st.areas
                 if not a.dead
-                    f_bxs(a.known, a.hi, xCut, a.lo, color.new(color.teal, 92), color.new(color.teal, 55), a.stale ? line.style_dotted : line.style_solid)
+                    f_bxs(a.known, a.hi, xe, a.lo, color.new(color.teal, 92), color.new(color.teal, 55), a.stale ? line.style_dotted : line.style_solid)
                     f_lb(a.known, a.ce, a.kind + " CE " + str.tostring(a.ce, format.mintick) + (a.stale ? " (stale)" : ""), color.teal, label.style_label_right, "eligible area")
-    else if st.st == 8
-        f_lb(st.swT, st.ext, "setup #" + str.tostring(st.id) + " ended: " + st.why, color.gray, st.dir > 0 ? label.style_label_up : label.style_label_down, st.why)
+    if st.st == 8
+        f_lb(xe, st.ext, "ended: " + st.why, color.gray, st.dir > 0 ? label.style_label_up : label.style_label_down, st.endCat)
     true
 f_cxDrawLevels() =>
     int xe = time_close + 12 * chartMs
     for lv in lvls
-        if (lv.side != 0 or inCxOpens) and lv.known > time_close - 172800000
-            bool sw = lv.st == 2
+        bool sw = lv.st == 2
+        if (lv.side != 0 or inCxOpens) and lv.known > time_close - 172800000 and (not sw or inCxHistCtx)
             color c = lv.side == 0 ? color.new(color.gray, 20) : (lv.side > 0 ? color.new(color.maroon, sw ? 70 : 25) : color.new(color.green, sw ? 70 : 25))
             f_ln(lv.known, lv.px, sw ? lv.swT : xe, lv.px, c, lv.side == 0 ? line.style_dotted : (sw ? line.style_dashed : line.style_solid), 1)
-            f_lb(sw ? lv.swT : xe, lv.px, lv.ty + " " + str.tostring(lv.px, format.mintick) + (sw ? " [swept]" : (lv.st == 1 ? " [touched]" : "")), c, label.style_label_left, "level L" + str.tostring(lv.id) + ", known " + f_hm(lv.known) + " NY, first knowable then")
+            f_lb(sw ? lv.swT : xe, lv.px, lv.ty + " " + str.tostring(lv.px, format.mintick) + (sw ? " [swept]" : ""), c, label.style_label_left, "level L" + str.tostring(lv.id) + ", known " + f_hm(lv.known) + " NY")
     true
-var table tbInfo = table.new(position.middle_left, 1, 16, bgcolor = color.new(color.white, 8), border_width = 1, border_color = color.gray)
-var table tbFun = table.new(position.top_right, 6, 16, bgcolor = color.new(color.white, 8), border_width = 1, border_color = color.gray)
-var table tbPerf = table.new(position.bottom_right, 6, 21, bgcolor = color.new(color.white, 8), border_width = 1, border_color = color.gray)
+var table tbInfo = table.new(position.middle_left, 1, 11, bgcolor = color.new(color.white, 8), border_width = 1, border_color = color.gray)
+var table tbFun = table.new(position.middle_right, 5, 16, bgcolor = color.new(color.white, 8), border_width = 1, border_color = color.gray)
+var table tbPerf = table.new(position.bottom_right, 5, 21, bgcolor = color.new(color.white, 8), border_width = 1, border_color = color.gray)
 var table tbLed = table.new(position.bottom_left, 12, 12, bgcolor = color.new(color.white, 8), border_width = 1, border_color = color.gray)
 f_cell(table t, int c, int r, string txt, color tcol, color bg) =>
     table.cell(t, c, r, txt, text_color = tcol, text_size = size.tiny, text_halign = text.align_left, bgcolor = bg)
     true
 var table tbWhy = table.new(position.top_left, 1, 20, bgcolor = color.new(color.white, 8), border_width = 1, border_color = color.gray)
+f_perfStr(array<float> a, int r) =>
+    array<string> v = array.from(str.tostring(a.get(0), "#") + (a.get(26) > 0 ? " (+" + str.tostring(a.get(26), "#") + " excl.)" : ""), str.tostring(a.get(1), "#") + " / " + str.tostring(a.get(2), "#") + " / " + str.tostring(a.get(3), "#") + " / " + str.tostring(a.get(4), "#"), f_fmt(a.get(5), "#.0"), f_fmt(a.get(27), "#.00") + " / " + f_fmt(a.get(6), "#.00"), f_fmt(a.get(7), "#.00"), f_fmt(a.get(8), "#.00") + " / " + f_fmt(a.get(9), "#.00"), str.tostring(a.get(10), "#"), f_fmt(a.get(11), "#.00") + " / " + f_fmt(a.get(12), "#"), f_fmt(a.get(13), "#.00") + " / " + f_fmt(a.get(25), "#"), f_fmt(a.get(14), "#.0") + " / " + f_fmt(a.get(15), "#.00"), f_fmt(a.get(16), "#.0") + " / " + f_fmt(a.get(17), "#.00"), f_fmt(a.get(18), "#.0") + " / " + f_fmt(a.get(19), "#.00"), f_fmt(a.get(20), "#"), f_fmt(a.get(21), "#.0") + " / " + f_fmt(a.get(22), "#.00"), str.tostring(a.get(23), "#") + " / " + str.tostring(a.get(24), "#"), f_fmt(a.get(28), "#.0"), f_fmt(a.get(29), "#.0") + " / " + f_fmt(a.get(6), "#.00"), f_fmt(a.get(30), "#"), str.tostring(a.get(31), "#") + " / " + str.tostring(a.get(32), "#"), str.tostring(a.get(33), "#"))
+    v.get(r)
+var table tbSum = table.new(position.top_right, 1, 7, bgcolor = color.new(color.white, 8), border_width = 1, border_color = color.gray)
+var table tbRec = table.new(position.top_center, 2, 24, bgcolor = color.new(color.white, 8), border_width = 1, border_color = color.gray)
+var table tbSet = table.new(position.bottom_center, 7, 14, bgcolor = color.new(color.white, 8), border_width = 1, border_color = color.gray)
+f_cxSumStat(int slot) =>
+    array<float> a = f_perf(slot, "")
+    string s = "0 trades"
+    if a.get(0) + a.get(24) > 0
+        s := str.tostring(a.get(0), "#") + " closed (" + str.tostring(a.get(1), "#") + "W/" + str.tostring(a.get(2), "#") + "L/" + str.tostring(a.get(3), "#") + "T)" + (a.get(24) > 0 ? " +" + str.tostring(a.get(24), "#") + " open" : "") + " | net win " + f_fmt(a.get(5), "#.0") + "% | net " + f_fmt(a.get(13), "#.00") + "R"
+    s
+f_cxSetupTxt() =>
+    Setup st = f_cxCur()
+    string s = "none yet"
+    if not na(st)
+        string base = "#" + str.tostring(st.id) + " " + (st.dir > 0 ? "LONG" : "SHORT") + " swept " + st.lvl.ty + " " + str.tostring(st.lvl.px, format.mintick)
+        if st.st == 1
+            s := base + " | waiting for a close through CISD ref " + str.tostring(st.cisdRef, format.mintick)
+        else if st.st == 2
+            s := base + " | CISD " + f_hm(st.cisdT) + ", " + str.tostring(st.areas.size()) + " area(s), " + (f_cxArmWin() ? "entry window OPEN" : "waiting for the entry window")
+        else
+            s := base + " | ended: " + st.why
+    s
+f_cxSummary() =>
+    color blk = color.black
+    int maxN = 0
+    for t in trades
+        maxN += 1
+    string pTxt = "PREC: OFF - tick 'COMPARE Standard and Precision' or select Precision"
+    if slotOn.get(SC_PRE)
+        pTxt := "PREC: " + f_cxSumStat(SC_PRE)
+    string sTxt = "STD: not simulated (variant = Precision only; tick COMPARE to run both)"
+    if slotOn.get(SC_STD)
+        sTxt := "STD: " + f_cxSumStat(SC_STD)
+    string rs = lastRsn.get(0)
+    if str.length(rs) > 78
+        rs := str.substring(rs, 0, 78)
+    int dropped = 0
+    for i = 1 to 6
+        dropped += aggs.get(i).dropN
+    string warn = maxN < 30 ? "SAMPLE: " + str.tostring(maxN) + " trade(s) - too few to show an edge" : "Sample: " + str.tostring(maxN) + " trades (still not proof)"
+    warn += " | days " + str.tostring(cv.get(0)) + " (" + str.tostring(cv.get(2)) + " partial, " + str.tostring(cv.get(3) + cv.get(5)) + " unusable)" + (dropped > 0 ? " | " + str.tostring(dropped) + " HTF candles dropped" : "")
+    f_cell(tbSum, 0, 0, "H Ticks C | Contextual | " + inVariant + (inCmpVar ? " + comparison" : "") + " | research sim", color.white, color.new(color.maroon, 10))
+    f_cell(tbSum, 0, 1, "Setup: " + f_cxSetupTxt(), blk, na)
+    f_cell(tbSum, 0, 2, sTxt, blk, na)
+    f_cell(tbSum, 0, 3, pTxt, slotOn.get(SC_PRE) ? blk : color.red, na)
+    f_cell(tbSum, 0, 4, "Last reject: " + (rs == "" ? "-" : rs), blk, na)
+    f_cell(tbSum, 0, 5, warn, maxN < 30 ? color.red : blk, na)
+    f_cell(tbSum, 0, 6, inDbgMode ? "Debug mode ON" : "Full tables: Settings > Display > DEBUG MODE", color.gray, na)
+    true
 f_cxPrbTxt(int ix, string nm) =>
     string s = nm + " n/a"
     if not na(prbT.get(ix))
         s := nm + " " + (prbS.get(ix) > 0 ? "up" : (prbS.get(ix) < 0 ? "down" : "none yet")) + " (" + f_hm(prbT.get(ix)) + ")"
     s
-f_perfStr(array<float> a, int r) =>
-    array<string> v = array.from(str.tostring(a.get(0), "#") + (a.get(26) > 0 ? " (+" + str.tostring(a.get(26), "#") + " excl.)" : ""), str.tostring(a.get(1), "#") + " / " + str.tostring(a.get(2), "#") + " / " + str.tostring(a.get(3), "#") + " / " + str.tostring(a.get(4), "#"), f_fmt(a.get(5), "#.0"), f_fmt(a.get(27), "#.00") + " / " + f_fmt(a.get(6), "#.00"), f_fmt(a.get(7), "#.00"), f_fmt(a.get(8), "#.00") + " / " + f_fmt(a.get(9), "#.00"), str.tostring(a.get(10), "#"), f_fmt(a.get(11), "#.00") + " / " + f_fmt(a.get(12), "#"), f_fmt(a.get(13), "#.00") + " / " + f_fmt(a.get(25), "#"), f_fmt(a.get(14), "#.0") + " / " + f_fmt(a.get(15), "#.00"), f_fmt(a.get(16), "#.0") + " / " + f_fmt(a.get(17), "#.00"), f_fmt(a.get(18), "#.0") + " / " + f_fmt(a.get(19), "#.00"), f_fmt(a.get(20), "#"), f_fmt(a.get(21), "#.0") + " / " + f_fmt(a.get(22), "#.00"), str.tostring(a.get(23), "#") + " / " + str.tostring(a.get(24), "#"), f_fmt(a.get(28), "#.0"), f_fmt(a.get(29), "#.0") + " / " + f_fmt(a.get(6), "#.00"), f_fmt(a.get(30), "#"), str.tostring(a.get(31), "#") + " / " + str.tostring(a.get(32), "#"), str.tostring(a.get(33), "#"))
-    v.get(r)
-f_cxTables() =>
+f_cxCols() =>
+    array<int> c = array.new_int(0)
+    if slotOn.get(SC_STD)
+        c.push(5)
+    if slotOn.get(SC_PRE)
+        c.push(6)
+        if inPFibOn
+            c.push(7)
+        if inPRejOn
+            c.push(8)
+    c
+f_cxDbgInfo() =>
+    color blk = color.black
+    int wk = not na(firstKey) and not na(lastKey) ? f_weekdays(firstKey, lastKey) : 0
+    string rng = not na(firstKey) ? f_dt(firstKey) + " to " + f_dt(lastKey) : "none"
+    string agTxt = "5m " + str.tostring(aggs.get(1).doneN) + "/" + str.tostring(aggs.get(1).dropN) + " 15m " + str.tostring(aggs.get(2).doneN) + "/" + str.tostring(aggs.get(2).dropN) + " 1H " + str.tostring(aggs.get(4).doneN) + "/" + str.tostring(aggs.get(4).dropN) + " 4H " + str.tostring(aggs.get(5).doneN) + "/" + str.tostring(aggs.get(5).dropN) + " D " + str.tostring(aggs.get(6).doneN) + "/" + str.tostring(aggs.get(6).dropN)
+    string tAud = "-"
+    if plans.size() > 0
+        for i = plans.size() - 1 to 0
+            if plans.get(i).tgtAud != ""
+                tAud := "#" + str.tostring(plans.get(i).sid) + " " + plans.get(i).meth + " target: " + plans.get(i).tgtAud
+                break
+    f_cell(tbInfo, 0, 0, "DEBUG | Contextual | " + syminfo.ticker + " | research model, profitability UNPROVEN, our reading of the guide", color.white, color.new(color.maroon, 10))
+    f_cell(tbInfo, 0, 1, "Data (loaded history): " + rng + " | window " + inCxWin + " NY, hard exit " + inCxHard + " | weekdays done " + str.tostring(cv.get(0)) + " of " + str.tostring(wk) + " (complete " + str.tostring(cv.get(1)) + ", partial " + str.tostring(cv.get(2)) + ", no window candle " + str.tostring(cv.get(3)) + ", levels n/a " + str.tostring(cv.get(5)) + ")", blk, na)
+    f_cell(tbInfo, 0, 2, "HTF candles built/dropped: " + agTxt + " (tolerance " + str.tostring(inCxMiss) + ")", blk, na)
+    f_cell(tbInfo, 0, 3, "Prior-range breakout state, NOT CISD: " + f_cxPrbTxt(6, "D") + " | " + f_cxPrbTxt(5, "4H") + " | " + f_cxPrbTxt(4, "1H") + " | " + f_cxPrbTxt(3, "30m") + " | " + f_cxPrbTxt(2, "15m"), blk, na)
+    f_cell(tbInfo, 0, 4, "Current setup: " + f_cxSetupTxt(), blk, na)
+    f_cell(tbInfo, 0, 5, "STANDARD: limit at area CE, stop beyond the sweep extreme +" + str.tostring(inCxBuf) + "t (cap " + str.tostring(inCxCap) + "t), min " + str.tostring(inCxMinR, "#.0") + "R, " + (inCxTgt == "Fixed R" ? "fixed " + str.tostring(inCxFixR, "#.0") + "R" : "nearest unswept liquidity"), blk, na)
+    f_cell(tbInfo, 0, 6, "PRECISION: " + (inPFibOn ? "Fib " + str.tostring(inFibE, "#.000") + " " : "") + (inPRejOn ? "rejection CE on " + inRejTf : "") + " | cap " + str.tostring(inCxPCap) + "t buf " + str.tostring(inCxPBuf) + " | min " + str.tostring(inCxPMinR, "#.0") + "R | " + inSeq, blk, na)
+    f_cell(tbInfo, 0, 7, "Costs " + (inComm == 0.0 and inSlip == 0 ? "ZERO (net = gross)" : str.tostring(inComm, "#.00") + "/side, " + str.tostring(inSlip) + "t slip") + " | size " + (inSizeMode == "Fixed cash risk" ? str.tostring(inCashRisk, "#") + " USD risk" : str.tostring(inQty) + " contract(s)") + " | fills " + (inStrict ? "trade-through" : "touch assumed"), blk, na)
+    f_cell(tbInfo, 0, 8, "Latest " + tAud, blk, na)
+    f_cell(tbInfo, 0, 9, "Unswept levels superseded by a newer same-type level (no longer targets): " + str.tostring(cxN.get(5)) + " | not implemented: NWOG/NDOG, trailing, SMT target role", blk, na)
+    f_cell(tbInfo, 0, 10, "Limits: OHLC order inside a candle is unknowable (ambiguous = loss); a touched limit is an assumption; drawdown = closed trades only.", blk, na)
+    true
+f_cxDbgFun() =>
     color blk = color.black
     color bgH = color.new(color.silver, 30)
-    color bgN = na
-    int wk = not na(firstKey) and not na(lastKey) ? f_weekdays(firstKey, lastKey) : 0
-    int evald = cv.get(0)
-    string rngTxt = not na(firstKey) ? f_dt(firstKey) + " to " + f_dt(lastKey) : "no weekday evaluated yet"
-    int maxN = 0
-    for k = 5 to 6
-        int cnt = 0
-        for t in trades
-            if t.slot == k
-                cnt += 1
-        maxN := math.max(maxN, cnt)
-    Setup st = f_cxCur()
-    string stTxt = "no setup yet"
-    if not na(st)
-        stTxt := "#" + str.tostring(st.id) + " " + (st.dir > 0 ? "LONG" : "SHORT") + " swept " + st.lvl.ty + " " + str.tostring(st.lvl.px, format.mintick) + " | " + (st.st == 1 ? "waiting for a close through CISD ref " + str.tostring(st.cisdRef, format.mintick) : (st.st == 2 ? "CISD confirmed " + f_hm(st.cisdT) + ", " + str.tostring(st.areas.size()) + " area(s)" : "ended: " + st.why))
-    string vTxt = ""
-    if not na(st)
-        vTxt := "STD: " + (na(st.mdlS) ? (st.stdSt == 0 ? "waiting for an area" : "none") : (st.mdlS.st == 2 ? "order armed" : (st.mdlS.st == 3 ? "position open" : (st.mdlS.why == "" ? "done" : st.mdlS.why)))) + " | PREC: " + (na(st.mdlP) ? "waiting for a trigger" : (st.mdlP.st == 2 ? "order armed (" + st.mdlP.meth + ")" : (st.mdlP.st == 3 ? "position open" : (st.mdlP.why == "" ? "done" : st.mdlP.why))))
-    bool nqOk = syminfo.root == "NQ" or syminfo.root == "MNQ"
-    if not inCxCompact
-        f_cell(tbInfo, 0, 0, "H Ticks - Powell Model C (Contextual) | RESEARCH MODEL, profitability UNPROVEN | " + syminfo.ticker, color.white, color.new(color.maroon, 10))
-        f_cell(tbInfo, 0, 1, "Our mechanical reading of the guide, not Powell's rules. Simulated on completed 1m candles; HTF candles built from 1m and used once complete." + (nqOk ? "" : " NOTE: tuned for NQ/MNQ."), nqOk ? blk : color.red, bgN)
-        f_cell(tbInfo, 0, 2, "Data (loaded history only): " + rngTxt + " | window " + inCxWin + " NY, hard exit " + inCxHard, blk, bgN)
-        f_cell(tbInfo, 0, 3, "Weekdays: " + str.tostring(evald) + " done | context-ready " + str.tostring(cv.get(1) + cv.get(2)) + " (" + str.tostring(cv.get(1)) + " complete, " + str.tostring(cv.get(2)) + " partial) | no window candle " + str.tostring(cv.get(3)) + " | levels n/a " + str.tostring(cv.get(5)), blk, bgN)
-        f_cell(tbInfo, 0, 4, "No-bar weekdays: " + str.tostring(math.max(0, wk - evald)) + " (never 'no setup'). Candles built / DROPPED as incomplete: 5m " + str.tostring(aggs.get(1).doneN) + "/" + str.tostring(aggs.get(1).dropN) + " 15m " + str.tostring(aggs.get(2).doneN) + "/" + str.tostring(aggs.get(2).dropN) + " 1H " + str.tostring(aggs.get(4).doneN) + "/" + str.tostring(aggs.get(4).dropN) + " 4H " + str.tostring(aggs.get(5).doneN) + "/" + str.tostring(aggs.get(5).dropN) + " D " + str.tostring(aggs.get(6).doneN) + "/" + str.tostring(aggs.get(6).dropN) + " (tolerance " + str.tostring(inCxMiss) + ")", blk, bgN)
-        f_cell(tbInfo, 0, 5, "Prior-range breakout state, NOT CISD (completed candles): " + f_cxPrbTxt(6, "D") + " | " + f_cxPrbTxt(5, "4H") + " | " + f_cxPrbTxt(4, "1H") + " | " + f_cxPrbTxt(3, "30m") + " | " + f_cxPrbTxt(2, "15m"), blk, bgN)
-        f_cell(tbInfo, 0, 6, "Current setup: " + stTxt, blk, bgN)
-        f_cell(tbInfo, 0, 7, "Latest setup per variant: " + vTxt, blk, bgN)
-        f_cell(tbInfo, 0, 8, "Variant: " + inVariant + (inCmpVar ? " (comparing both)" : "") + " | source TF " + inCxTf + " | areas " + (inAFvg ? "FVG " : "") + (inAOb ? "OB " : "") + (inABrk ? "BRK " : "") + (inARb ? "RB " : "") + (inAIf ? "iFVG" : "") + " | HTF POI " + inPoi, blk, bgN)
-        f_cell(tbInfo, 0, 9, "STANDARD: limit at area CE, stop beyond the full sweep extreme +" + str.tostring(inCxBuf) + "t (cap " + str.tostring(inCxCap) + "t), min " + str.tostring(inCxMinR, "#.0") + "R, target " + (inCxTgt == "Fixed R" ? "fixed " + str.tostring(inCxFixR, "#.0") + "R" : "nearest unswept liquidity"), blk, bgN)
-        f_cell(tbInfo, 0, 10, "PRECISION: " + (inPFibOn ? "Fib " + str.tostring(inFibE, "#.000") + " (stop beyond " + str.tostring(inFibS, "#.00") + ") " : "") + (inPRejOn ? "| rejection CE on " + inRejTf : "") + " | cap " + str.tostring(inCxPCap) + "t buf " + str.tostring(inCxPBuf) + " | min " + str.tostring(inCxPMinR, "#.0") + "R", blk, bgN)
-        f_cell(tbInfo, 0, 11, "Costs: " + (inComm == 0.0 and inSlip == 0 ? "ZERO (net = gross)" : str.tostring(inComm, "#.00") + " USD/side, " + str.tostring(inSlip) + "t slip") + " | size: " + (inSizeMode == "Fixed cash risk" ? str.tostring(inCashRisk, "#") + " USD risk, whole contracts" : str.tostring(inQty) + " contract(s)") + " | fills: " + (inStrict ? "trade-through" : "touch assumed") + " | " + inSeq, blk, bgN)
-        f_cell(tbInfo, 0, 12, maxN < 100 ? "SAMPLE TOO SMALL: " + str.tostring(maxN) + " trade(s) in the largest column. A few days cannot show an edge." : "Sample: " + str.tostring(maxN) + " trades in the largest column (still not proof).", maxN < 100 ? color.red : blk, bgN)
-        f_cell(tbInfo, 0, 13, "Limits: OHLC order inside a candle is unknowable (ambiguous trades are counted as losses); a touched limit is an assumption; MAE/MFE are bounds.", blk, bgN)
-        f_cell(tbInfo, 0, 14, "Not implemented: NWOG/NDOG, trailing/breakeven, SMT target role, local FVG/breaker overlap for rejections. Unfilled orders create no trade.", blk, bgN)
-        f_cell(tbInfo, 0, 15, "Defaults are research starting points, not optimised. No guarantee of any outcome. Drawdown = closed trades only.", blk, bgN)
-    else
-        table.clear(tbInfo, 0, 0, 0, 15)
-    f_cell(tbWhy, 0, 0, "WHY NO TRADE? (latest day, newest last)", blk, bgH)
+    string[] rows = array.from("Eligible days", "Setups created (sweeps)", "CISD confirmed", "Setups with an eligible area", "Candidates evaluated", "Orders armed", "Filled trades", "Unfilled/expired/cancel", "Stop rejections", "Invalidated", "Ambiguous trades", "No-target rejections", "Filter rejections / stale", "Min-R rejections", "Sizing rejections")
+    string[] cn = array.from("", "", "", "", "", "STD", "PREC", "PREC-Fib", "PREC-Rej")
+    array<int> cs = f_cxCols()
+    f_cell(tbFun, 0, 0, "FUNNEL - candidate/order rows are per variant and NOT exclusive; setup rows are shared", blk, bgH)
+    for c = 0 to 3
+        if c < cs.size()
+            f_cell(tbFun, c + 1, 0, cn.get(cs.get(c)), blk, bgH)
+    for r = 0 to NF - 1
+        f_cell(tbFun, 0, r + 1, rows.get(r), blk, na)
+        for c = 0 to 3
+            if c < cs.size()
+                f_cell(tbFun, c + 1, r + 1, str.tostring(fnl.get(cs.get(c) * NF + r)), blk, na)
+    true
+f_cxDbgPerf() =>
+    color blk = color.black
+    color bgH = color.new(color.silver, 30)
+    string[] pr = array.from("Closed trades", "W / L / time / ambig", "Net win rate % (filled)", "Expectancy gross / net R", "Profit factor (net)", "Avg win / avg loss R", "Max losing streak", "Closed DD  R / USD", "Net total  R / USD", "Avg MAE pts / R", "Median MAE all  pts / R", "Median MAE wins  pts / R", "Wins with MAE <= 0.25R %", "Avg MFE pts / R", "Uncertain / open trades", "Avg stop (ticks)", "Avg plan R / real net R", "Avg actual risk USD", "Planned >=4R / >=5R trades", "Gap-through-entry events")
+    string[] cn = array.from("", "", "", "", "", "STD", "PREC", "PREC-Fib", "PREC-Rej")
+    array<int> cs = f_cxCols()
+    f_cell(tbPerf, 0, 0, "PERFORMANCE (MAE/MFE = bounds)", blk, bgH)
+    for r = 0 to 19
+        f_cell(tbPerf, 0, r + 1, pr.get(r), blk, na)
+    for c = 0 to 3
+        if c < cs.size()
+            int k = cs.get(c)
+            f_cell(tbPerf, c + 1, 0, cn.get(k), blk, bgH)
+            array<float> pa = f_perf(k == 5 ? 5 : 6, k == 7 ? "Fib 0.705" : (k == 8 ? "Rejection CE" : ""))
+            for r = 0 to 19
+                f_cell(tbPerf, c + 1, r + 1, f_perfStr(pa, r), blk, na)
+    true
+f_cxDbgLed() =>
+    color blk = color.black
+    color bgH = color.new(color.silver, 30)
+    int perPage = 10
+    int sel = inLedModel == "Ctx Standard" ? 5 : (inLedModel == "Ctx Precision" ? 6 : -1)
+    array<int> idx = array.new_int(0)
+    if trades.size() > 0
+        for i = trades.size() - 1 to 0
+            Trade tt = trades.get(i)
+            if tt.slot >= 5 and (sel < 0 or tt.slot == sel)
+                idx.push(i)
+    int pages = math.max(1, int(math.ceil(idx.size() / 10.0)))
+    int pg = math.min(inLedPage, pages)
+    string[] hd = array.from("Date", "Dir", "Method", "Swept", "Entry", "Stop", "Target", "Fill", "Exit", "Outcome", "Net R", "Reason (incl. target audit)")
+    for c = 0 to 11
+        f_cell(tbLed, c, 0, (c == 0 ? "LEDGER " + str.tostring(pg) + "/" + str.tostring(pages) + " " : "") + hd.get(c), blk, bgH)
+    for r = 0 to perPage - 1
+        int pos = (pg - 1) * perPage + r
+        if pos < idx.size()
+            Trade t = trades.get(idx.get(pos))
+            string oc = t.isOpen ? "OPEN" : (t.outcome == 1 ? "TARGET" : (t.outcome == 2 ? "STOP" : (t.outcome == 3 ? "TIME EXIT" : "AMBIGUOUS")))
+            string why = t.note + (t.entryAmb ? " [entry-candle ambiguity]" : "")
+            string mth = (t.slot == SC_STD ? "STD " : "PREC ") + t.meth
+            string[] cells = array.from(f_dt(t.dayKey), t.dir > 0 ? "LONG" : "SHORT", mth, str.tostring(t.lvl, format.mintick), str.tostring(t.entryPx, format.mintick), str.tostring(t.stopPx, format.mintick), str.tostring(t.tgtPx, format.mintick), f_hms(t.fillT), t.isOpen ? "-" : f_hms(t.exitT), oc, f_fmt(t.netR, "#.00"), str.length(why) > 120 ? str.substring(why, 0, 120) : why)
+            for c = 0 to 11
+                f_cell(tbLed, c, r + 1, cells.get(c), blk, na)
+        else
+            for c = 0 to 11
+                f_cell(tbLed, c, r + 1, "", blk, na)
+    true
+f_cxDbgWhy() =>
+    color blk = color.black
+    color bgH = color.new(color.silver, 30)
+    f_cell(tbWhy, 0, 0, "WHY NO TRADE? latest day (newest last)", blk, bgH)
     int nr = dayWhy.size()
     int w0 = math.max(0, nr - 9)
     for r = 0 to 8
-        f_cell(tbWhy, 0, r + 1, w0 + r < nr ? dayWhy.get(w0 + r) : "", blk, bgN)
+        f_cell(tbWhy, 0, r + 1, w0 + r < nr ? dayWhy.get(w0 + r) : "", blk, na)
     f_cell(tbWhy, 0, 10, "Cumulative reasons (all loaded days):", blk, bgH)
     for r = 0 to 8
-        f_cell(tbWhy, 0, r + 11, r < rjK.size() ? rjK.get(r) + ": " + str.tostring(rjC.get(r)) : "", blk, bgN)
-    if inFunnel and not inCxCompact
-        string[] rows = array.from("Eligible days", "Sweeps recognised", "CISD confirmed", "Setups with an eligible area", "Candidates evaluated", "Orders armed", "Filled trades", "Unfilled/expired/cancel", "Stop rejections", "Invalidated", "Ambiguous trades", "No-target rejections", "Filter rejections / stale", "Min-R rejections", "Sizing rejections")
-        string[] cn = array.from("STD", "PREC", "PREC-Fib", "PREC-Rej")
-        f_cell(tbFun, 0, 0, "FUNNEL (shadow sims; setup-level rows are shared)", blk, bgH)
-        for c = 0 to 3
-            f_cell(tbFun, c + 1, 0, cn.get(c), blk, bgH)
-        for r = 0 to NF - 1
-            f_cell(tbFun, 0, r + 1, rows.get(r), blk, bgN)
-            for c = 0 to 3
-                f_cell(tbFun, c + 1, r + 1, slotOn.get(5 + c) ? str.tostring(fnl.get((5 + c) * NF + r)) : "off", blk, bgN)
-        table.clear(tbFun, 5, 0, 5, 15)
-    else
-        table.clear(tbFun, 0, 0, 5, 15)
+        f_cell(tbWhy, 0, r + 11, r < rjK.size() ? rjK.get(r) + ": " + str.tostring(rjC.get(r)) : "", blk, na)
+    true
+f_cxDbgRec() =>
+    color blk = color.black
+    color bgH = color.new(color.silver, 30)
+    int tot = rcN.get(15)
+    int sumC = 0
+    f_cell(tbRec, 0, 0, "SETUP-LEVEL RECONCILIATION: each area-qualified setup is counted ONCE", blk, bgH)
+    f_cell(tbRec, 1, 0, "setups", blk, bgH)
+    for c = 0 to 13
+        int v = c < 13 ? rcN.get(c) : math.max(0, tot - sumC)
+        sumC += c < 13 ? v : 0
+        f_cell(tbRec, 0, c + 1, f_cxRecLabel(c), blk, na)
+        f_cell(tbRec, 1, c + 1, str.tostring(v), blk, na)
+    f_cell(tbRec, 0, 15, "Area-qualified setups (total)", blk, bgH)
+    f_cell(tbRec, 1, 15, str.tostring(tot), blk, bgH)
+    f_cell(tbRec, 0, 16, "SWEEPS IGNORED while a setup was active (by blocker):", blk, bgH)
+    f_cell(tbRec, 1, 16, "", blk, bgH)
+    string[] bl = array.from("blocker waiting for its CISD", "blocker CISD done, no order yet", "blocker IDLE (attempts used, nothing pending)", "blocker has an order pending/open")
+    for b = 0 to 3
+        f_cell(tbRec, 0, b + 17, bl.get(b), blk, na)
+        f_cell(tbRec, 1, b + 17, str.tostring(blkC.get(b)), blk, na)
+    f_cell(tbRec, 0, 21, "Setup counters are exclusive; funnel candidate/order counters are per variant.", blk, na)
+    f_cell(tbRec, 1, 21, "", blk, na)
+    true
+f_cxDbgSet() =>
+    color blk = color.black
+    color bgH = color.new(color.silver, 30)
+    string[] hd = array.from("Setup", "Dir", "Swept level", "CISD", "Areas", "Cands", "Outcome")
+    for c = 0 to 6
+        f_cell(tbSet, c, 0, hd.get(c), blk, bgH)
+    int row = 1
+    if sets.size() > 0
+        for i = sets.size() - 1 to 0
+            Setup q = sets.get(i)
+            if q.hadArea and row <= 13
+                string oc = q.st == 8 ? q.endCat : "active: " + (q.st == 1 ? "waiting CISD" : "CISD done")
+                string[] cells = array.from("#" + str.tostring(q.id) + " " + str.format_time(q.swT, "MM-dd HH:mm", TZ), q.dir > 0 ? "LONG" : "SHORT", q.lvl.ty + " " + str.tostring(q.lvl.px, format.mintick), f_hm(q.cisdT), str.tostring(q.areas.size()), str.tostring(q.candN), oc)
+                for c = 0 to 6
+                    f_cell(tbSet, c, row, cells.get(c), blk, na)
+                row += 1
+    while row <= 13
+        for c = 0 to 6
+            f_cell(tbSet, c, row, "", blk, na)
+        row += 1
+    true
+f_cxDebugAll() =>
+    f_cxDbgInfo()
+    f_cxDbgWhy()
+    f_cxDbgRec()
+    f_cxDbgSet()
+    if inFunnel
+        f_cxDbgFun()
     if inPerf
-        string[] pr = array.from("Closed trades", "W / L / time / ambig", "Net win rate % (filled)", "Expectancy gross / net R", "Profit factor (net)", "Avg win / avg loss R", "Max losing streak", "Closed DD  R / USD", "Net total  R / USD", "Avg MAE pts / R", "Median MAE all  pts / R", "Median MAE wins  pts / R", "Wins with MAE <= 0.25R %", "Avg MFE pts / R", "Uncertain / open trades", "Avg stop (ticks)", "Avg plan R / real net R", "Avg actual risk USD", "Planned >=4R / >=5R trades", "Gap-through-entry events")
-        string[] cn = array.from("STD", "PREC", "PREC-Fib", "PREC-Rej")
-        f_cell(tbPerf, 0, 0, "PERFORMANCE (MAE/MFE = bounds)", blk, bgH)
-        for c = 0 to 3
-            f_cell(tbPerf, c + 1, 0, cn.get(c), blk, bgH)
-            array<float> pa = f_perf(c == 0 ? 5 : 6, c == 2 ? "Fib 0.705" : (c == 3 ? "Rejection CE" : ""))
-            for r = 0 to 19
-                f_cell(tbPerf, 0, r + 1, pr.get(r), blk, bgN)
-                f_cell(tbPerf, c + 1, r + 1, slotOn.get(5 + (c == 0 ? 0 : 1)) ? f_perfStr(pa, r) : "off", blk, bgN)
-        table.clear(tbPerf, 5, 0, 5, 20)
-    else
-        table.clear(tbPerf, 0, 0, 5, 20)
-    if inLedger and not inCxCompact
-        int perPage = 10
-        int sel = inLedModel == "Ctx Standard" ? 5 : (inLedModel == "Ctx Precision" ? 6 : -1)
-        array<int> idx = array.new_int(0)
-        if trades.size() > 0
-            for i = trades.size() - 1 to 0
-                Trade tt = trades.get(i)
-                if tt.slot >= 5 and (sel < 0 or tt.slot == sel)
-                    idx.push(i)
-        int pages = math.max(1, int(math.ceil(idx.size() / 10.0)))
-        int pg = math.min(inLedPage, pages)
-        string[] hd = array.from("Date", "Dir", "Method", "Swept", "Entry", "Stop", "Target", "Fill", "Exit", "Outcome", "Net R", "Reason")
-        for c = 0 to 11
-            f_cell(tbLed, c, 0, (c == 0 ? "LEDGER " + str.tostring(pg) + "/" + str.tostring(pages) + " " : "") + hd.get(c), blk, bgH)
-        for r = 0 to perPage - 1
-            int pos = (pg - 1) * perPage + r
-            if pos < idx.size()
-                Trade t = trades.get(idx.get(pos))
-                string oc = t.isOpen ? "OPEN" : (t.outcome == 1 ? "TARGET" : (t.outcome == 2 ? "STOP" : (t.outcome == 3 ? "TIME EXIT" : "AMBIGUOUS")))
-                string why = t.note + (t.entryAmb ? " [entry-candle ambiguity]" : "")
-                string[] cells = array.from(f_dt(t.dayKey), t.dir > 0 ? "LONG" : "SHORT", (t.slot == SC_STD ? "STD " : "PREC ") + t.meth, str.tostring(t.lvl, format.mintick), str.tostring(t.entryPx, format.mintick), str.tostring(t.stopPx, format.mintick), str.tostring(t.tgtPx, format.mintick), f_hms(t.fillT), t.isOpen ? "-" : f_hms(t.exitT), oc, f_fmt(t.netR, "#.00"), str.length(why) > 44 ? str.substring(why, 0, 44) : why)
-                for c = 0 to 11
-                    f_cell(tbLed, c, r + 1, cells.get(c), blk, bgN)
-            else
-                for c = 0 to 11
-                    f_cell(tbLed, c, r + 1, "", blk, bgN)
-    else
-        table.clear(tbLed, 0, 0, 11, 11)
-    if not inInfo
-        table.clear(tbInfo, 0, 0, 0, 15)
+        f_cxDbgPerf()
+    if inLedger
+        f_cxDbgLed()
+    true
+f_cxClearDebug() =>
+    table.clear(tbInfo, 0, 0, 0, 10)
+    table.clear(tbFun, 0, 0, 4, 15)
+    table.clear(tbPerf, 0, 0, 4, 20)
+    table.clear(tbLed, 0, 0, 11, 11)
+    table.clear(tbWhy, 0, 0, 0, 19)
+    table.clear(tbRec, 0, 0, 1, 23)
+    table.clear(tbSet, 0, 0, 6, 13)
     true
 bool drawNow = barstate.islastconfirmedhistory or (barstate.isrealtime and barstate.isconfirmed)
 if not supported
@@ -2002,12 +2199,35 @@ else if drawNow
             if dd.active and shown < inDraw
                 shownKeys.push(dd.key)
                 shown += 1
+    Setup cs = f_cxCur()
     if inCxVisCtx
+        if not na(cs) and (cs.st == 1 or cs.st == 2)
+            f_cxDrawSetup(cs)
+        if inCxHistCtx
+            for q in sets
+                if shownKeys.includes(q.dayKey) and q.st == 8
+                    f_cxDrawSetup(q)
+    if inCxVisLevels
         f_cxDrawLevels()
-        for q in sets
-            if shownKeys.includes(q.dayKey) and (inCxHist or q.dayKey == cur.key)
-                f_cxDrawSetup(q)
-    for md in plans
-        if shownKeys.includes(md.dayKey) and (inCxHist or md.dayKey == cur.key) and slotOn.get(md.slot) and inVisPlan and (inShowBoth or md.slot == selSlot)
-            f_cxDrawPlan(md)
-    f_cxTables()
+    array<int> pendShown = array.new_int(9, 0)
+    array<int> doneShown = array.new_int(9, 0)
+    if plans.size() > 0 and inVisPlan
+        for i = plans.size() - 1 to 0
+            Mdl md = plans.get(i)
+            if slotOn.get(md.slot)
+                bool draw = false
+                if md.st == 3
+                    draw := true
+                else if md.st == 2 and pendShown.get(md.slot) == 0
+                    draw := true
+                    pendShown.set(md.slot, 1)
+                else if md.st == 4 and not na(md.tr) and doneShown.get(md.slot) < inCxNDone
+                    draw := true
+                    doneShown.set(md.slot, doneShown.get(md.slot) + 1)
+                if draw
+                    f_cxDrawPlan(md)
+    f_cxSummary()
+    if inDbgMode
+        f_cxDebugAll()
+    else
+        f_cxClearDebug()
