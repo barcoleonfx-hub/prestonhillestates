@@ -299,12 +299,12 @@ boxes = [o for o in it.objs if o.kind == 'box.new' and not o.dead]
 lines = [o for o in it.objs if o.kind == 'line.new' and not o.dead]
 ok('display: a pending Standard plan draws a dashed red risk box and a dashed green reward box', any(str(o.kw.get('border_style')) == 'line.style_dashed' and str(o.kw.get('border_color')) == 'color.red' for o in boxes) and any(str(o.kw.get('border_color')) == 'color.green' for o in boxes), [(o.kw.get('border_style'), o.kw.get('border_color')) for o in boxes])
 ok('display: the entry line is black', any(str(o.kw.get('color')) == 'color.black' for o in lines), [o.kw.get('color') for o in lines])
-it = run(b, inject=lv, draw=True, inputs=dict(inCmpVar=True, inDbgMode=True))
+it = run(b, inject=lv, draw=True, inputs=dict(inCmpVar=True, inDbgView='All (overlaps)'))
 T_ = it.tables
 ok('display: debug mode fills the diagnostic tables', len(T_['position.top_center'].cells) > 10 and len(T_['position.middle_left'].cells) >= 8 and len(T_['position.bottom_center'].cells) > 5, {k: len(v.cells) for k, v in T_.items()})
 fun = T_['position.middle_right'].cells
 ok('display: disabled method columns are hidden, enabled ones shown (no "off" cells)', not any(v == 'off' for v in fun.values()) and (3, 0) in fun and (4, 0) in fun and fun[(1, 0)] == 'STD', {k: v for k, v in fun.items() if k[1] == 0})
-it = run(b, inject=lv, draw=True, inputs=dict(inCmpVar=True, inDbgMode=True, inPFibOn=False, inPRejOn=False))
+it = run(b, inject=lv, draw=True, inputs=dict(inCmpVar=True, inDbgView='All (overlaps)', inPFibOn=False, inPRejOn=False))
 fun = it.tables['position.middle_right'].cells
 ok('display: with both Precision methods off only STD and PREC columns appear', (3, 0) not in fun and (2, 0) in fun, {k: v for k, v in fun.items() if k[1] == 0})
 # lifecycle: an invalidated setup is not drawn by default and is truncated at its end when historical context is on

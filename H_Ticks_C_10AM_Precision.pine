@@ -119,7 +119,8 @@ string inSeq = input.string("One trade per day", "Daily sequence (each variant i
 bool inCxVisCtx = input.bool(true, "Draw the CURRENT setup context (sweep, CISD reference, setup extreme)", group = G16)
 bool inCxVisAreas = input.bool(false, "Draw every eligible area (otherwise only the selected parent area)", group = G16)
 bool inCxVisFib = input.bool(false, "Draw Fib anchors and levels on Fib plans", group = G16)
-bool inDbgMode = input.bool(false, "DEBUG MODE: show the full funnel, reconciliation, ledger, coverage and diagnostic tables", group = G16, tooltip = "OFF (default) = one small summary panel only.")
+string inDbgView = input.string("Off", "DIAGNOSTIC PANEL (one at a time)", options = ["Off", "Setups", "Reasons", "Reconciliation", "Funnel", "Performance", "Ledger", "Info", "All (overlaps)"], group = G16, tooltip = "Off (default) = one small summary panel only. Pick ONE panel to read it without overlap; All shows every panel at once and they overlap on small screens.")
+bool inDbgMode = inDbgView != "Off"
 int inCxNDone = input.int(10, "Completed trade boxes kept on the chart (per variant)", minval = 0, maxval = 40, group = G16)
 bool inCxVisLevels = input.bool(false, "Draw live liquidity levels (clutter)", group = G16)
 bool inCxHistCtx = input.bool(false, "Historical context: also draw ended / superseded setups, truncated at their end", group = G16)
@@ -2320,7 +2321,7 @@ f_cxSummary() =>
     f_cell(tbSum, 0, 3, pTxt, slotOn.get(SC_PRE) ? blk : color.red, na)
     f_cell(tbSum, 0, 4, "Last reject: " + (rs == "" ? "-" : rs), blk, na)
     f_cell(tbSum, 0, 5, warn, maxN < 30 ? color.red : blk, na)
-    f_cell(tbSum, 0, 6, inDbgMode ? "Debug mode ON" : "Full tables: Settings > Display > DEBUG MODE", color.gray, na)
+    f_cell(tbSum, 0, 6, inDbgMode ? "Panel: " + inDbgView : "Diagnostic panels: Settings > Display > DIAGNOSTIC PANEL", color.gray, na)
     true
 
 // ---- debug view ----
@@ -2493,19 +2494,6 @@ f_cxDbgSet() =>
         row += 1
     true
 
-f_cxDebugAll() =>
-    f_cxDbgInfo()
-    f_cxDbgWhy()
-    f_cxDbgRec()
-    f_cxDbgSet()
-    if inFunnel
-        f_cxDbgFun()
-    if inPerf
-        f_cxDbgPerf()
-    if inLedger
-        f_cxDbgLed()
-    true
-
 f_cxClearDebug() =>
     table.clear(tbInfo, 0, 0, 0, 10)
     table.clear(tbFun, 0, 0, 4, 15)
@@ -2514,6 +2502,26 @@ f_cxClearDebug() =>
     table.clear(tbWhy, 0, 0, 0, 19)
     table.clear(tbRec, 0, 0, 1, 23)
     table.clear(tbSet, 0, 0, 6, 13)
+    true
+
+f_cxDebugAll() =>
+    bool all = inDbgView == "All (overlaps)"
+    if not all
+        f_cxClearDebug()
+    if all or inDbgView == "Info"
+        f_cxDbgInfo()
+    if all or inDbgView == "Reasons"
+        f_cxDbgWhy()
+    if all or inDbgView == "Reconciliation"
+        f_cxDbgRec()
+    if all or inDbgView == "Setups"
+        f_cxDbgSet()
+    if (all or inDbgView == "Funnel") and inFunnel
+        f_cxDbgFun()
+    if (all or inDbgView == "Performance") and inPerf
+        f_cxDbgPerf()
+    if (all or inDbgView == "Ledger") and inLedger
+        f_cxDbgLed()
     true
 
 bool drawNow = barstate.islastconfirmedhistory or (barstate.isrealtime and barstate.isconfirmed)
