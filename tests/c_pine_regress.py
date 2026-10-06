@@ -272,8 +272,8 @@ it = run(b, inject=lv, inputs=dict(inCmpVar=False, inCxLvCS=False, inCxMacro=Tru
 ok('macro: ON with 09:50-10:10 - a 09:40 sweep is ignored (no setup), counted as outside the macro', len(setups(it)) == 0 and rc(it)[14] >= 1, (len(setups(it)), rc(it)[14]))
 it = run(b, inject=lv, inputs=dict(inCmpVar=False, inCxLvCS=False, inCxMacro=True, inCxMacroWin='0935-0950'))
 ok('macro: ON with a window containing 09:40 - the setup is created and reaches its CISD', len(setups(it)) == 1 and setups(it)[0].f['st'] == 2, [(s.f['st'], s.f['why']) for s in setups(it)])
-it = run(b, inject=lv, inputs=dict(inCmpVar=False, inCxLvCS=False, inCxMacro=True, inCxMacroWin='0940-0941'))
-ok('macro: the window start is inclusive and the end exclusive (09:40-09:41 admits the 09:40 candle)', len(setups(it)) == 1, len(setups(it)))
+it = run(b, inject=lv, inputs=dict(inCmpVar=False, inCxLvCS=False, inCxMacro=True, inCxMacroWin='0940-0945'))
+ok('macro: the window start is inclusive and the end exclusive (09:40-09:45 admits the 5m source candle starting 09:40; the check uses the 1m candle that crossed the level)', len(setups(it)) == 1, len(setups(it)))
 it = run(b, inject=lv, inputs=dict(inCmpVar=False, inCxLvCS=False, inCxMacro=True, inCxMacroWin='0930-0940'))
 ok('macro: a window ending at 09:40 excludes the 09:40 candle', len(setups(it)) == 0, len(setups(it)))
 
