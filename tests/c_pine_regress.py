@@ -337,5 +337,61 @@ it = run(allb, inject_at=inj, draw=True, inputs=dict(FIXR, inCxNDone=3))
 exits = [o for o in it.objs if o.kind == 'label.new' and not o.dead and str(o.kw.get('text')).startswith('x ')]
 ok('boxes: raising the setting to 3 keeps all three', len(exits) == 3, len(exits))
 
+
+# =============================================================== 12. guide-faithful mode
+G15 = [(15, (20000, 20001, 19994, 19995)), (15, (19995, 19996, 19990.5, 19991)), (15, (19991, 19992, 19985, 19987)), (15, (19987, 19999.5, 19987, 19999)), (15, (19999, 20008, 19999, 20006))]   # 09:00-10:15: sweep of 19990, CISD at 10:15
+RET = [(5, (20006, 20006.5, 20003, 20003.5)), (5, (20003.5, 20004, 19998, 19998.5)), (5, (19998.5, 19999, 19995, 19996))]   # retracement run into the 15m FVG
+TRIG = (5, (19996, 20009, 19995.5, 20008))     # 10:30 bullish candle closing through the run's open (20006)
+def gd_bars(extra=(), trig=TRIG):
+    return seq((*D, 9, 0), G15 + RET + [trig] + list(extra))
+GDI = dict(inCmpVar=False, inGdH1=False)
+b = gd_bars()
+it = run(b, inject=LV, inputs=GDI)
+st1 = setups(it)[0]; md = [m for m in plans(it, 5)]
+ok('guide: the sweep and CISD are read on 15m (CISD confirmed at 10:15)', st1.f['dir'] == 1 and st1.f['st'] == 2 and st1.f['cisdT'] == at(10, 15), (st1.f['st'], st1.f['why'], st1.f['cisdT']))
+ok('guide: Standard enters on a CLOSING confirmation candle inside the zone (method "Close trigger", market order)', len(md) == 1 and md[0].f['meth'] == 'Close trigger' and md[0].f['mkt'] is True, [(m.f['meth'], m.f['st'], m.f['why']) for m in md])
+tr = trades(it, 5)
+ok('guide: the order fills at the NEXT candle\'s open (10:35 open = 20008), not at a resting limit', len(tr) == 1 and abs(tr[0].f['entryPx'] - 20008.0) < 1e-9 and tr[0].f['fillT'] == at(10, 35), [(t.f['entryPx'], t.f['fillT']) for t in tr])
+ok('guide: stop beyond the sweep extreme (94 ticks <= cap 100); target the nearest unswept liquidity; planned R >= 3', md and abs(md[0].f['stp'] - 19984.5) < 1e-9 and md[0].f['tgt'] == 20100.0 and md[0].f['plannedR'] >= 3.0, (md[0].f['stp'], md[0].f['tgt'], md[0].f['plannedR']) if md else None)
+it2 = run(b, inject=LV, inputs=dict(GDI, inGdCap=80)); m2 = plans(it2, 5)
+ok('guide: stop too wide -> the local-structure stop (retracement extreme 19995 - buffer)', len(m2) == 1 and abs(m2[0].f['stp'] - 19994.5) < 1e-9, [(m.f['stp'], m.f['why']) for m in m2])
+it3 = run(b, inject=LV, inputs=dict(GDI, inGdCap=40)); m3 = plans(it3, 5)
+ok('guide: still too wide -> rejected (never squeezed), no trade', len(m3) == 1 and m3[0].f['st'] == 4 and 'stop-cap' in m3[0].f['why'] and not trades(it3, 5), [(m.f['st'], m.f['why']) for m in m3])
+it4 = run(b, inject=LV, inputs=dict(inCmpVar=False))
+m4 = plans(it4, 5)
+ok('guide: by default the 1H CISD must agree - with none available the candidate is rejected with that reason', len(m4) == 1 and m4[0].f['st'] == 4 and '1H CISD' in m4[0].f['why'], [(m.f['st'], m.f['why']) for m in m4])
+bad = (5, (19996, 19999, 19994, 19995))
+it5 = run(gd_bars(trig=bad), inject=LV, inputs=GDI)
+ok('guide: a non-confirming candle (bearish / no close through the run open) is not a trigger', len(plans(it5, 5)) == 0, [(m.f['meth'], m.f['why']) for m in plans(it5, 5)])
+it6 = run(b, inject=LV, inputs=dict(GDI, inGuide=False))
+ok('guide: OFF restores the previous behaviour (limit-at-CE Standard, no Close trigger plans)', not any(m.f['meth'] == 'Close trigger' for m in plans(it6, 5)), [(m.f['meth']) for m in plans(it6, 5)])
+# trailing: +1R then back -> stopped at -0.5R; +2R then back -> break-even; trail OFF -> still open
+UP1 = [(5, (20011, 20035, 20010, 20034)), (5, (20034, 20034.5, 19990, 19992))]
+UP2 = [(5, (20011, 20060, 20010, 20058)), (5, (20058, 20058.5, 19990, 19992))]
+it7 = run(gd_bars(UP1), inject=LV, inputs=GDI); t7 = trades(it7, 5)
+ok('guide trail: +1R then a pullback is stopped at -0.5R (trailed stop, effective from the next candle)', len(t7) == 1 and abs(t7[0].f['exitPx'] - 19996.25) < 1e-9 and 'trailed' in t7[0].f['note'] and -0.6 < t7[0].f['netR'] < -0.4, [(t.f['exitPx'], t.f['netR'], t.f['note']) for t in t7])
+it8 = run(gd_bars(UP2), inject=LV, inputs=GDI); t8 = trades(it8, 5)
+ok('guide trail: +2R then a pullback exits at break-even', len(t8) == 1 and abs(t8[0].f['exitPx'] - 20008.0) < 1e-9 and abs(t8[0].f['netR']) < 1e-9, [(t.f['exitPx'], t.f['netR']) for t in t8])
+it9 = run(gd_bars(UP1), inject=LV, inputs=dict(GDI, inGdTrail=False)); t9 = trades(it9, 5)
+ok('guide trail: with the trail OFF the same path leaves the trade open (stop untouched)', len(t9) == 1 and t9[0].f['isOpen'] is True, [(t.f['isOpen'], t.f['exitPx']) for t in t9])
+# significant levels only
+flat_bars = stream(T(*D, 9, 30), T(*D, 11, 30), lambda t: (20000, 20003 if t == T(*D, 9, 45) else 20000.5, 19999.5, 20000))
+ig = run(flat_bars, inputs=dict(inGuide=True)); ng = run(flat_bars, inputs=dict(inGuide=False))
+ok('guide: current-session levels are not created in guide mode (they are otherwise)', not any(l.f['ty'] in ('CSH', 'CSL') for l in L(ig, 'lvls')) and any(l.f['ty'] in ('CSH', 'CSL') for l in L(ng, 'lvls')), ([l.f['ty'] for l in L(ig, 'lvls')], [l.f['ty'] for l in L(ng, 'lvls')]))
+# CISD tracker on the 1H timeframe
+def hourly(t):
+    hh = (t - T(*D, 8, 0)) / 3600000.0
+    path = [(8, 20000.0), (9, 20000.0), (10, 19980.0), (11, 19960.0), (12, 20010.0)]
+    for (h0, p0), (h1, p1) in zip(path, path[1:]):
+        if h0 <= hh < h1:
+            f = lambda x: p0 + (p1 - p0) * (x - h0) / (h1 - h0)
+            a = f(hh); b2 = f(hh + 1 / 60.0)
+            return (a, max(a, b2), min(a, b2), b2)
+    return (20010.0, 20010.5, 20009.5, 20010.0)
+hb = stream(T(*D, 8, 0), T(*D, 12, 5), hourly)
+ith = run(hb, inputs=dict(inCmpVar=False))
+ok('guide: the 1H CISD tracker flips bullish when a 1H candle closes through the open of the opposing run, stamped at that candle\'s close', list(ith.g('ctS'))[4] == 1 and list(ith.g('ctT'))[4] == T(*D, 12, 0), (list(ith.g('ctS')), list(ith.g('ctT'))))
+
+
 print('passed', _L.PASS, 'failed', len(_L.FAIL), 'skipped', len(_L.SKIPPED))
 sys.exit(1 if _L.FAIL else 0)

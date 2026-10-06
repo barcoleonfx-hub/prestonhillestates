@@ -58,3 +58,12 @@ def sc(specs, mirror=False, start=(*D, 9, 30), raw=(), lv=LV):
     return b, lv
 
 
+
+
+def seq(start, segs, base=20000.0, pre=60):
+    # segs: list of (minutes, (o,h,l,c) | None); minutes in (5, 15); a flat pre-roll precedes
+    t = T(*start); out = flat(t - pre * 60000, pre, base)
+    for n, sp in segs:
+        out += five(t, *sp, n=n) if sp else flat(t, n, out[-1]['c'])
+        t += n * 60000
+    return out
