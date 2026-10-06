@@ -106,11 +106,11 @@ string inCxLd = input.session("0200-0500", "London range (NY)", group = G11)
 bool inCxLvPO = input.bool(false, "Level: predefined PO3 accumulation range", group = G11)
 string inCxPo = input.session("0000-0600", "PO3 accumulation range (NY)", group = G11)
 bool inCxOpens = input.bool(true, "Show the 18:00 / 00:00 / 10:00 opens (reference only, never an entry)", group = G11)
-bool inBiasD = input.bool(false, "Filter: Daily bias must agree", group = G12)
-bool inBias4 = input.bool(false, "Filter: 4H bias must agree", group = G12)
-bool inBias1 = input.bool(false, "Filter: 1H bias must agree", group = G12)
-bool inBias30 = input.bool(false, "Filter: 30m bias must agree", group = G12)
-bool inBias15 = input.bool(false, "Filter: 15m bias must agree", group = G12)
+bool inBiasD = input.bool(false, "Filter: Daily prior-range breakout state must agree (NOT a CISD)", group = G12)
+bool inBias4 = input.bool(false, "Filter: 4H prior-range breakout state must agree", group = G12)
+bool inBias1 = input.bool(false, "Filter: 1H prior-range breakout state must agree", group = G12)
+bool inBias30 = input.bool(false, "Filter: 30m prior-range breakout state must agree", group = G12)
+bool inBias15 = input.bool(false, "Filter: 15m prior-range breakout state must agree", group = G12)
 bool inFPo3 = input.bool(false, "Filter: the swept level must be the PO3 range (enable the PO3 level too)", group = G12)
 bool inFConf = input.bool(false, "Filter: parent area must overlap another eligible area of a different type", group = G12)
 bool inFIfvg = input.bool(false, "Filter: require a confirmed iFVG among the eligible areas", group = G12)
@@ -155,6 +155,7 @@ bool inCxVisFib = input.bool(true, "Draw Fib anchors and levels", group = G16)
 bool inCxHist = input.bool(true, "Draw historical trades (OFF = latest day only)", group = G16)
 bool inCxCompact = input.bool(false, "Compact tables (performance + why-no-trade only)", group = G16)
 bool inAlExit = input.bool(true, "Alert: simulated stop / target / time exit", group = G8)
+int inCxMiss = input.int(0, "Aggregation: missing 1m candles tolerated per higher-timeframe candle (0 = strict)", minval = 0, maxval = 30, group = G10)
 f_hhmm(string s) =>
     string t = str.trim(s)
     int p = str.pos(t, ":")
@@ -224,6 +225,7 @@ type Trade
     float riskUsd = 0.0
     string meth = ""
     int sid = 0
+    bool gap = false
 type Mdl
     int slot
     int st = 0
@@ -265,6 +267,7 @@ type Mdl
     float rLo = na
     float rHi = na
     int rT
+    int parId = 0
 type Day
     int key
     bool active = true
@@ -341,6 +344,14 @@ type Agg
     int t0 = 0
     int tc = 0
     bool nw = false
+    int cnt = 0
+    int idx = 0
+    int firstMs = 0
+    int lastMs = 0
+    bool gap = false
+    bool bad = false
+    int dropN = 0
+    int doneN = 0
     array<float> O
     array<float> H
     array<float> L
@@ -359,6 +370,7 @@ type Lvl
     int swOpen = 0
     bool proc = false
 type Area
+    int id
     string kind
     float lo
     float hi
@@ -382,6 +394,13 @@ type Pv
     int side
     float px
     bool dead = false
+type Sw
+    int side
+    float px
+    int open
+    int kn
+    float bLo = na
+    float bHi = na
 type Rg
     bool active = false
     float h = na
@@ -416,7 +435,11 @@ type Setup
     array<int> fvgUsed
     int smt = -1
     bool hadArea = false
-    bool fibDone = false
+    int fibSt = 0
+    float fibPx = na
+    int fibOp = 0
+    int fibKn = 0
+    bool brkDone = false
     int stdSt = 0
     int precSt = 0
     Mdl mdlS
@@ -451,9 +474,10 @@ var array<Fvg> fvgs = array.new<Fvg>()
 var array<Fvg> poi15 = array.new<Fvg>()
 var array<Fvg> poi60 = array.new<Fvg>()
 var array<Pv> eqP = array.new<Pv>()
+var array<Sw> swgs = array.new<Sw>()
 var array<int> cxN = array.new_int(6, 0)
-var array<int> biasS = array.new_int(7, 0)
-var array<int> biasT = array.new_int(7, na)
+var array<int> prbS = array.new_int(7, 0)
+var array<int> prbT = array.new_int(7, na)
 var array<float> pvPx = array.new_float(2, na)
 var array<int> pvOp = array.new_int(2, na)
 var array<int> pvKn = array.new_int(2, na)
@@ -609,7 +633,13 @@ f_fillTry(Day dy, Mdl md) =>
             t.mfeP := 0.0
             t.excUnc := fav > 0
             t.entryAmb := tgtTouch or fav > 0
-        if stopHit and tgtTouch
+        bool gapStop = bull ? open <= stp : open >= stp
+        if gapStop
+            t.gap := true
+            t.maeP := math.max(t.maeP, bull ? lim - open : open - lim)
+            t.excUnc := true
+            f_finish(md, 4, open, time, "gap through entry AND stop: resting limit assumed filled at the limit, stopped at the open (conservative, ambiguous)")
+        else if stopHit and tgtTouch
             t.maeP := math.max(t.maeP, t.riskPts)
             t.excUnc := true
             f_finish(md, 4, stp, time, "ambiguous: stop and target both reachable on the fill candle")
@@ -621,14 +651,7 @@ f_fillTry(Day dy, Mdl md) =>
             f_finish(md, 1, tgt, time, "target hit on the fill candle (fill at the open)")
     true
 f_fillStep(Day dy, Mdl md) =>
-    bool bull = dy.dir > 0
-    if (bull ? open < dy.mExt : open > dy.mExt)
-        md.st := 4
-        md.why := "invalidated: the candle opened beyond the frozen manipulation extreme"
-        f_fn(md.slot, 9)
-        f_msgK(3, md.slot, "INVALIDATED - " + md.why)
-    else
-        f_fillTry(dy, md)
+    f_fillTry(dy, md)
     true
 f_posStep(Day dy, Mdl md) =>
     Trade t = md.tr
@@ -841,10 +864,6 @@ f_fillStepP(Day dy, Mdl md) =>
         md.why := "expired: not filled within " + str.tostring(inPExp) + " subsequent candles"
         f_fn(4, 7)
         f_msgK(3, 4, "CANCELLED - " + md.why)
-    else if (bull ? open <= md.stp : open >= md.stp)
-        f_invalidate(md, "local stop level breached before the fill (the candle opened beyond the stop)")
-    else if (bull ? open < dy.mExt : open > dy.mExt)
-        f_invalidate(md, "shared setup invalidated: the candle opened beyond the frozen manipulation extreme")
     else
         bool touchE = bull ? low <= md.lim - thrP : high >= md.lim + thrP
         bool tgtFirst = not touchE and (bull ? high >= md.tgt : low <= md.tgt)
@@ -1199,14 +1218,45 @@ f_aggPush(Agg a) =>
         a.T0.shift()
         a.TC.shift()
     true
-f_aggStep(Agg a) =>
-    int ms18 = (mOpen - 1080 + 1440) % 1440
-    int bid = tdk * 10000 + (a.n >= 1440 ? 0 : int(math.floor(ms18 / a.n)))
-    bool late = false
-    if a.has and bid != a.id
+f_aggClear(Agg a) =>
+    a.O.clear()
+    a.H.clear()
+    a.L.clear()
+    a.C.clear()
+    a.T0.clear()
+    a.TC.clear()
+    true
+f_aggClose(Agg a, bool ok) =>
+    if ok
         f_aggPush(a)
-        a.has := false
-        late := true
+        a.doneN += 1
+        a.nw := true
+    else
+        f_aggClear(a)
+        a.dropN += 1
+        a.bad := true
+    a.has := false
+    true
+f_aggStep(Agg a) =>
+    a.nw := false
+    a.bad := false
+    int ms18 = (mOpen - 1080 + 1440) % 1440
+    int span = a.n >= 1440 ? 1440 : a.n
+    int idx = a.n >= 1440 ? 0 : int(math.floor(ms18 / a.n))
+    int bid = tdk * 10000 + idx
+    int startMs = idx * span
+    int endMs = math.min((idx + 1) * span, 1380)
+    int prevM = na(pCloseT) ? -1 : hour(pCloseT - chartMs, TZ) * 60 + minute(pCloseT - chartMs, TZ)
+    int missed = na(pCloseT) ? 0 : int(math.round((time - pCloseT) / chartMs))
+    bool hole = missed > inCxMiss and prevM != 1019
+    if a.has and bid != a.id
+        bool okp = a.firstMs - a.idx * span <= inCxMiss and (math.min((a.idx + 1) * span, 1380) - 1) - a.lastMs <= inCxMiss and a.cnt >= (math.min((a.idx + 1) * span, 1380) - a.idx * span) - inCxMiss and not a.gap
+        f_aggClose(a, okp)
+    if hole
+        a.gap := true
+        if a.H.size() > 0
+            f_aggClear(a)
+            a.bad := true
     if not a.has
         a.o := open
         a.h := high
@@ -1215,19 +1265,23 @@ f_aggStep(Agg a) =>
         a.t0 := time
         a.tc := time_close
         a.id := bid
+        a.idx := idx
+        a.cnt := 1
+        a.firstMs := ms18
+        a.lastMs := ms18
+        a.gap := hole
         a.has := true
     else
         a.h := math.max(a.h, high)
         a.l := math.min(a.l, low)
         a.c := close
         a.tc := time_close
-    bool done = false
-    if a.n < 1440 and (ms18 + 1) % a.n == 0
-        f_aggPush(a)
-        a.has := false
-        done := true
-    a.nw := late or done
-    a.nw
+        a.cnt += 1
+        a.lastMs := ms18
+    if ms18 + 1 == endMs
+        bool ok = a.firstMs - startMs <= inCxMiss and endMs - 1 - a.lastMs <= inCxMiss and a.cnt >= (endMs - startMs) - inCxMiss and not a.gap
+        f_aggClose(a, ok)
+    a.nw or a.bad
 f_newLevel(string ty, int side, float px, int origin, int known, bool sup) =>
     bool dup = false
     for lv in lvls
@@ -1355,14 +1409,21 @@ f_cxLevelsBar() =>
     if m == 1080 or m == 0 or m == 600
         f_newLevel(m == 1080 ? "O1800" : (m == 0 ? "O0000" : "O1000"), 0, open, time, time_close, true)
     true
-f_cxBias(int ix, Agg a) =>
+f_cxPrb(int ix, Agg a) =>
+    if a.bad
+        prbS.set(ix, 0)
+        prbT.set(ix, na)
+        if ix == 2
+            poi15.clear()
+        if ix == 4
+            poi60.clear()
     if a.nw and a.H.size() >= 2
         float c0 = f_ag(a.C, 0)
         if c0 > f_ag(a.H, 1)
-            biasS.set(ix, 1)
+            prbS.set(ix, 1)
         else if c0 < f_ag(a.L, 1)
-            biasS.set(ix, -1)
-        biasT.set(ix, a.TC.last())
+            prbS.set(ix, -1)
+        prbT.set(ix, a.TC.last())
     if a.nw and (ix == 2 or ix == 4) and a.H.size() >= 3
         array<Fvg> pl = ix == 2 ? poi15 : poi60
         float h1 = f_ag(a.H, 2)
@@ -1393,6 +1454,21 @@ f_cxSrc() =>
     aggs.get(inCxTf == "1m" ? 0 : (inCxTf == "5m" ? 1 : 2))
 f_cxTfMs() =>
     (inCxTf == "1m" ? 1 : (inCxTf == "5m" ? 5 : 15)) * chartMs
+f_cxSwing(Agg A, int i, int side) =>
+    float px = side > 0 ? A.H.get(i) : A.L.get(i)
+    float bLo = na
+    float bHi = na
+    for k = 0 to 3
+        int j = i - k
+        if j >= 0 and na(bLo)
+            bool cand = side > 0 ? A.C.get(j) > A.O.get(j) : A.C.get(j) < A.O.get(j)
+            if cand
+                bLo := A.L.get(j)
+                bHi := A.H.get(j)
+    swgs.push(Sw.new(side = side, px = px, open = A.T0.get(i), kn = time_close, bLo = bLo, bHi = bHi))
+    while swgs.size() > 30
+        swgs.shift()
+    true
 f_cxPivFvg(Agg A) =>
     int n = A.H.size()
     int P = inCxPv
@@ -1432,10 +1508,12 @@ f_cxPivFvg(Agg A) =>
             okH := okH and A.H.get(i - j) < ph and A.H.get(i + j) < ph
             okL := okL and A.L.get(i - j) > pl and A.L.get(i + j) > pl
         if okH
+            f_cxSwing(A, i, 1)
             pvPx.set(0, ph)
             pvOp.set(0, A.T0.get(i))
             pvKn.set(0, time_close)
         if okL
+            f_cxSwing(A, i, -1)
             pvPx.set(1, pl)
             pvOp.set(1, A.T0.get(i))
             pvKn.set(1, time_close)
@@ -1476,6 +1554,9 @@ f_cxRef(Agg A, int d) =>
             ref := A.O.get(j)
             refOpen := A.T0.get(j)
     [ref, refOpen]
+f_cxMkArea(string kind, float lo, float hi, int known, int src) =>
+    cxN.set(4, cxN.get(4) + 1)
+    Area.new(id = cxN.get(4), kind = kind, lo = lo, hi = hi, ce = (lo + hi) / 2.0, known = known, src = src)
 f_cxRb(Setup st, Agg A) =>
     if inARb
         float h0 = f_ag(A.H, 0)
@@ -1489,7 +1570,7 @@ f_cxRb(Setup st, Agg A) =>
             float lo = st.dir > 0 ? l0 : math.max(o0, c0)
             float hi = st.dir > 0 ? math.min(o0, c0) : h0
             if wick / rng >= inRbWick - 0.000000001 and body / rng <= inRbBody + 0.000000001 and hi > lo
-                st.rbs.push(Area.new(kind = "RB", lo = lo, hi = hi, ce = (lo + hi) / 2.0, known = time_close, src = f_agI(A.T0, 0)))
+                st.rbs.push(f_cxMkArea("RB", lo, hi, time_close, f_agI(A.T0, 0)))
     true
 f_cxCollect(Setup st) =>
     while st.rbs.size() > 0
@@ -1497,11 +1578,38 @@ f_cxCollect(Setup st) =>
     for f in fvgs
         if not f.dead and not st.fvgUsed.includes(f.id)
             if inAFvg and f.dir == st.dir and not f.inv and f.c1open >= st.swOpen
-                st.areas.push(Area.new(kind = "FVG", lo = f.lo, hi = f.hi, ce = (f.lo + f.hi) / 2.0, known = f.known, src = f.c1open))
+                st.areas.push(f_cxMkArea("FVG", f.lo, f.hi, f.known, f.c1open))
                 st.fvgUsed.push(f.id)
             else if inAIf and f.dir == -st.dir and f.inv and f.invOpen >= st.swOpen and f.c1open >= st.swOpen - inIfLook * f_cxTfMs()
-                st.areas.push(Area.new(kind = "iFVG", lo = f.lo, hi = f.hi, ce = (f.lo + f.hi) / 2.0, known = f.invKnown, src = f.c1open))
+                st.areas.push(f_cxMkArea("iFVG", f.lo, f.hi, f.invKnown, f.c1open))
                 st.fvgUsed.push(f.id)
+    true
+f_cxBrk(Setup st, Agg A) =>
+    if inABrk and not st.brkDone and A.H.size() >= 3
+        bool bull = st.dir > 0
+        Sw c = na
+        for s in swgs
+            if s.side == (bull ? -1 : 1) and s.px == st.ext and s.open >= st.swOpen and s.kn <= time_close
+                c := s
+        if not na(c)
+            Sw b = na
+            Sw a0 = na
+            for i = swgs.size() - 1 to 0
+                Sw s2 = swgs.get(i)
+                if na(b)
+                    if s2.side == (bull ? 1 : -1) and s2.open < c.open
+                        b := s2
+                else if na(a0)
+                    if s2.side == c.side and s2.open < b.open and (bull ? s2.px > c.px : s2.px < c.px)
+                        a0 := s2
+            if not na(b) and not na(a0) and not na(b.bLo)
+                bool broke = false
+                for k = 0 to A.H.size() - 1
+                    if A.T0.get(k) > c.open
+                        broke := broke or (bull ? A.C.get(k) > b.px : A.C.get(k) < b.px)
+                if broke
+                    st.areas.push(f_cxMkArea("BRK", b.bLo, b.bHi, time_close, b.open))
+                    st.brkDone := true
     true
 f_cxSmt(Setup st) =>
     int res = -1
@@ -1540,22 +1648,9 @@ f_cxCisd(Setup st, Agg A) =>
         float oc = A.C.get(j - 1)
         bool opp = bull ? oc < oo : oc > oo
         if opp and A.T0.get(j - 1) >= st.swOpen
-            st.areas.push(Area.new(kind = "OB", lo = A.L.get(j - 1), hi = A.H.get(j - 1), ce = (A.L.get(j - 1) + A.H.get(j - 1)) / 2.0, known = time_close, src = A.T0.get(j - 1)))
-    if inABrk
-        int jr = n - 1
-        while jr >= 0 and A.T0.get(jr) != st.refOpen
-            jr -= 1
-        if jr >= 1
-            float bo = A.O.get(jr - 1)
-            float bc = A.C.get(jr - 1)
-            bool isBlock = bull ? bc > bo : bc < bo
-            bool broke = false
-            for i = 0 to n - 1
-                if A.T0.get(i) >= st.swOpen
-                    broke := broke or (bull ? A.C.get(i) > A.H.get(jr - 1) : A.C.get(i) < A.L.get(jr - 1))
-            if isBlock and broke
-                st.areas.push(Area.new(kind = "BRK", lo = A.L.get(jr - 1), hi = A.H.get(jr - 1), ce = (A.L.get(jr - 1) + A.H.get(jr - 1)) / 2.0, known = time_close, src = A.T0.get(jr - 1)))
+            st.areas.push(f_cxMkArea("OB", A.L.get(j - 1), A.H.get(j - 1), time_close, A.T0.get(j - 1)))
     f_cxCollect(st)
+    f_cxBrk(st, A)
     if inSmt != "Off"
         st.smt := f_cxSmt(st)
     f_msgK(0, selSlot, "SETUP #" + str.tostring(st.id) + " CONFIRMED " + (bull ? "LONG" : "SHORT") + " - swept " + st.lvl.ty + " " + str.tostring(st.lvl.px, format.mintick) + ", CISD ref " + str.tostring(st.cisdRef, format.mintick) + " closed through, sweep extreme " + str.tostring(st.ext, format.mintick))
@@ -1625,6 +1720,7 @@ f_cxSource(Agg A) =>
         else
             f_cxRb(st, A)
             f_cxCollect(st)
+            f_cxBrk(st, A)
     true
 f_cxAreaUpdate(Setup st) =>
     bool bull = st.dir > 0
@@ -1653,13 +1749,13 @@ f_cxPoi(int d) =>
     [lo, hi]
 f_cxKindRank(string k) =>
     k == "OB" ? 0 : (k == "BRK" ? 1 : (k == "FVG" ? 2 : (k == "iFVG" ? 3 : 4)))
-f_cxPick(Setup st, bool execSide) =>
+f_cxPick(Setup st, bool execSide, int beforeT) =>
     bool bull = st.dir > 0
     [plo, phi] = f_cxPoi(st.dir)
     Area best = na
     bool bestOv = false
     for a in st.areas
-        bool okA = not a.dead and a.known <= time_close
+        bool okA = not a.dead and a.known <= beforeT
         if okA and execSide
             okA := not a.stale and (bull ? a.ce < close : a.ce > close)
         if okA
@@ -1705,10 +1801,10 @@ f_cxFilters(Setup st, Area area) =>
         int ix = q == 0 ? 6 : (q == 1 ? 5 : (q == 2 ? 4 : (q == 3 ? 3 : 2)))
         string nm = q == 0 ? "Daily" : (q == 1 ? "4H" : (q == 2 ? "1H" : (q == 3 ? "30m" : "15m")))
         if on and r == ""
-            if na(biasT.get(ix)) or biasS.get(ix) == 0
-                r := "bias " + nm + " unavailable or neutral"
-            else if (biasS.get(ix) > 0) != bull
-                r := "bias " + nm + " against the setup"
+            if na(prbT.get(ix)) or prbS.get(ix) == 0
+                r := "prior-range state " + nm + " unavailable or none yet"
+            else if (prbS.get(ix) > 0) != bull
+                r := "prior-range state " + nm + " against the setup"
     if r == "" and inFPo3 and st.lvl.ty != "PO3H" and st.lvl.ty != "PO3L"
         r := "PO3 filter: the swept level is not the PO3 range"
     if r == "" and inFConf and not na(area)
@@ -1831,7 +1927,7 @@ f_cxPlan(Setup st, Mdl md, float entryRaw, float stopRaw, int cap, float minR, f
                     f_msgK(1, md.slot, "ORDER ARMED (simulated limit, NOT a fill) setup #" + str.tostring(st.id) + " " + md.meth + " " + (bull ? "LONG" : "SHORT") + " limit " + str.tostring(entry, format.mintick) + " stop " + str.tostring(stop, format.mintick) + " (" + str.tostring(riskT) + " ticks) target " + str.tostring(tgtR, format.mintick) + " (" + tt + ", planned " + str.tostring(pR, "#.0") + "R)")
     armed
 f_cxArmWin() =>
-    mOpen >= winS and mOpen < cutM
+    dowN >= dayofweek.monday and dowN <= dayofweek.friday and mOpen >= winS and mOpen < cutM
 f_cxTryStd(Setup st) =>
     if slotOn.get(SC_STD) and st.stdSt == 0 and f_cxArmWin()
         [mult, firstRisk, why] = f_cxSeq(SC_STD)
@@ -1840,7 +1936,7 @@ f_cxTryStd(Setup st) =>
                 st.stdSt := 2
                 f_why("daily sequence", "Standard: " + why)
         else
-            Area area = f_cxPick(st, true)
+            Area area = f_cxPick(st, true, time_close)
             if not na(area)
                 st.stdSt := 2
                 Mdl md = f_cxNewMdl(SC_STD, st, "Area CE")
@@ -1859,60 +1955,96 @@ f_cxTryStd(Setup st) =>
                     if f_cxPlan(st, md, area.ce, stopRaw, inCxCap, inCxMinR, mult, firstRisk)
                         st.stdSt := 1
     true
-f_cxTryFib(Setup st, Agg A) =>
-    if slotOn.get(SC_PRE) and inPFibOn and not st.fibDone and f_cxArmWin()
+f_cxFibEntry(Setup st) =>
+    bool bull = st.dir > 0
+    float hx = bull ? st.fibPx : st.ext
+    float lx = bull ? st.ext : st.fibPx
+    float rg = hx - lx
+    float e = bull ? hx - inFibE * rg : lx + inFibE * rg
+    float ref = bull ? hx - inFibS * rg : lx + inFibS * rg
+    [rg, e, ref]
+f_cxFibDetect(Setup st, Agg A) =>
+    if slotOn.get(SC_PRE) and inPFibOn and st.fibSt == 0
         bool bull = st.dir > 0
         int q = bull ? 0 : 1
         if not na(pvKn.get(q)) and pvKn.get(q) == time_close and pvOp.get(q) >= st.cisdOpen
-            st.fibDone := true
-            [mult, firstRisk, why] = f_cxSeq(SC_PRE)
-            if mult == 0.0
-                if why != "busy"
-                    f_why("daily sequence", "Precision: " + why)
+            st.fibSt := 1
+            st.fibPx := pvPx.get(q)
+            st.fibOp := pvOp.get(q)
+            st.fibKn := pvKn.get(q)
+            [rg, e, ref] = f_cxFibEntry(st)
+            float eR = math.round_to_mintick(e)
+            bool trav = false
+            int n = A.H.size()
+            for i = 0 to n - 1
+                if A.T0.get(i) > st.fibOp
+                    trav := trav or (bull ? A.L.get(i) <= eR : A.H.get(i) >= eR)
+            if rg <= 0
+                st.fibSt := 3
+                f_why("fib invalid", "Fib: the leg has no size")
+                f_fn(SC_PRE, 8)
+                f_fn(7, 8)
+            else if trav or not (bull ? eR < close : eR > close)
+                st.fibSt := 3
+                f_why("stale fib", "Fib: " + str.tostring(inFibE, "#.000") + " (" + str.tostring(eR, format.mintick) + ") was already traversed before the swing anchor (confirmed " + f_hm(st.fibKn) + ") existed; no back-dated entry")
+                f_fn(SC_PRE, 12)
+                f_fn(7, 12)
+    true
+f_cxFibTrack(Setup st) =>
+    if st.fibSt == 1 and time >= st.fibKn
+        [rg, e, ref] = f_cxFibEntry(st)
+        float eR = math.round_to_mintick(e)
+        if st.dir > 0 ? low <= eR : high >= eR
+            st.fibSt := 3
+            f_why("stale fib", "Fib: price traded to " + str.tostring(eR, format.mintick) + " after the anchor was confirmed (" + f_hm(st.fibKn) + ") and before an order could be armed")
+            f_fn(SC_PRE, 12)
+            f_fn(7, 12)
+    true
+f_cxFibArm(Setup st) =>
+    if slotOn.get(SC_PRE) and st.fibSt == 1 and f_cxArmWin()
+        [mult, firstRisk, why] = f_cxSeq(SC_PRE)
+        if mult == 0.0
+            if why != "busy"
+                st.fibSt := 3
+                f_why("daily sequence", "Precision Fib: " + why)
+        else
+            bool bull = st.dir > 0
+            Mdl md = f_cxNewMdl(SC_PRE, st, "Fib 0.705")
+            st.mdlP := md
+            st.fibSt := 3
+            md.fH := bull ? st.fibPx : st.ext
+            md.fL := bull ? st.ext : st.fibPx
+            Area par = f_cxPick(st, false, time_close)
+            if na(par)
+                f_cxDrop(md, "no valid parent area for Precision (none known, alive and eligible)", "no parent", 12)
             else
-                float hx = bull ? pvPx.get(0) : st.ext
-                float lx = bull ? st.ext : pvPx.get(1)
-                Mdl md = f_cxNewMdl(SC_PRE, st, "Fib 0.705")
-                st.mdlP := md
-                md.fH := hx
-                md.fL := lx
-                Area par = f_cxPick(st, false)
-                if not na(par)
-                    md.areaK := par.kind
-                    md.aLo := par.lo
-                    md.aHi := par.hi
-                    md.aCe := par.ce
-                float rg = hx - lx
-                if rg <= 0
-                    f_cxDrop(md, "Fib leg has no size", "stop invalid", 8)
+                md.areaK := par.kind
+                md.aLo := par.lo
+                md.aHi := par.hi
+                md.aCe := par.ce
+                md.parId := par.id
+                [rg, e, ref] = f_cxFibEntry(st)
+                float eR = math.round_to_mintick(e)
+                if not (bull ? eR < close : eR > close)
+                    f_cxDrop(md, "stale: the entry is no longer on the executable side of the market", "stale fib", 12)
+                else if inFibArea and (eR < par.lo or eR > par.hi)
+                    f_cxDrop(md, "Fib entry does not overlap the selected parent area (optional condition)", "filter", 12)
                 else
-                    float e = bull ? hx - inFibE * rg : lx + inFibE * rg
-                    float ref = bull ? hx - inFibS * rg : lx + inFibS * rg
-                    float eR = math.round_to_mintick(e)
-                    bool trav = false
-                    int n = A.H.size()
-                    for i = 0 to n - 1
-                        if A.T0.get(i) > pvOp.get(q)
-                            trav := trav or (bull ? A.L.get(i) <= eR : A.H.get(i) >= eR)
-                    if trav or not (bull ? eR < close : eR > close)
-                        f_cxDrop(md, "stale: " + str.tostring(inFibE, "#.000") + " was already traversed before the swing anchor was confirmed (no back-dated entry)", "stale fib", 12)
-                    else if inFibArea and (na(par) or eR < par.lo or eR > par.hi)
-                        f_cxDrop(md, "Fib entry is outside the selected parent area", "filter", 12)
+                    string fl = f_cxFilters(st, par)
+                    if fl != ""
+                        f_cxDrop(md, fl, "filter", 12)
+                    else if inFCe and f_cxCeProx(st, eR)
+                        f_cxDrop(md, "engineered-liquidity proximity beyond the entry", "filter", 12)
                     else
-                        string fl = f_cxFilters(st, par)
-                        if fl != ""
-                            f_cxDrop(md, fl, "filter", 12)
-                        else if inFCe and f_cxCeProx(st, eR)
-                            f_cxDrop(md, "engineered-liquidity proximity beyond the entry", "filter", 12)
-                        else
-                            float stopRaw = bull ? ref - inCxPBuf * tk : ref + inCxPBuf * tk
-                            if f_cxPlan(st, md, e, stopRaw, inCxPCap, inCxPMinR, mult, firstRisk)
-                                st.precSt := 1
+                        float stopRaw = bull ? ref - inCxPBuf * tk : ref + inCxPBuf * tk
+                        if f_cxPlan(st, md, e, stopRaw, inCxPCap, inCxPMinR, mult, firstRisk)
+                            st.precSt := 1
     true
 f_cxTryRej(Setup st, Agg R) =>
-    if slotOn.get(SC_PRE) and inPRejOn and st.precSt != 1 and f_cxArmWin()
+    int rOpen = f_agI(R.T0, 0)
+    if slotOn.get(SC_PRE) and inPRejOn and st.precSt != 1 and f_cxArmWin() and rOpen >= st.cisdT
         bool bull = st.dir > 0
-        Area par = f_cxPick(st, false)
+        Area par = f_cxPick(st, false, rOpen)
         if not na(par)
             float h0 = f_ag(R.H, 0)
             float l0 = f_ag(R.L, 0)
@@ -1940,6 +2072,7 @@ f_cxTryRej(Setup st, Agg R) =>
                     md.aLo := par.lo
                     md.aHi := par.hi
                     md.aCe := par.ce
+                    md.parId := par.id
                     md.rLo := l0
                     md.rHi := h0
                     md.rT := f_agI(R.T0, 0)
@@ -2005,7 +2138,13 @@ f_cxFillTry(Mdl md) =>
             t.mfeP := 0.0
             t.excUnc := fav > 0
             t.entryAmb := tgtTouch or fav > 0
-        if stopHit and tgtTouch
+        bool gapStop = bull ? open <= stp : open >= stp
+        if gapStop
+            t.gap := true
+            t.maeP := math.max(t.maeP, bull ? lim - open : open - lim)
+            t.excUnc := true
+            f_cxFinish(md, 4, open, time, "gap through entry AND stop: resting limit assumed filled at the limit, stopped at the open (conservative, ambiguous)")
+        else if stopHit and tgtTouch
             t.maeP := math.max(t.maeP, t.riskPts)
             t.excUnc := true
             f_cxFinish(md, 4, stp, time, "ambiguous: stop and target both reachable on the fill candle")
@@ -2076,10 +2215,6 @@ f_cxPlanStep(Mdl md) =>
             f_cxCancel(md, "unfilled: cancelled at the entry cutoff", 7, false)
         else if bar_index > md.armBar + inCxExp
             f_cxCancel(md, "expired: not filled within " + str.tostring(inCxExp) + " candles", 7, false)
-        else if md.slot == SC_PRE and (bull ? open <= md.stp : open >= md.stp)
-            f_cxCancel(md, "local stop level breached before the fill (precision attempt ends; the larger setup may continue)", 9, false)
-        else if bull ? open < md.xExt : open > md.xExt
-            f_cxCancel(md, "invalidated: the candle opened beyond the frozen setup extreme", 9, true)
         else
             bool touchE = bull ? low <= md.lim - thrP : high >= md.lim + thrP
             bool tgtFirst = not touchE and (bull ? high >= md.tgt : low <= md.tgt)
@@ -2088,10 +2223,24 @@ f_cxPlanStep(Mdl md) =>
             else
                 f_cxFillTry(md)
     true
+f_cxSrcBad() =>
+    fvgs.clear()
+    eqP.clear()
+    swgs.clear()
+    for q = 0 to 1
+        pvPx.set(q, na)
+        pvOp.set(q, na)
+        pvKn.set(q, na)
+    Setup st = f_cxCur()
+    if not na(st) and st.st == 1
+        st.st := 8
+        st.why := "source candle incomplete (missing 1m data): CISD tracking cannot continue"
+        f_why("incomplete data", "setup #" + str.tostring(st.id) + ": " + st.why)
+    true
 f_cxBar(Day dy) =>
-    if mOpen >= winS and mOpen < exitM
+    if dy.active and mOpen >= winS and mOpen < exitM
         dy.bars10 += 1
-    if dy.st == 0 and mOpen >= winS
+    if dy.active and dy.st == 0 and mOpen >= winS
         if mOpen != winS
             dy.st := 9
             dy.status := 2
@@ -2130,6 +2279,7 @@ f_cxBar(Day dy) =>
     Setup st = f_cxCur()
     if not na(st) and st.st == 2
         f_cxAreaUpdate(st)
+        f_cxFibTrack(st)
     for md in plans
         if md.st == 2 or md.st == 3
             f_cxPlanStep(md)
@@ -2147,10 +2297,12 @@ f_cxBar(Day dy) =>
         f_newLevel("PDH", 1, f_ag(dA.H, 0), f_agI(dA.T0, 0), time_close, true)
         f_newLevel("PDL", -1, f_ag(dA.L, 0), f_agI(dA.T0, 0), time_close, true)
     for i = 2 to 6
-        f_cxBias(i, aggs.get(i))
+        f_cxPrb(i, aggs.get(i))
     f_cxLevelsBar()
     Agg A = f_cxSrc()
     Agg R = aggs.get(inRejTf == "1m" ? 0 : 1)
+    if A.bad
+        f_cxSrcBad()
     if A.nw
         f_cxSource(A)
         st := f_cxCur()
@@ -2158,7 +2310,10 @@ f_cxBar(Day dy) =>
             if not st.hadArea and st.areas.size() > 0
                 st.hadArea := true
                 f_fnA2(3)
-            f_cxTryFib(st, A)
+            f_cxFibDetect(st, A)
+    st := f_cxCur()
+    if not na(st) and st.st == 2
+        f_cxFibArm(st)
     st := f_cxCur()
     if R.nw and not na(st) and st.st == 2
         f_cxTryRej(st, R)
@@ -2222,11 +2377,10 @@ if supported and cfgAll and barstate.isconfirmed
             if na(firstKey)
                 firstKey := dkey
             lastKey := dkey
-    if cur.active
-        if isCx
-            f_cxBar(cur)
-        else
-            f_dayStep(cur)
+    if isCx
+        f_cxBar(cur)
+    else if cur.active
+        f_dayStep(cur)
     pClose := close
     pCloseT := time_close
     if barstate.isrealtime and aMsgs.size() > 0
@@ -2280,6 +2434,7 @@ f_perf(int slot, string meth) =>
     int nW = 0
     int n4 = 0
     int n5 = 0
+    int nGap = 0
     int n = trades.size()
     if n > 0
         for i = 0 to n - 1
@@ -2287,7 +2442,7 @@ f_perf(int slot, string meth) =>
             if t.slot == slot and (meth == "" or t.meth == meth)
                 if t.isOpen
                     openN += 1
-                else if t.outcome == 4 and inAmbMode == "Exclude from stats"
+                else if t.outcome == 4 and inAmbMode == "Exclude from stats" and not t.gap
                     exAmb += 1
                 else
                     cntT += 1
@@ -2302,6 +2457,8 @@ f_perf(int slot, string meth) =>
                         losses += 1
                     if t.outcome == 4
                         amb += 1
+                    if t.gap
+                        nGap += 1
                     if t.excUnc or t.entryAmb
                         unc += 1
                     sumNet += nr
@@ -2377,6 +2534,7 @@ f_perf(int slot, string meth) =>
     r.set(30, cntT > 0 ? sumRisk / cntT : na)
     r.set(31, n4)
     r.set(32, n5)
+    r.set(33, nGap)
     r
 f_weekdays(int k1, int k2) =>
     int t0 = f_ts(k1, 720)
@@ -2572,7 +2730,7 @@ f_cxDrawLevels() =>
     true
 var table tbInfo = table.new(position.middle_left, 1, 16, bgcolor = color.new(color.white, 8), border_width = 1, border_color = color.gray)
 var table tbFun = table.new(position.top_right, 6, 16, bgcolor = color.new(color.white, 8), border_width = 1, border_color = color.gray)
-var table tbPerf = table.new(position.bottom_right, 6, 20, bgcolor = color.new(color.white, 8), border_width = 1, border_color = color.gray)
+var table tbPerf = table.new(position.bottom_right, 6, 21, bgcolor = color.new(color.white, 8), border_width = 1, border_color = color.gray)
 var table tbLed = table.new(position.bottom_left, 12, 12, bgcolor = color.new(color.white, 8), border_width = 1, border_color = color.gray)
 f_cell(table t, int c, int r, string txt, color tcol, color bg) =>
     table.cell(t, c, r, txt, text_color = tcol, text_size = size.tiny, text_halign = text.align_left, bgcolor = bg)
@@ -2716,52 +2874,14 @@ f_drawTables() =>
         table.clear(tbInfo, 0, 0, 0, 15)
     true
 var table tbWhy = table.new(position.top_left, 1, 20, bgcolor = color.new(color.white, 8), border_width = 1, border_color = color.gray)
-f_cxBiasTxt(int ix, string nm) =>
+f_cxPrbTxt(int ix, string nm) =>
     string s = nm + " n/a"
-    if not na(biasT.get(ix))
-        s := nm + " " + (biasS.get(ix) > 0 ? "bull" : (biasS.get(ix) < 0 ? "bear" : "neutral")) + " (" + f_hm(biasT.get(ix)) + ")"
+    if not na(prbT.get(ix))
+        s := nm + " " + (prbS.get(ix) > 0 ? "up" : (prbS.get(ix) < 0 ? "down" : "none yet")) + " (" + f_hm(prbT.get(ix)) + ")"
     s
 f_perfStr(array<float> a, int r) =>
-    string v = ""
-    if r == 0
-        v := str.tostring(a.get(0), "#") + (a.get(26) > 0 ? " (+" + str.tostring(a.get(26), "#") + " excl.)" : "")
-    else if r == 1
-        v := str.tostring(a.get(1), "#") + " / " + str.tostring(a.get(2), "#") + " / " + str.tostring(a.get(3), "#") + " / " + str.tostring(a.get(4), "#")
-    else if r == 2
-        v := f_fmt(a.get(5), "#.0")
-    else if r == 3
-        v := f_fmt(a.get(27), "#.00") + " / " + f_fmt(a.get(6), "#.00")
-    else if r == 4
-        v := f_fmt(a.get(7), "#.00")
-    else if r == 5
-        v := f_fmt(a.get(8), "#.00") + " / " + f_fmt(a.get(9), "#.00")
-    else if r == 6
-        v := str.tostring(a.get(10), "#")
-    else if r == 7
-        v := f_fmt(a.get(11), "#.00") + " / " + f_fmt(a.get(12), "#")
-    else if r == 8
-        v := f_fmt(a.get(13), "#.00") + " / " + f_fmt(a.get(25), "#")
-    else if r == 9
-        v := f_fmt(a.get(14), "#.0") + " / " + f_fmt(a.get(15), "#.00")
-    else if r == 10
-        v := f_fmt(a.get(16), "#.0") + " / " + f_fmt(a.get(17), "#.00")
-    else if r == 11
-        v := f_fmt(a.get(18), "#.0") + " / " + f_fmt(a.get(19), "#.00")
-    else if r == 12
-        v := f_fmt(a.get(20), "#")
-    else if r == 13
-        v := f_fmt(a.get(21), "#.0") + " / " + f_fmt(a.get(22), "#.00")
-    else if r == 14
-        v := str.tostring(a.get(23), "#") + " / " + str.tostring(a.get(24), "#")
-    else if r == 15
-        v := f_fmt(a.get(28), "#.0")
-    else if r == 16
-        v := f_fmt(a.get(29), "#.0") + " / " + f_fmt(a.get(6), "#.00")
-    else if r == 17
-        v := f_fmt(a.get(30), "#")
-    else
-        v := str.tostring(a.get(31), "#") + " / " + str.tostring(a.get(32), "#")
-    v
+    array<string> v = array.from(str.tostring(a.get(0), "#") + (a.get(26) > 0 ? " (+" + str.tostring(a.get(26), "#") + " excl.)" : ""), str.tostring(a.get(1), "#") + " / " + str.tostring(a.get(2), "#") + " / " + str.tostring(a.get(3), "#") + " / " + str.tostring(a.get(4), "#"), f_fmt(a.get(5), "#.0"), f_fmt(a.get(27), "#.00") + " / " + f_fmt(a.get(6), "#.00"), f_fmt(a.get(7), "#.00"), f_fmt(a.get(8), "#.00") + " / " + f_fmt(a.get(9), "#.00"), str.tostring(a.get(10), "#"), f_fmt(a.get(11), "#.00") + " / " + f_fmt(a.get(12), "#"), f_fmt(a.get(13), "#.00") + " / " + f_fmt(a.get(25), "#"), f_fmt(a.get(14), "#.0") + " / " + f_fmt(a.get(15), "#.00"), f_fmt(a.get(16), "#.0") + " / " + f_fmt(a.get(17), "#.00"), f_fmt(a.get(18), "#.0") + " / " + f_fmt(a.get(19), "#.00"), f_fmt(a.get(20), "#"), f_fmt(a.get(21), "#.0") + " / " + f_fmt(a.get(22), "#.00"), str.tostring(a.get(23), "#") + " / " + str.tostring(a.get(24), "#"), f_fmt(a.get(28), "#.0"), f_fmt(a.get(29), "#.0") + " / " + f_fmt(a.get(6), "#.00"), f_fmt(a.get(30), "#"), str.tostring(a.get(31), "#") + " / " + str.tostring(a.get(32), "#"), str.tostring(a.get(33), "#"))
+    v.get(r)
 f_cxTables() =>
     color blk = color.black
     color bgH = color.new(color.silver, 30)
@@ -2789,8 +2909,8 @@ f_cxTables() =>
         f_cell(tbInfo, 0, 1, "Our mechanical reading of the guide, not Powell's rules. Simulated on completed 1m candles; HTF candles built from 1m and used once complete." + (nqOk ? "" : " NOTE: tuned for NQ/MNQ."), nqOk ? blk : color.red, bgN)
         f_cell(tbInfo, 0, 2, "Data (loaded history only): " + rngTxt + " | window " + inCxWin + " NY, hard exit " + inCxHard, blk, bgN)
         f_cell(tbInfo, 0, 3, "Weekdays: " + str.tostring(evald) + " done | context-ready " + str.tostring(cv.get(1) + cv.get(2)) + " (" + str.tostring(cv.get(1)) + " complete, " + str.tostring(cv.get(2)) + " partial) | no window candle " + str.tostring(cv.get(3)) + " | levels n/a " + str.tostring(cv.get(5)), blk, bgN)
-        f_cell(tbInfo, 0, 4, "No-bar weekdays: " + str.tostring(math.max(0, wk - evald)) + " (holiday/missing; never counted as 'no setup'). Warm-up: bias D/4H/1H need 2 completed candles.", blk, bgN)
-        f_cell(tbInfo, 0, 5, "Bias (completed candles): " + f_cxBiasTxt(6, "D") + " | " + f_cxBiasTxt(5, "4H") + " | " + f_cxBiasTxt(4, "1H") + " | " + f_cxBiasTxt(3, "30m") + " | " + f_cxBiasTxt(2, "15m"), blk, bgN)
+        f_cell(tbInfo, 0, 4, "No-bar weekdays: " + str.tostring(math.max(0, wk - evald)) + " (never 'no setup'). Candles built / DROPPED as incomplete: 5m " + str.tostring(aggs.get(1).doneN) + "/" + str.tostring(aggs.get(1).dropN) + " 15m " + str.tostring(aggs.get(2).doneN) + "/" + str.tostring(aggs.get(2).dropN) + " 1H " + str.tostring(aggs.get(4).doneN) + "/" + str.tostring(aggs.get(4).dropN) + " 4H " + str.tostring(aggs.get(5).doneN) + "/" + str.tostring(aggs.get(5).dropN) + " D " + str.tostring(aggs.get(6).doneN) + "/" + str.tostring(aggs.get(6).dropN) + " (tolerance " + str.tostring(inCxMiss) + ")", blk, bgN)
+        f_cell(tbInfo, 0, 5, "Prior-range breakout state, NOT CISD (completed candles): " + f_cxPrbTxt(6, "D") + " | " + f_cxPrbTxt(5, "4H") + " | " + f_cxPrbTxt(4, "1H") + " | " + f_cxPrbTxt(3, "30m") + " | " + f_cxPrbTxt(2, "15m"), blk, bgN)
         f_cell(tbInfo, 0, 6, "Current setup: " + stTxt, blk, bgN)
         f_cell(tbInfo, 0, 7, "Latest setup per variant: " + vTxt, blk, bgN)
         f_cell(tbInfo, 0, 8, "Variant: " + inVariant + (inCmpVar ? " (comparing both)" : "") + " | source TF " + inCxTf + " | areas " + (inAFvg ? "FVG " : "") + (inAOb ? "OB " : "") + (inABrk ? "BRK " : "") + (inARb ? "RB " : "") + (inAIf ? "iFVG" : "") + " | HTF POI " + inPoi, blk, bgN)
@@ -2825,18 +2945,18 @@ f_cxTables() =>
     else
         table.clear(tbFun, 0, 0, 5, 15)
     if inPerf
-        string[] pr = array.from("Closed trades", "W / L / time / ambig", "Net win rate % (filled)", "Expectancy gross / net R", "Profit factor (net)", "Avg win / avg loss R", "Max losing streak", "Closed DD  R / USD", "Net total  R / USD", "Avg MAE pts / R", "Median MAE all  pts / R", "Median MAE wins  pts / R", "Wins with MAE <= 0.25R %", "Avg MFE pts / R", "Uncertain / open trades", "Avg stop (ticks)", "Avg plan R / real net R", "Avg actual risk USD", "Planned >=4R / >=5R trades")
+        string[] pr = array.from("Closed trades", "W / L / time / ambig", "Net win rate % (filled)", "Expectancy gross / net R", "Profit factor (net)", "Avg win / avg loss R", "Max losing streak", "Closed DD  R / USD", "Net total  R / USD", "Avg MAE pts / R", "Median MAE all  pts / R", "Median MAE wins  pts / R", "Wins with MAE <= 0.25R %", "Avg MFE pts / R", "Uncertain / open trades", "Avg stop (ticks)", "Avg plan R / real net R", "Avg actual risk USD", "Planned >=4R / >=5R trades", "Gap-through-entry events")
         string[] cn = array.from("STD", "PREC", "PREC-Fib", "PREC-Rej")
         f_cell(tbPerf, 0, 0, "PERFORMANCE (MAE/MFE = bounds)", blk, bgH)
         for c = 0 to 3
             f_cell(tbPerf, c + 1, 0, cn.get(c), blk, bgH)
             array<float> pa = f_perf(c == 0 ? 5 : 6, c == 2 ? "Fib 0.705" : (c == 3 ? "Rejection CE" : ""))
-            for r = 0 to 18
+            for r = 0 to 19
                 f_cell(tbPerf, 0, r + 1, pr.get(r), blk, bgN)
                 f_cell(tbPerf, c + 1, r + 1, slotOn.get(5 + (c == 0 ? 0 : 1)) ? f_perfStr(pa, r) : "off", blk, bgN)
-        table.clear(tbPerf, 5, 0, 5, 18)
+        table.clear(tbPerf, 5, 0, 5, 20)
     else
-        table.clear(tbPerf, 0, 0, 5, 18)
+        table.clear(tbPerf, 0, 0, 5, 20)
     if inLedger and not inCxCompact
         int perPage = 10
         int sel = inLedModel == "Ctx Standard" ? 5 : (inLedModel == "Ctx Precision" ? 6 : -1)

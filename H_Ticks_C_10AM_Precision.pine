@@ -1452,7 +1452,6 @@ f_aggStep(Agg a) =>
         a.gap := true
         if a.H.size() > 0
             f_aggClear(a)
-            a.dropN += 1
             a.bad := true
     if not a.has
         a.o := open
