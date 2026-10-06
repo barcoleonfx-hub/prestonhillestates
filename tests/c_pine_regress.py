@@ -257,6 +257,13 @@ fp = plans(it, 6, 'Fib 0.705'); st1 = setups(it)[0]
 ok('consumption: with no parent at the window start the stored Fib candidate WAITS (not consumed)', st1.f['parWait'] is True and len(fp) == 1, (st1.f['parWait'], st1.f['fibSt'], [(m.f['st'], m.f['why']) for m in fp]))
 ok('consumption: ...and arms once a valid parent (the later rejection block) exists', len(fp) == 1 and fp[0].f['areaK'] == 'RB' and fp[0].f['armT'] >= at(9, 40) and fp[0].f['st'] in (2, 3, 4), [(m.f['areaK'], m.f['armT'], m.f['st'], m.f['why']) for m in fp])
 
+# (h) a Fib endpoint that goes stale BEFORE any entry window is not an evaluated candidate: the setup is attributed to the entry window
+STL = [(20006, 20006, 19993, 20004)]
+b, lv = sc(BASE + FIBX + [None] * 3 + STL + [None] * 4, start=(*D, 4, 0))
+it = run(b + stream(b[-1]['t'] + 60000, T(*D, 18, 5), lambda t: (20006, 20006.5, 20005.5, 20006)), inject=lv, inputs=dict(inCmpVar=True, inPRejOn=False, inCxWin='2000-2100', inCxHard='21:00', inCxAgeMin=2000))
+st1 = setups(it)[0]
+ok('funnel: pre-window stale Fib is NOT a candidate; setup attributed to the entry window (rolled); stale still counted as a reason', st1.f['candN'] == 0 and rc(it)[3] == 0 and rc(it)[10] == 1 and 'stale fib' in list(it.g('rjK')), (st1.f['candN'], rc(it), list(it.g('rjK'))))
+
 # =============================================================== 10. target audit
 b, lv = sc(BASE)
 it = run(b, inject=lv + [('ORH', 1, 20050.0)], inject_at={5: [('EQH', 1, 20040.0, at(23, 0) + 86400000)]}, inputs=dict(inCmpVar=False))

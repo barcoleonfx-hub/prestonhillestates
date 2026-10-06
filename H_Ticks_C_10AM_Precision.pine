@@ -1484,8 +1484,9 @@ f_cxFibDetect(Setup st, Agg A) =>
                 f_fn(7, 8)
             else if trav or not (bull ? eR < close : eR > close)
                 st.fibSt := 3
-                st.candN += 1
-                st.candCat := st.candCat == "" ? "filter" : st.candCat
+                if st.winSeen
+                    st.candN += 1
+                    st.candCat := st.candCat == "" ? "filter" : st.candCat
                 f_why("stale fib", "Fib: " + str.tostring(inFibE, "#.000") + " (" + str.tostring(eR, format.mintick) + ") was already traversed before the swing anchor (confirmed " + f_hm(st.fibKn) + ") existed; no back-dated entry")
                 f_fn(SC_PRE, 12)
                 f_fn(7, 12)
@@ -1498,8 +1499,9 @@ f_cxFibTrack(Setup st) =>
         float eR = math.round_to_mintick(e)
         if st.dir > 0 ? low <= eR : high >= eR
             st.fibSt := 3
-            st.candN += 1
-            st.candCat := st.candCat == "" ? "filter" : st.candCat
+            if st.winSeen
+                st.candN += 1
+                st.candCat := st.candCat == "" ? "filter" : st.candCat
             f_why("stale fib", "Fib: price traded to " + str.tostring(eR, format.mintick) + " after the anchor was confirmed (" + f_hm(st.fibKn) + ") and before an order could be armed")
             f_fn(SC_PRE, 12)
             f_fn(7, 12)
