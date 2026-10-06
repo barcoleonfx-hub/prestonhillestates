@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 import c_model as M
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SRC = open(os.path.join(ROOT, 'H_Ticks_C_10AM_Precision.pine'), encoding='utf-8').read()
+SRC = open(os.path.join(ROOT, 'H_Ticks_C_Legacy_10AM.pine'), encoding='utf-8').read()   # sections 1-2 check the LEGACY script; section 3 re-binds SRC to the contextual script
 OLD = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'c_before_precision.pine'), encoding='utf-8').read() if os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'c_before_precision.pine')) else None
 CODE = '\n'.join(l for l in SRC.split('\n') if not l.strip().startswith('//'))
 res = []
@@ -26,11 +26,11 @@ def fn_text(src, name):
 defs = set(re.findall(r'^(f_\w+)\(', CODE, re.M)); calls = set(re.findall(r'\b(f_\w+)\(', CODE))
 chk('every called f_ function is defined', not (calls - defs))
 chk('no unused helper functions', not [d for d in defs if len(re.findall(r'\b' + d + r'\(', CODE)) < 2])
-chk('indicator (not a strategy), exact title', 'indicator("H Ticks — Powell Model C"' in SRC and 'strategy(' not in CODE)
+chk('indicator (not a strategy), exact title', 'indicator("H Ticks — 10AM Precision Model C (Legacy)"' in SRC and 'strategy(' not in CODE)
 chk('all time logic uses America/New_York; no timenow / wall-clock', 'const string TZ = "America/New_York"' in SRC and 'timenow' not in CODE)
 chk('1-minute standard candles only, warning otherwise', 'timeframe.multiplier == 1' in CODE and 'chart.is_standard' in CODE and 'needs STANDARD 1-MINUTE candles' in CODE)
-chk('only one request.* call: the optional SMT peer on the SAME 1m timeframe (no HTF request, no lookahead); HTF candles are self-aggregated', CODE.count('request.') == 1 and 'request.security(inSmt != "Off" ? inSmtSym : syminfo.tickerid, "1"' in CODE and 'lookahead' not in CODE)
-chk('state changes only on confirmed bars', 'barstate.isconfirmed' in CODE and 'if supported and cfgAll and barstate.isconfirmed' in CODE)
+chk('every request / no HTF series: legacy indicator uses no request.* calls (nothing to repaint)', 'request.' not in CODE)
+chk('state changes only on confirmed bars', 'barstate.isconfirmed' in CODE and 'if supported and cfgOk and barstate.isconfirmed' in CODE)
 chk('alerts only on confirmed realtime bars', 'barstate.isrealtime and aMsgs.size() > 0' in CODE and 'alert.freq_once_per_bar_close' in CODE)
 # shared setup / precision timing
 chk('open captured only when the 10:00 candle is processed (at its close); missing 10am candle -> ineligible', 'if m != openT' in CODE and 'missing 10am candle' in CODE)
@@ -53,13 +53,13 @@ chk('precision pending order cancel rules: expiry and target-before-entry only; 
 chk('Fixed-R target is a separate labelled mode', 'inPTgt == "Fixed R"' in CODE and '"fixed-R"' in CODE)
 chk('retries are not implemented (documented)', 'Precision retries are NOT implemented' in CODE)
 chk('whole-contract sizing only (int contracts, floor)', 'int inQty = input.int' in CODE and 'math.floor(inCashRisk' in CODE)
-chk('both variants stay independent: separate slot, funnel, trades and statistics per slot', 'const int NS = 9' in CODE and 't.slot == slot' in CODE and 'slotNm' in CODE)
-chk('only the selected variant raises alerts', 'if slot == selSlot' in CODE and 'int selSlot = isCx ? (selVar == 1 ? 6 : 5) : (selVar == 1 ? 4 : stdSel)' in CODE)
+chk('both variants stay independent: separate slot, funnel, trades and statistics per slot', 'const int NS = 5' in CODE and 't.slot == slot' in CODE and 'slotNm' in CODE)
+chk('only the selected variant raises alerts', 'if slot == selSlot' in CODE and 'int selSlot = selVar == 1 ? 4 : stdSel' in CODE)
 chk('STD / PREC labels, pending vs filled vs cancelled styles', all(x in CODE for x in ('"STD"', '"PREC"', 'PENDING', 'FILLED', 'CANCELLED', 'line.style_dashed', 'line.style_dotted')))
-chk('expired / unfilled orders create no Trade (trades are pushed only at fill)', len(re.findall(r'trades\.push\(', CODE)) == 2 and 'trades.push(t)' in fn_text(CODE, 'f_fillTry') and 'trades.push(t)' in fn_text(CODE, 'f_cxFillTry'))
+chk('expired / unfilled orders create no Trade (trades are pushed only at fill)', len(re.findall(r'trades\.push\(', CODE)) == 1 and 'trades.push(t)' in fn_text(CODE, 'f_fillTry'))
 chk('standard entry models A/B/C/C-wick still present (mapped into Standard)', all(x in CODE for x in ('f_waitB', 'f_waitC', 'f_cReject', 'A: plain retest', 'B: retest + iFVG', 'C: Fib overlap + rejection', 'Rejection wick (experimental)')))
 chk('f_newDay creates exactly NS models (the runtime error RE10045 on array.get index 4)', len(re.findall(r'Mdl\.new\(slot = \d\)', fn_text(CODE, 'f_newDay'))) == int(re.search(r'const int NS = (\d+)', CODE).group(1)))
-chk('paste file exists (size reported, TradingView limit NOT verified)', os.path.exists(os.path.join(ROOT, 'H_Ticks_C_10AM_Precision_paste.pine')))
+chk('legacy paste file exists', os.path.exists(os.path.join(ROOT, 'H_Ticks_C_Legacy_10AM_paste.pine')))
 if OLD:
     for f in ['f_posStep', 'f_waitB', 'f_waitC', 'f_cReject', 'f_exceeded', 'f_fibLvl', 'f_invalidate', 'f_cond']:
         chk(f'Standard {f} byte-identical to the pre-Precision version', fn_text(OLD, f) == fn_text(SRC, f))
@@ -227,13 +227,19 @@ chk('COSTS: commission per contract per side and adverse slippage reduce net R b
 
 
 # ---------------- contextual preset: text checks ----------------
-print('--- contextual / legacy-preservation checks ---')
+print('--- legacy preservation (legacy script vs the pre-contextual source) ---')
 BASE = open(os.path.join(ROOT, 'tests', 'c_before_powell.pine'), encoding='utf-8').read()
 for f in ['f_finish', 'f_plan', 'f_cond', 'f_posStep', 'f_invalidate', 'f_waitB', 'f_waitC', 'f_cReject', 'f_pivotUpdate', 'f_precTrig', 'f_rejectP', 'f_planP', 'f_waitP', 'f_modelStep', 'f_confirm', 'f_dayStep', 'f_finalize', 'f_exceeded', 'f_fibLvl']:
     chk(f'Legacy 10am {f} byte-identical to the pre-contextual version', fn_text(BASE, f).strip() == fn_text(SRC, f).strip())
-chk('Legacy preset selectable; contextual is a separate preset input appended at the END of the legacy inputs', 'options = ["Contextual (Powell guide)", "Legacy 10am"]' in CODE and CODE.index('inVisOR = input') < CODE.index('inPreset = input'))
-chk('legacy slots are off when contextual is selected and vice versa', 'not isCx and stdOn' in CODE and 'isCx and stdOn, isCx and precOn' in CODE)
-chk('f_newDay creates NS models', len(re.findall(r'Mdl\.new\(slot = \d\)', fn_text(CODE, 'f_newDay'))) == 9)
+print('--- contextual script ---')
+SRC = open(os.path.join(ROOT, 'H_Ticks_C_10AM_Precision.pine'), encoding='utf-8').read()
+CODE = '\n'.join(l for l in SRC.split('\n') if not l.strip().startswith('//'))
+_d = set(re.findall(r'^(f_\w+)\(', CODE, re.M)); _c = set(re.findall(r'\b(f_\w+)\(', CODE))
+chk('contextual: every called f_ function is defined, none unused', not (_c - _d) and not [d for d in _d if len(re.findall(r'\b' + d + r'\(', CODE)) < 2])
+chk('contextual: indicator (not a strategy), title', 'indicator("H Ticks — Powell Model C"' in SRC and 'strategy(' not in CODE)
+chk('contextual: only one request.* call (SMT peer, same 1m timeframe, no lookahead)', CODE.count('request.') == 1 and 'lookahead' not in CODE)
+chk('contextual: legacy engine removed (token limit CE10117) - no legacy state left', not any(w in CODE for w in ('f_dayStep', 'f_waitP', 'dy.mExt', 'inPreset', 'isCx')))
+chk('contextual: no built-in name shadowing (bid)', not re.search(r'\bint bid\b', CODE))
 chk('NY clock: trading day = date of (time + 6h); aggregation buckets from minutes since 18:00 NY', 'time + 21600000' in CODE and 'ms18 = (mOpen - 1080 + 1440) % 1440' in CODE)
 chk('levels are statused BEFORE new levels are created on the same candle', CODE.index('f_cxLvlStatus()\n    Setup st = f_cxCur()') < CODE.index('f_cxLevelsBar()\n    Agg A = f_cxSrc()'))
 chk('sweep needs the level known before the sweeping candle began', 'lv.known <= lv.swOpen' in CODE and 'time >= lv.known' in CODE)

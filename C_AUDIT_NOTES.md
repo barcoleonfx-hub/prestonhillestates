@@ -1,7 +1,15 @@
 # Powell Model C - audit patch notes
 
 Source: `H_Ticks_C_10AM_Precision.pine` (paste copy: `H_Ticks_C_10AM_Precision_paste.pine`). Pre-audit copy: `tests/c_before_audit.pine`.
-**Not compiled in TradingView, not chart-tested.** No features were removed for size; no compiler or runtime size limit was identified (the TradingView docs are unreachable from this environment).
+**Not compiled in TradingView, not chart-tested.**
+
+## Compiler limit found, and the split it forced (CE10117)
+TradingView rejected the combined script: *"Compiled code contains too many tokens: 122572. The limit is 100256 (CE10117)"*. That is the actual limit; it was addressed by **splitting, not by deleting features**:
+* `H_Ticks_C_10AM_Precision.pine` (+ `_paste`) = **Powell Model C, Contextual only**. The legacy engine, the preset input and all legacy-only inputs/state/tables/drawings were removed from it. Estimated size ~80k tokens (proportional to stripped size 96.7 KB vs 148.2 KB at 122,572 tokens) - **an estimate, not a measurement**.
+* `H_Ticks_C_Legacy_10AM.pine` (+ `_paste`) = the **Legacy 10am** engine as its own indicator ("H Ticks - 10AM Precision Model C (Legacy)"): the pre-contextual source (70.5 KB stripped, which compiled before) plus the gap-policy correction. Its logic is otherwise unchanged (byte-compared in `tests/c_check.py`).
+* Consequence: Legacy is **no longer a preset inside one script**; it is a second indicator. The contextual script's inputs were renumbered (legacy inputs removed), so **reset its settings to defaults** after pasting.
+* Also fixed: warning CW10011 (a local named `bid` shadowed a built-in) - renamed.
+The remaining entries below describe the audit changes; items for the Legacy engine apply to the legacy script.
 
 ## Changes by issue
 | # | Change | Functions |
@@ -18,16 +26,16 @@ Source: `H_Ticks_C_10AM_Precision.pine` (paste copy: `H_Ticks_C_10AM_Precision_p
 ## Historical results that may change
 * **Legacy 10am and Contextual alike:** any pending order whose next candle opened beyond the stop (Precision) or beyond the manipulation/setup extreme (Standard) used to be silently cancelled (no trade). It is now a flagged gap trade or a normal fill, so *trade counts, losses and drawdown can only get worse or stay equal* for those days. This is an execution-safety correction, not a preserved baseline; the byte comparison for `f_fillTry`, `f_fillStep`, `f_fillStepP`, `f_perf` was intentionally dropped.
 * Contextual: Precision-Fib orders that were armed with no parent area now disappear (rejected); Fib endpoints confirmed before the window now arm at the window (previously lost); rejection triggers that relied on a self-created or not-yet-known parent, or on a candle opening before the CISD, disappear; breakers change definition; HTF candles with missing minutes (strict mode) disappear, which can remove range-state filters/POIs and, in thin sessions, many candles - use `inCxMiss` to relax; Sunday-evening data now feeds levels/ranges/aggregation (PDH/PDL, Asia range, 18:00 open now include it; the Daily level appears at 17:00).
-* All other Legacy decision functions are unchanged (still byte-compared in `tests/c_check.py`).
+* All other Legacy decision functions are unchanged (byte-compared in `tests/c_check.py`, legacy script vs `tests/c_before_powell.pine`).
 
 ## Test evidence
 * `tests/c_pine_regress.py` - **63 scenarios pass, executing the actual Pine source** through `tests/pine_interp.py` (my own tree-walking interpreter of the Pine subset, using the third-party pynescript parser; strict on array bounds, undeclared names, and writes to globals from functions). Covers: gap through entry+stop (Standard, Precision, Legacy), gap through entry only, parent pre-existence and frozen id, CISD->parent->rejection sequence, Sunday context vs Mon-Fri entries, aggregation completeness (missing minute, tolerance, truncated first bucket, full trading day with the break, unexplained hole and range-state reset), pre-window Fib (stored, armed at open, stale, no substitution), breaker (full / wick-only / missing A / mirrored short), Precision parent requirement. Long and mirrored short where applicable.
 * 12 "pre-audit" comparisons are **skipped**: the old source takes >30 min to parse; the old behaviour is evidenced instead by the Python legacy model (`tests/c_model.py` before the change) and the text diff.
-* `tests/c_check.py` 140/140 (text checks + legacy-model scenarios, updated for the corrections); `tests/c_ctx_check.py` 102/102 is a **stale** model of the contextual engine (it still has the old breaker/gap/Fib logic) and is supplementary only.
+* `tests/c_check.py` 142/142 (text checks + legacy-model scenarios, updated for the corrections); `tests/c_ctx_check.py` 102/102 is a **stale** model of the contextual engine (it still has the old breaker/gap/Fib logic) and is supplementary only.
 
 ## Remaining limitations
 * The interpreter is not TradingView: Pine built-in semantics (series, `var`, `ta.*`, `request.security`, drawing limits, runtime error rules) are my re-implementation. **Compilation and chart behaviour remain unverified.**
 * Not executed at all: `f_drawTables`, `f_cxTables` (10 KB each; the parser needs >90 min per function and did not finish), the drawing dispatch, `f_cxDrawPlan/Setup/Levels` (parsed, but never run with draw enabled), alerts text content, the legacy Python-model-only paths of `f_cxFilters` beyond those in scenarios, SMT with real peer data, Asia/London/PO3 beyond the Asia range test.
 * TradingView builds no bar for a minute without trades, so strict completeness can drop candles in thin sessions; the tolerance input trades that off. Early-close days are treated as unexplained holes.
 * Gap policy is a disclosed conservative bound, not a model of real fills; touch-fill and OHLC ambiguity limits from the guide still apply. Results from a handful of days prove nothing about an edge.
-* Script size ~145 KB stripped; whether TradingView accepts it is unverified.
+* The ~80k-token figure for the contextual script is a proportional estimate; TradingView's own count has not been seen.

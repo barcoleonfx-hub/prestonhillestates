@@ -21,18 +21,43 @@ const string TZ = "America/New_York"
 const int NS = 9
 const int NF = 15
 const string G1 = "1. Times (New York, DST-aware)"
+const string G2 = "2. Manipulation and reversal"
+const string G3 = "3. Optional liquidity-sweep filter (OFF = baseline)"
 const string G4 = "4. Entry model"
+const string G5 = "5. Stop, target, risk"
 const string G6 = "6. Simulation assumptions"
 const string G7 = "7. Display"
 const string G8 = "8. Alerts"
 const string G0 = "0. Execution variant"
+const string G9 = "9. Precision variant (Rejection / Sweep)"
 
 // ───────────────────────────────────────────── INPUTS ─────────────────────────────────────────────
 string inVariant = input.string("Standard", "Execution variant (selected: alerts, planned lines)", options = ["Standard", "Precision"], group = G0, tooltip = "Standard = the 10am reversal / retest execution (entry models A, B, C below). Precision = wait for a local rejection / secondary sweep after the same setup, with a local stop.")
 bool inShowBoth = input.bool(true, "Display both variants on the chart (when both are simulated)", group = G0)
 bool inCmpVar = input.bool(false, "Compare both variants' statistics (simulate Standard AND Precision)", group = G0, tooltip = "OFF = only the selected variant is simulated, so Standard behaves exactly as before. ON = both are simulated independently with separate equity and statistics.")
 string inORs = input.session("0930-1000", "Opening range (candle OPEN times, end exclusive)", group = G1, tooltip = "Default 09:30-09:59. Frozen when the 10:00 candle closes. Used only for the optional sweep filter and the liquidity target.")
+string inMan = input.session("1000-1010", "10am open candle / initial-manipulation window (candle OPEN times, end exclusive)", group = G1, tooltip = "The START is the candle whose exact open is captured (10:00). The first qualifying manipulation must be on a candle that opens in this window (default 10:00-10:09).")
+string inCut = input.session("1045-1100", "Entry cutoff -> time exit (NY)", group = G1, tooltip = "FIRST time = entry cutoff: pending entries are cancelled, no new fills. SECOND time = any remaining position is closed at that candle's open (reported as a time exit).")
+string inThr = input.string("ATR", "Manipulation threshold mode", options = ["ATR", "Fixed points"], group = G2, tooltip = "Initial research setting, NOT optimised. ATR mode uses ATR frozen from the last completed candle before the 10:00 open, so the manipulation can never inflate its own threshold.")
+float inFixed = input.float(15.0, "Fixed threshold (points)", minval = 0.25, step = 0.25, group = G2)
+float inAtrM = input.float(0.5, "ATR multiple", minval = 0.05, step = 0.05, group = G2)
+int inAtrLen = input.int(14, "ATR length (1m)", minval = 1, group = G2)
+int inRevN = input.int(2, "Consecutive closes through the open to confirm the reversal", minval = 1, maxval = 5, group = G2, tooltip = "Counted only on candles AFTER the manipulation candle; the count resets if a close fails the condition.")
+string inAmbInit = input.string("Skip day", "A first candle that crosses both thresholds", options = ["Skip day", "Use larger excursion"], group = G2)
+bool inMaxOn = input.bool(false, "Maximum manipulation-size filter (OFF = baseline)", group = G2, tooltip = "Size is ALWAYS recorded in points and ATR multiples. When ON, a candidate larger than the limit is invalidated at reversal confirmation.")
+float inMaxPts = input.float(60.0, "Maximum size (points, used in Fixed mode)", minval = 1.0, group = G2)
+float inMaxAtr = input.float(4.0, "Maximum size (ATR multiples, used in ATR mode)", minval = 0.1, group = G2)
+bool inSweep = input.bool(false, "Require a post-10am liquidity sweep", group = G3, tooltip = "Short: price must exceed an eligible HIGH by the minimum, then close back below it by the reversal confirmation. Long mirrors. Levels must exist BEFORE they are swept; a sweep before 10:00 is context only. Asia/London levels are NOT implemented.")
+int inSweepTk = input.int(1, "Minimum sweep distance (ticks)", minval = 1, group = G3)
+bool inLvOR = input.bool(true, "Eligible: frozen opening-range high/low", group = G3)
+bool inLvPD = input.bool(true, "Eligible: previous completed regular-session high/low (09:30-16:00)", group = G3, tooltip = "Used only when that session had all 390 one-minute candles.")
+string inModel = input.string("A: plain retest", "Selected entry model (alerts + planned lines)", options = ["A: plain retest", "B: retest + iFVG", "C: Fib overlap + rejection"], group = G4)
+bool inCompare = input.bool(false, "Comparison mode: simulate A, B, C and C-wick independently", group = G4, tooltip = "OFF = only the selected model is simulated. ON = every model keeps its own independent statistics. Only the selected model raises alerts.")
+string inCStop = input.string("Manipulation extreme", "Model C stop policy", options = ["Manipulation extreme", "Rejection wick (experimental)"], group = G4, tooltip = "The wick-stop variant is EXPERIMENTAL and always reported as its own column (C-wick).")
 bool inStrict = input.bool(false, "Stricter fill: require trade-through (1 tick beyond the limit)", group = G4, tooltip = "OFF = a touch fills (a simulation assumption, not guaranteed execution).")
+int inBuf = input.int(2, "Stop buffer (ticks)", minval = 0, group = G5)
+int inMaxStop = input.int(80, "Maximum stop distance (ticks); wider setups are REJECTED", minval = 1, group = G5)
+string inTgt = input.string("1R", "Target", options = ["1R", "2R", "Opposing liquidity"], group = G5, tooltip = "Opposing liquidity = nearest frozen opening-range / previous-session level beyond the entry on the profit side; no eligible level = the trade is rejected and counted.")
 string inSizeMode = input.string("Fixed contracts", "Position sizing", options = ["Fixed contracts", "Fixed cash risk"], group = G6, tooltip = "Fixed cash risk uses the SAME cash risk for every trade (whole contracts only, rounded DOWN; a setup needing less than one contract is rejected). Use it when comparing variants with very different stop sizes.")
 int inQty = input.int(1, "Contracts (Fixed contracts mode, whole contracts)", minval = 1, group = G6)
 float inCashRisk = input.float(500.0, "Cash risk per trade (USD, Fixed cash risk mode)", minval = 10.0, step = 50.0, group = G6)
@@ -46,19 +71,38 @@ int inLedPage = input.int(1, "Ledger page", minval = 1, group = G7)
 string inLedModel = input.string("All", "Ledger model", options = ["All", "A", "B", "C", "C-wick", "Precision", "Ctx Standard", "Ctx Precision"], group = G7)
 int inDraw = input.int(5, "Days drawn on the chart", minval = 1, maxval = 20, group = G7)
 bool inVisPlan = input.bool(true, "Draw planned entry / stop / target (selected model)", group = G7)
+bool inVisFib = input.bool(true, "Draw frozen Fib zone, levels and rejection wick", group = G7)
+bool inVisFvg = input.bool(true, "Draw the frozen FVG (model B)", group = G7)
+bool inVisPrec = input.bool(true, "Draw the Precision trigger wick and swept local level", group = G7)
+bool inVisBand = input.bool(false, "Draw the Precision band around the 10am open", group = G7)
 bool inDebug = input.bool(false, "Debug: log each day's result to Pine Logs", group = G7)
+string inPTrig = input.string("Rejection", "Precision trigger", options = ["Rejection", "Secondary sweep", "Either"], group = G9, tooltip = "Rejection = a confirmed rejection candle in the precision area. Secondary sweep = a confirmed local pivot (formed after the reversal) is exceeded and the candle closes back, with the same rejection conditions. Either = whichever comes first; both on one candle is labelled Sweep + Rejection.")
+float inBand = input.float(4.0, "Precision band half-width (ticks around the 10am open)", minval = 0.0, step = 1.0, group = G9, tooltip = "A test parameter, not an optimised value.")
+bool inPFib = input.bool(false, "Require the band to overlap the frozen 61.8-79% Fib zone", group = G9, tooltip = "Uses the same frozen, causal displacement-leg anchors as model C. The trigger candle must then interact with the band-and-zone overlap.")
+bool inPIfvg = input.bool(false, "Require a confirmed iFVG inversion first (model B rules)", group = G9, tooltip = "The latest eligible FVG is frozen at the reversal confirmation; a later close through it must happen BEFORE a trigger candle can qualify (the inverting candle itself cannot trigger).")
+float inWick = input.float(0.40, "Minimum rejection-wick share of the candle range", minval = 0.05, maxval = 0.95, step = 0.05, group = G9)
+int inPvL = input.int(1, "Local pivot: candles to the left", minval = 1, maxval = 5, group = G9)
+int inPvR = input.int(1, "Local pivot: candles to the right", minval = 1, maxval = 5, group = G9, tooltip = "A pivot becomes known only when the last right-side candle has CLOSED; it can be swept only by a later candle.")
+float inMinR = input.float(5.0, "Minimum planned reward:risk", minval = 0.5, step = 0.5, group = G9, tooltip = "Checked on the ROUNDED entry, stop and target. The nearest eligible target below this is skipped; no farther target is substituted.")
+int inPStopCap = input.int(40, "Maximum Precision stop distance (ticks)", minval = 1, group = G9, tooltip = "Over the cap = rejected, never compressed.")
+int inPBuf = input.int(2, "Precision stop buffer (ticks)", minval = 0, group = G9)
+int inPExp = input.int(3, "Precision order expiry (subsequent chart candles)", minval = 1, group = G9)
+string inPTgt = input.string("Opposing liquidity", "Precision target", options = ["Opposing liquidity", "Fixed R"], group = G9, tooltip = "Opposing liquidity = nearest UNSWEPT frozen opening-range / previous-session level beyond the entry on the profit side, known when the order is armed. Fixed R is a separate mode and is labelled as such.")
+float inPFixR = input.float(5.0, "Fixed R multiple (Fixed R mode)", minval = 0.5, step = 0.5, group = G9)
 bool inAlSetup = input.bool(true, "Alert: setup ready (reversal confirmed)", group = G8)
 bool inAlArm = input.bool(true, "Alert: order armed (simulated limit, NOT a fill)", group = G8)
 bool inAlFill = input.bool(true, "Alert: simulated fill", group = G8)
 bool inAlInv = input.bool(true, "Alert: invalidation / cancellation", group = G8)
 bool inInfo = input.bool(true, "Show the info panel (left)", group = G7)
-const string G10 = "10. Window and source timeframe (Contextual)"
+bool inVisOR = input.bool(true, "Draw the opening-range box", group = G7)
+const string G10 = "10. Preset, window, source timeframe (Contextual)"
 const string G11 = "11. Context levels (Contextual)"
 const string G12 = "12. Bias and optional filters (Contextual)"
 const string G13 = "13. Price areas (Contextual)"
 const string G14 = "14. Standard execution (Contextual)"
 const string G15 = "15. Precision execution (Contextual)"
 const string G16 = "16. Daily risk sequence and display (Contextual)"
+string inPreset = input.string("Contextual (Powell guide)", "Preset", options = ["Contextual (Powell guide)", "Legacy 10am"], group = G10, tooltip = "Contextual = the new level / sweep / CISD / price-area engine described in the Powell Model C guide (our mechanical interpretation). Legacy 10am = the earlier 10:00 open retest engine, kept unchanged for comparison. Sections 0-9 apply to Legacy; sections 10-16 apply to Contextual.")
 string inCxWin = input.session("0930-1100", "Contextual window: orders may be armed from the FIRST time until the SECOND (NY, candle open times)", group = G10, tooltip = "A setup (sweep + reversal) that formed earlier in the trading day stays eligible; no fresh sweep is required after the window opens.")
 string inCxHard = input.string("11:00", "Hard exit (NY HH:MM, candle open)", group = G10, tooltip = "Any open position is closed at the open of the first candle at/after this time. Must not be earlier than the window end.")
 string inCxTf = input.string("5m", "Source timeframe for sweeps, CISD, areas and swings (built from 1m candles)", options = ["1m", "5m", "15m"], group = G10, tooltip = "All higher-timeframe candles are aggregated from the 1m chart and used only after they COMPLETE, so nothing can repaint or leak.")
@@ -207,10 +251,21 @@ type Mdl
     float lim = na
     float stp = na
     float tgt = na
+    float fT = na
+    float fB = na
+    int fCT
+    bool fInv = false
     Trade tr
     int qty = 1
     float plannedR = na
     string tgtType = ""
+    string trigNm = ""
+    int tT
+    float tHi = na
+    float tLo = na
+    float tBase = na
+    float sLvl = na
+    int sT
     int dir
     int dayKey
     int sid
@@ -230,14 +285,73 @@ type Mdl
     int rT
     int parId = 0
 
-// Per NY calendar day bookkeeping (coverage only). st: 0 waiting, 1 window seen, 9 ineligible. status: 0 complete, 1 partial, 2 no window start candle, 4 no levels.
+// Day state. st: 0 WAITING, 1 OPEN_CAPTURED, 2 MANIPULATION_QUALIFIED, 3 REVERSAL_CONFIRMED, 6 COMPLETE, 7 EXPIRED, 8 INVALIDATED, 9 INELIGIBLE.
 type Day
     int key
     bool active = true
     int status = 0
     int st = 0
     string why = ""
+    float O = na
+    int oT
+    float atrPre = na
+    float thr = na
+    float orH = na
+    float orL = na
+    int orN = 0
+    float pdH = na
+    float pdL = na
+    float rthH = na
+    float rthL = na
+    int rthN = 0
     int bars10 = 0
+    int dir = 0
+    float mExt = na
+    int mExtT
+    float oppX = na
+    int qBar = -1
+    int qT
+    int cnt = 0
+    int confBar = -1
+    int confT
+    float mPts = na
+    float mAtr = na
+    bool preSweep = false
+    float swpLvl = na
+    int swpT
+    string swpNm = ""
+    array<float> lvlP
+    array<int> lvlT
+    float fbuT = na
+    float fbuB = na
+    int fbuC
+    float fbuMin = na
+    float fbeT = na
+    float fbeB = na
+    int fbeC
+    float fbeMax = na
+    bool fibOk = false
+    float fibLo = na
+    float fibHi = na
+    bool rejOk = false
+    int rejT
+    float rejHi = na
+    float rejLo = na
+    float rejBase = na
+    float rejEntry = na
+    float parLo = na
+    float parHi = na
+    float bdLo = na
+    float bdHi = na
+    float pvP = na
+    int pvBar
+    int pvKn
+    int pvT
+    bool pvDead = false
+    float poHi = na
+    float poLo = na
+    array<Mdl> ms
+
 
 // ──────────────────────────────── CONTEXTUAL ENGINE TYPES ────────────────────────────────
 // Aggregated candles are built from the 1m chart and used only after they COMPLETE (history arrays hold completed candles only).
@@ -472,7 +586,11 @@ f_finish(Mdl md, int outcome, float exitPx, int exitTime, string note) =>
     true
 
 f_newDay(int key, int dow, Day prev) =>
-    Day d = Day.new(key = key, active = dow >= dayofweek.monday and dow <= dayofweek.friday)
+    Day d = Day.new(key = key, active = dow >= dayofweek.monday and dow <= dayofweek.friday, lvlP = array.new_float(4, na), lvlT = array.new_int(4, na), ms = array.from(Mdl.new(slot = 0), Mdl.new(slot = 1), Mdl.new(slot = 2), Mdl.new(slot = 3), Mdl.new(slot = 4), Mdl.new(slot = 5), Mdl.new(slot = 6), Mdl.new(slot = 7), Mdl.new(slot = 8)))
+    if not na(prev)
+        if prev.rthN >= 390
+            d.pdH := prev.rthH
+            d.pdL := prev.rthL
     d
 
 // ═════════════════════════════════════ CONTEXTUAL ENGINE ═════════════════════════════════════
@@ -574,13 +692,13 @@ f_aggStep(Agg a) =>
     int ms18 = (mOpen - 1080 + 1440) % 1440
     int span = a.n >= 1440 ? 1440 : a.n
     int idx = a.n >= 1440 ? 0 : int(math.floor(ms18 / a.n))
-    int bkt = tdk * 10000 + idx
+    int bid = tdk * 10000 + idx
     int startMs = idx * span
     int endMs = math.min((idx + 1) * span, 1380)
     int prevM = na(pCloseT) ? -1 : hour(pCloseT - chartMs, TZ) * 60 + minute(pCloseT - chartMs, TZ)
     int missed = na(pCloseT) ? 0 : int(math.round((time - pCloseT) / chartMs))
     bool hole = missed > inCxMiss and prevM != 1019
-    if a.has and bkt != a.id
+    if a.has and bid != a.id
         // the previous bucket never saw its last candle
         bool okp = a.firstMs - a.idx * span <= inCxMiss and (math.min((a.idx + 1) * span, 1380) - 1) - a.lastMs <= inCxMiss and a.cnt >= (math.min((a.idx + 1) * span, 1380) - a.idx * span) - inCxMiss and not a.gap
         f_aggClose(a, okp)
@@ -596,7 +714,7 @@ f_aggStep(Agg a) =>
         a.c := close
         a.t0 := time
         a.tc := time_close
-        a.id := bkt
+        a.id := bid
         a.idx := idx
         a.cnt := 1
         a.firstMs := ms18
@@ -1801,9 +1919,28 @@ if supported and cfgAll and barstate.isconfirmed
     aMsgs.clear()
     for q = 0 to 4
         evK.set(q, 0)
+    bufH.push(high)
+    bufL.push(low)
+    bufI.push(bar_index)
+    bufT.push(time)
+    while bufH.size() > 12
+        bufH.shift()
+        bufL.shift()
+        bufI.shift()
+        bufT.shift()
+    if mOpen >= 960 and (na(pM) or pM < 960)
+        sHi := high
+        sLo := low
+    else
+        sHi := na(sHi) ? high : math.max(sHi, high)
+        sLo := na(sLo) ? low : math.min(sLo, low)
+    pM := mOpen
     if na(cur) or cur.key != dkey
         if not na(cur)
-            f_cxFinalize(cur, pClose, pCloseT)
+            if isCx
+                f_cxFinalize(cur, pClose, pCloseT)
+            else
+                f_finalize(cur, pClose, pCloseT)
             if cur.active
                 lastAct := cur
         cur := f_newDay(dkey, dowN, lastAct)
@@ -1814,7 +1951,10 @@ if supported and cfgAll and barstate.isconfirmed
             if na(firstKey)
                 firstKey := dkey
             lastKey := dkey
-    f_cxBar(cur)
+    if isCx
+        f_cxBar(cur)
+    else if cur.active
+        f_dayStep(cur)
     pClose := close
     pCloseT := time_close
     if barstate.isrealtime and aMsgs.size() > 0
@@ -2249,14 +2389,19 @@ else if drawNow
         for i = nd - 1 to 0
             Day dd = days.get(i)
             if dd.active and shown < inDraw
+                if not isCx
+                    f_drawDay(dd)
                 shownKeys.push(dd.key)
                 shown += 1
-    if inCxVisCtx
-        f_cxDrawLevels()
-        for q in sets
-            if shownKeys.includes(q.dayKey) and (inCxHist or q.dayKey == cur.key)
-                f_cxDrawSetup(q)
-    for md in plans
-        if shownKeys.includes(md.dayKey) and (inCxHist or md.dayKey == cur.key) and slotOn.get(md.slot) and inVisPlan and (inShowBoth or md.slot == selSlot)
-            f_cxDrawPlan(md)
-    f_cxTables()
+    if isCx
+        if inCxVisCtx
+            f_cxDrawLevels()
+            for q in sets
+                if shownKeys.includes(q.dayKey) and (inCxHist or q.dayKey == cur.key)
+                    f_cxDrawSetup(q)
+        for md in plans
+            if shownKeys.includes(md.dayKey) and (inCxHist or md.dayKey == cur.key) and slotOn.get(md.slot) and inVisPlan and (inShowBoth or md.slot == selSlot)
+                f_cxDrawPlan(md)
+        f_cxTables()
+    else
+        f_drawTables()

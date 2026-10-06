@@ -9,6 +9,7 @@ from c_ctx_helpers import candles, five, flat, stream
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 NEW = open(os.path.join(ROOT, 'H_Ticks_C_10AM_Precision.pine'), encoding='utf-8').read()
 OLD = open(os.path.join(ROOT, 'tests', 'c_before_audit.pine'), encoding='utf-8').read()
+LEGACY = open(os.path.join(ROOT, 'H_Ticks_C_Legacy_10AM.pine'), encoding='utf-8').read()
 PASS = 0; FAIL = []
 SKIPPED = []
 def ok(name, cond, info=''):
@@ -25,7 +26,7 @@ class FakeIt:
 def run(bars, src=NEW, inputs=None, inject=(), draw=False):
     if src is OLD: return FakeIt()   # the pre-audit source takes >30 min to parse with the third-party parser; old behaviour is shown by the Python legacy model + text diff instead
     inputs = dict(inputs or {})
-    if 'inPreset' not in inputs: inputs.setdefault('inCmpVar', True)   # simulate Standard AND Precision
+    if src is NEW: inputs.setdefault('inCmpVar', True)   # simulate Standard AND Precision
     it = Interp(src, inputs)
     for i, b in enumerate(bars):
         it.feed(b, i, last=(draw and i == len(bars) - 1))
@@ -84,23 +85,23 @@ for mirror in (False, True):
     ok('gap: performance table has a gap-event row' + tag, any(True for _ in [0]) and 'Gap-through-entry events' in NEW)
 
 # =============================================================== 1b. gap execution policy (LEGACY 10am preset)
-LEG = dict(inPreset='Legacy 10am', inThr='Fixed points', inVariant='Precision')
+LEG = dict(inThr='Fixed points', inVariant='Precision')
 def prec_day(extra=None, orLow=19970.0):
     spec = {(10, 0): (20000, 20005, 19999, 20003), (10, 1): (20003, 20015, 20002, 20014), (10, 2): (20014, 20016, 19995, 19996),
             (10, 3): (19996, 19998, 19985, 19990), (10, 4): (19990, 19996, 19988, 19992),
             (10, 5): (19994, 20000.5, 19992, 19993), (10, 6): (19994, 19998, 19990, 19992), (10, 7): (19992, 19994, 19969.5, 19972)}
     if extra: spec.update(extra)
     return mkday(2026, 3, 4, spec, orLow=orLow)
-base = run(prec_day(), inputs=LEG)
+base = run(prec_day(), src=LEGACY, inputs=LEG)
 ok('legacy: the normal precision scenario still produces the same trade (target hit)', len(trades(base, 4)) == 1 and trades(base, 4)[0].f['outcome'] == 1, [t.f['outcome'] for t in trades(base, 4)])
-g = run(prec_day(extra={(10, 6): (20010, 20012, 20008, 20009)}), inputs=LEG)
+g = run(prec_day(extra={(10, 6): (20010, 20012, 20008, 20009)}), src=LEGACY, inputs=LEG)
 tg = trades(g, 4)
 ok('legacy: Precision gap through entry AND stop is now a flagged gap trade (was: silently cancelled)', len(tg) == 1 and tg[0].f['gap'] is True and tg[0].f['outcome'] == 4 and abs(tg[0].f['exitPx'] - 20010) < 1e-9, [(t.f['gap'], t.f['outcome'], t.f['exitPx']) for t in tg])
 go = run(prec_day(extra={(10, 6): (20010, 20012, 20008, 20009)}), src=OLD, inputs=LEG)
 ok('legacy: the pre-audit source produced NO trade for that candle (optimistic)', len(trades(go, 4)) == 0)
 # Standard model A (10am open limit): a candle opening beyond the frozen manipulation extreme + stop
-LEGA = dict(inPreset='Legacy 10am', inThr='Fixed points', inVariant='Standard')
-ea = run(prec_day(extra={(10, 5): (20020, 20021, 20019, 20020)}), inputs=LEGA)
+LEGA = dict(inThr='Fixed points', inVariant='Standard')
+ea = run(prec_day(extra={(10, 5): (20020, 20021, 20019, 20020)}), src=LEGACY, inputs=LEGA)
 ta = trades(ea, 0)
 ok('legacy Standard A: opening beyond the extreme+stop is a flagged gap trade (was: silent invalidation)', len(ta) == 1 and ta[0].f['gap'] is True and ta[0].f['outcome'] == 4, [(t.f['gap'], t.f['outcome'], t.f['exitPx']) for t in ta])
 

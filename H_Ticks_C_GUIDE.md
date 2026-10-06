@@ -6,10 +6,10 @@
 candles. **Not compiled in TradingView and not chart-tested** (see "Verification status"). The paste file is about 143 KB stripped; whether TradingView accepts
 that size is **unverified** - if it reports "script too large", say so and a lean build (Contextual only) will be made.
 
-## Presets (Settings -> "10. Preset")
-* **Contextual (Powell guide)** - default, described below (sections 10-16 of the settings).
-* **Legacy 10am** - the earlier 10:00-open retest engine (sections 0-9), byte-identical logic to the previous version (checked by `tests/c_check.py`).
-  Existing saved settings keep working: all new inputs were appended after the old ones.
+## Two scripts (split forced by TradingView's compiled-token limit CE10117)
+* **`H_Ticks_C_10AM_Precision.pine`** - Powell Model C, Contextual only (described below).
+* **`H_Ticks_C_Legacy_10AM.pine`** - the earlier 10:00-open retest engine as its own indicator (logic unchanged except the gap-policy correction).
+  Reset the contextual script's settings to defaults after pasting (its inputs were renumbered).
 
 ## Rule provenance
 | Tag | Meaning |
