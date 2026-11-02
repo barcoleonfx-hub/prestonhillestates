@@ -1,4 +1,4 @@
-// Checks the valuation pop-up: timing, video-to-form reveal, validation, submission, once-per-visitor,
+// Checks the valuation pop-up: timing, video with the form below it, validation, submission, once-per-visitor,
 // the phone layout and reduced motion. Usage: node scripts/e2e-popup.mjs <baseUrl> <email> <password> <screenshotDir>
 import { createRequire } from 'node:module'
 import path from 'node:path'
@@ -22,9 +22,7 @@ await page.waitForTimeout(2500)
 const playing = await page.evaluate(() => { const v = document.querySelector('.vp-media video'); return v && !v.paused && v.currentTime > 0 })
 log('video playing:', playing)
 await page.screenshot({ path: path.join(shots, 'p1-video.png') })
-await page.waitForSelector('.vp-dialog.form-shown', { timeout: 15000 })
-await page.waitForTimeout(1200)
-log('form revealed near the end of the video')
+log('form visible straight away:', await page.locator('.vp-dialog form').isVisible())
 await page.screenshot({ path: path.join(shots, 'p2-form.png') })
 
 await page.click('.vp-actions .btn-gold')
@@ -81,10 +79,8 @@ await p3.mouse.wheel(0, 600); await p3.evaluate(() => window.scrollTo(0, 600))
 await p3.waitForSelector('.vp-dialog', { timeout: 5000 })
 await p3.waitForTimeout(1500)
 await p3.screenshot({ path: path.join(shots, 'p5-phone-video.png') })
-await p3.click('.vp-tools button:has-text("Skip")')
-await p3.waitForTimeout(1300)
 await p3.screenshot({ path: path.join(shots, 'p6-phone-form.png') })
-log('phone: skip shows form:', await p3.locator('.vp-dialog.form-shown').count() === 1)
+log('phone: form visible:', await p3.locator('.vp-dialog form').isVisible())
 await c3.close()
 
 // ---- reduced motion ----
@@ -93,7 +89,7 @@ const p4 = await c4.newPage()
 await p4.goto(`${base}/properties`)
 await p4.waitForSelector('.vp-dialog', { timeout: 8000 })
 await p4.waitForTimeout(500)
-const rm = await p4.evaluate(() => ({ form: !!document.querySelector('.vp-dialog.form-shown'), paused: document.querySelector('.vp-media video').paused }))
+const rm = await p4.evaluate(() => ({ form: !!document.querySelector('.vp-dialog form'), paused: document.querySelector('.vp-media video').paused }))
 log('reduced motion: form straight away & video not playing:', rm.form && rm.paused)
 await c4.close()
 
