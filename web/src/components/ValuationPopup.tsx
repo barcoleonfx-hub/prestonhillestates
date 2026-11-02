@@ -117,6 +117,7 @@ export function ValuationPopup({ paths = DEFAULT_PATHS }: { paths?: string[] }) 
             <source src={small.current ? '/video/wembley-720.mp4' : '/video/wembley-1080.mp4'} type="video/mp4" />
           </video>
           <div className="vp-shade" />
+          <p className="vp-tagline">Serving Harrow <em>since 2004</em></p>
           <div className="vp-brand">
             <LogoMark />
             <span>Preston Hill Estates</span>
