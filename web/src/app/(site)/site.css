@@ -141,4 +141,5 @@
 .portal-links.dark .portal-link .pname { color: #FBFAF3; }
 .acc-links { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; }
 .acc-links a { color: #C9C5B4; }
+.acc-links img[alt="myDeposits"] { height: 46px; padding: 3px; }
 .acc-links img { height: 34px; width: auto; display: block; background: #fff; border-radius: 6px; padding: 4px 6px; }
