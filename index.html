@@ -405,9 +405,8 @@
   .vp-backdrop.in { opacity: 1; }
   .vp-dialog { width: var(--vpw); max-height: calc(100vh - 32px); overflow: auto; background: var(--bg); border-radius: 22px; box-shadow: 0 40px 90px -30px rgba(0,0,0,0.6); transform: translateY(18px) scale(0.98); transition: transform 0.45s cubic-bezier(.2,.65,.2,1); }
   .vp-backdrop.in .vp-dialog { transform: none; }
-  .vp-media { position: relative; height: calc(var(--vpw) * 0.5625); background: #0d0f16; overflow: hidden; transition: height 0.9s cubic-bezier(.2,.65,.2,1); }
-  .vp-dialog.form-shown .vp-media { height: calc(var(--vpw) * 0.32); }
-  .vp-media video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 74%; }
+  .vp-media { position: relative; height: calc(var(--vpw) * 0.38); background: #0d0f16; overflow: hidden; }
+  .vp-media video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 62%; }
   .vp-shade { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(0deg, rgba(10,10,14,0.55) 0%, rgba(10,10,14,0) 45%), linear-gradient(180deg, rgba(10,10,14,0.35) 0%, rgba(10,10,14,0) 30%); }
   .vp-brand { position: absolute; left: 22px; top: 18px; display: flex; align-items: center; gap: 12px; color: #FBFAF3; }
   .vp-brand svg { width: 38px; height: 38px; }
@@ -417,10 +416,6 @@
   .vp-tools { position: absolute; right: 14px; bottom: 14px; display: flex; gap: 8px; }
   .vp-tools button { font: inherit; font-size: 0.74rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #fff; background: rgba(0,0,0,0.45); border: 1px solid rgba(255,255,255,0.28); border-radius: 999px; padding: 8px 14px; cursor: pointer; backdrop-filter: blur(6px); }
   .vp-tools button:hover { background: rgba(0,0,0,0.7); }
-  .vp-dialog.form-shown .vp-skip { display: none; }
-  .vp-formwrap { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.9s cubic-bezier(.2,.65,.2,1); }
-  .vp-dialog.form-shown .vp-formwrap { grid-template-rows: 1fr; }
-  .vp-forminner { overflow: hidden; min-height: 0; }
   .vp-forminner form, .vp-done { padding: 22px 28px 24px; display: flex; flex-direction: column; gap: 14px; }
   .vp-done[hidden] { display: none; }
   .vp-head .label { color: var(--gold-deep); }
@@ -451,12 +446,12 @@
     .vp-backdrop { --vpw: 100vw; place-items: end center; padding: 0; }
     .vp-dialog { border-radius: 22px 22px 0 0; max-height: 92vh; transform: translateY(100%); }
     .vp-backdrop.in .vp-dialog { transform: none; }
-    .vp-dialog.form-shown .vp-media { height: calc(var(--vpw) * 0.36); }
+    .vp-media { height: calc(var(--vpw) * 0.5); }
     .vp-grid { grid-template-columns: 1fr; }
     .vp-forminner form, .vp-done { padding: 18px 18px 22px; }
     .vp-brand span { font-size: 0.95rem; }
   }
-  @media (prefers-reduced-motion: reduce) { .vp-backdrop, .vp-dialog, .vp-media, .vp-formwrap { transition: none !important; } }
+  @media (prefers-reduced-motion: reduce) { .vp-backdrop, .vp-dialog { transition: none !important; } }
 </style>
 
 <!-- ————— shared symbols ————— -->
@@ -836,11 +831,10 @@
     <div class="vp-media">
       <video id="vp-video" muted playsinline preload="none" aria-hidden="true"></video>
       <div class="vp-shade"></div>
-      <div class="vp-brand"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#ph-logo"/></svg><span>22 years on Preston Road.</span></div>
+      <div class="vp-brand"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#ph-logo"/></svg><span>Preston Hill Estates</span></div>
       <button type="button" class="vp-close" aria-label="Close"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
       <div class="vp-tools">
         <button type="button" class="vp-sound" aria-pressed="false">Sound on</button>
-        <button type="button" class="vp-skip">Skip</button>
       </div>
     </div>
     <div class="vp-formwrap">
@@ -946,12 +940,11 @@
     var root = document.getElementById('vp'); if (!root) return;
     var dialog = root.querySelector('.vp-dialog'), video = document.getElementById('vp-video');
     var form = document.getElementById('vp-form'), err = root.querySelector('.vp-error'), done = root.querySelector('.vp-done');
-    var KEY = 'phe_vp_preview', REVEAL = 2.5, lastFocus = null, opened = false;
+    var KEY = 'phe_vp_preview', lastFocus = null, opened = false;
     var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     var phone = window.matchMedia('(max-width: 640px)').matches;
     try { if (sessionStorage.getItem(KEY)) return; } catch (e) {}
 
-    function reveal() { dialog.classList.add('form-shown'); }
     function open() {
       if (opened) return; opened = true;
       lastFocus = document.activeElement;
@@ -960,25 +953,18 @@
       root.hidden = false;
       requestAnimationFrame(function () { root.classList.add('in'); });
       root.querySelector('.vp-close').focus();
-      if (reduced) { reveal(); root.querySelector('.vp-sound').hidden = true; }
-      else { video.preload = 'auto'; var pr = video.play(); if (pr && pr.catch) pr.catch(reveal); }
+      if (reduced) { root.querySelector('.vp-sound').hidden = true; }
+      else { video.preload = 'auto'; var pr = video.play(); if (pr && pr.catch) pr.catch(function () {}); }
     }
     function close() {
       try { sessionStorage.setItem(KEY, '1'); } catch (e) {}
       root.classList.remove('in'); video.pause();
       setTimeout(function () { root.hidden = true; if (lastFocus && lastFocus.focus) lastFocus.focus(); }, 350);
     }
-    video.addEventListener('timeupdate', function () { if (video.duration && video.duration - video.currentTime <= REVEAL) reveal(); });
-    video.addEventListener('ended', reveal);
-    video.addEventListener('error', reveal);
     root.querySelector('.vp-close').addEventListener('click', close);
     root.querySelector('.vp-later').addEventListener('click', close);
     root.querySelector('.vp-done-close').addEventListener('click', close);
     root.addEventListener('mousedown', function (e) { if (e.target === root) close(); });
-    root.querySelector('.vp-skip').addEventListener('click', function () {
-      if (video.duration) { video.currentTime = Math.max(video.duration - 0.05, 0); video.pause(); }
-      reveal();
-    });
     var sound = root.querySelector('.vp-sound');
     sound.addEventListener('click', function () {
       video.muted = !video.muted; sound.textContent = video.muted ? 'Sound on' : 'Sound off';
