@@ -120,3 +120,22 @@
 .site-footer h4 { font-size: 0.64rem; letter-spacing: 0.22em; text-transform: uppercase; color: #7B7663; margin: 0 0 12px; font-weight: 600; }
 .site-footer a { color: #C9C5B4; text-decoration: none; } .site-footer a:hover { color: var(--gold); }
 .site-footer .legal { border-top: 1px solid rgba(201,197,180,0.14); margin-top: 34px; padding-top: 18px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; font-size: 0.74rem; color: #7B7663; }
+
+/* property portal links */
+.portals-band { background: var(--surface); border-top: 1px solid var(--line); }
+.portals-inner { display: flex; align-items: center; justify-content: space-between; gap: 20px 32px; flex-wrap: wrap; padding-top: 28px; padding-bottom: 28px; }
+.portals-band h2 { font-family: var(--serif); font-weight: 420; font-size: 1.3rem; letter-spacing: -0.01em; }
+.portals-band p { color: var(--faint); font-size: 0.88rem; margin-top: 4px; }
+.portal-links { display: flex; gap: 12px; flex-wrap: wrap; }
+.portal-link {
+  display: inline-flex; align-items: center; gap: 12px; text-decoration: none;
+  min-height: 56px; padding: 10px 18px 10px 22px; border-radius: 14px;
+  background: var(--bg); border: 1.5px solid var(--line);
+  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+.portal-link:hover { border-color: var(--gold); transform: translateY(-2px); box-shadow: var(--shadow-sm); }
+.portal-link img { height: 26px; width: auto; display: block; }
+.portal-link .pname { font-weight: 700; font-size: 1.05rem; letter-spacing: -0.01em; color: var(--ink); }
+.portal-link .pgo { color: var(--gold-deep); font-size: 0.95rem; }
+.portal-links.dark .portal-link { background: rgba(255,255,255,0.04); border-color: rgba(246,244,236,0.18); }
+.portal-links.dark .portal-link .pname { color: #FBFAF3; }

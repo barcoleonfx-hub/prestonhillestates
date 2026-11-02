@@ -181,7 +181,19 @@
   .accredband .lead { font-size: 0.64rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold-deep); font-weight: 700; }
   .accredband .t { font-size: 0.74rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); font-weight: 600; }
   .accredband .lead + .t::before { content: none; }
-  .accredband .t + .lead { margin-left: 26px; }
+  .accredband .grp { display: inline-flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 10px 22px; }
+  .accredband .row { row-gap: 14px; column-gap: 48px; }
+  .accredband .portal {
+    display: inline-flex; align-items: center; gap: 8px; text-decoration: none;
+    font-size: 0.86rem; font-weight: 700; letter-spacing: -0.005em; color: var(--ink);
+    background: var(--bg); border: 1.5px solid var(--line); border-radius: 999px; padding: 8px 16px;
+    transition: border-color 0.2s ease, transform 0.2s ease;
+  }
+  .accredband .portal:hover { border-color: var(--gold); transform: translateY(-1px); }
+  .accredband .portal .go { color: var(--gold-deep); font-weight: 600; }
+  .accredband .portal img { height: 18px; width: auto; }
+  .accred a.portal { color: #E9E5D6; text-decoration: underline; text-decoration-color: rgba(196,151,47,0.6); text-underline-offset: 3px; }
+  .accred a.portal:hover { color: var(--gold); }
 
   /* ---------- heritage band ---------- */
   .heritage { padding: clamp(90px, 13vh, 150px) 0; }
@@ -511,15 +523,19 @@
   <!-- ————— accreditation band ————— -->
   <div class="accredband" aria-label="Accreditations">
     <div class="wide row">
+      <span class="grp">
       <span class="lead">Regulated &amp; accredited</span>
       <span class="t">The Property Ombudsman</span>
       <span class="t">safeagent</span>
       <span class="t">PRS</span>
       <span class="t">myDeposits</span>
-      <span class="lead">Listed on</span>
+      </span>
+      <span class="grp">
+      <span class="lead">Find us on</span>
       <span class="t">Rightmove</span>
-      <span class="t">Zoopla</span>
-      <span class="t">OnTheMarket</span>
+      <a class="portal" href="https://www.zoopla.co.uk/find-agents/branch/preston-hill-estates-harrow-middlesex-24845/" target="_blank" rel="noopener noreferrer" aria-label="Preston Hill Estates on Zoopla (opens in a new tab)">Zoopla <span class="go" aria-hidden="true">↗</span></a>
+      <a class="portal" href="https://www.onthemarket.com/agents/branch/preston-hill-estates-harrow/" target="_blank" rel="noopener noreferrer" aria-label="Preston Hill Estates on OnTheMarket (opens in a new tab)">OnTheMarket <span class="go" aria-hidden="true">↗</span></a>
+      </span>
     </div>
   </div>
 
@@ -739,7 +755,7 @@
       <h4>Accredited</h4>
       <div class="accred">
         <span>The Property Ombudsman</span><span>PRS</span><span>safeagent</span><span>myDeposits</span>
-        <span>Rightmove</span><span>Zoopla</span><span>OnTheMarket</span>
+        <span>Rightmove</span><a class="portal" href="https://www.zoopla.co.uk/find-agents/branch/preston-hill-estates-harrow-middlesex-24845/" target="_blank" rel="noopener noreferrer">Zoopla ↗</a><a class="portal" href="https://www.onthemarket.com/agents/branch/preston-hill-estates-harrow/" target="_blank" rel="noopener noreferrer">OnTheMarket ↗</a>
       </div>
     </div>
   </div>

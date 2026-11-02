@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { LogoMark } from '@/components/Logo'
+import { PortalLinks } from '@/components/PortalLinks'
 import './site.css'
 
 export default function SiteLayout({ children }: { children: React.ReactNode }) {
@@ -24,6 +25,15 @@ export default function SiteLayout({ children }: { children: React.ReactNode }) 
         </div>
       </header>
       <main className="site-main">{children}</main>
+      <section className="portals-band" aria-labelledby="portals-heading">
+        <div className="wrap portals-inner">
+          <div>
+            <h2 id="portals-heading">Find all our homes on Zoopla and OnTheMarket</h2>
+            <p>Every Preston Hill listing also appears on the major property portals.</p>
+          </div>
+          <PortalLinks />
+        </div>
+      </section>
       <footer className="site-footer">
         <div className="wrap">
           <div className="cols">
