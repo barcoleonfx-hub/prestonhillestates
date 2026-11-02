@@ -2,7 +2,7 @@ import 'server-only'
 import { after } from 'next/server'
 import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, ne, notInArray, sql } from 'drizzle-orm'
 import { db, ready } from '@/db/client'
-import { admins, appointments, notificationReads, notifications, properties, type Appointment, type Property } from '@/db/schema'
+import { admins, appointments, contacts, notificationReads, notifications, properties, tasks, type Appointment, type Property } from '@/db/schema'
 import { kindLabel, OUTCOME_GRACE_MIN } from './appointment-options'
 import { icsEvent, portalUrl, sendMail, staffEmailHtml } from './mailer'
 import { durationLabel, endIso, fmtDay, fmtTime, fmtWhen } from './time'
@@ -210,6 +210,7 @@ export type Alert = {
   createdAt: string
   createdBy: string | null
   appointment: { id: string; kind: string; startsAt: string; durationMin: number; location: string; staffName: string; staffId: string; contactName: string | null } | null
+  task: { id: string; title: string; dueAt: string; doneAt: string | null; contactId: string | null; contactName: string | null; contactPhone: string | null } | null
 }
 
 /** Unread alerts for one person: anything from the last 12 hours they haven't acknowledged and didn't cause themselves. */
@@ -222,14 +223,23 @@ export async function unreadAlerts(userId: string): Promise<Alert[]> {
       gt(notifications.createdAt, since),
       notInArray(notifications.id, read),
       sql`(${notifications.createdBy} IS NULL OR ${notifications.createdBy} <> ${userId})`,
+      sql`(${notifications.targetAdminId} IS NULL OR ${notifications.targetAdminId} = ${userId})`,
     ))
     .orderBy(desc(notifications.createdAt)).limit(20)
   const ids = [...new Set(rows.map((r) => r.n.appointmentId).filter(Boolean))] as string[]
   const appts = ids.length ? (await base().where(inArray(appointments.id, ids))).map(shape) : []
   const byId = new Map(appts.map((a) => [a.id, a]))
+  const taskIds = [...new Set(rows.map((r) => r.n.taskId).filter(Boolean))] as string[]
+  const taskRows = taskIds.length
+    ? await db.select({ t: tasks, name: contacts.name, phone: contacts.phone }).from(tasks)
+      .leftJoin(contacts, eq(tasks.contactId, contacts.id)).where(inArray(tasks.id, taskIds))
+    : []
+  const tasksById = new Map(taskRows.map((r) => [r.t.id, r]))
   return rows.map(({ n }) => {
     const a = n.appointmentId ? byId.get(n.appointmentId) : undefined
+    const t = n.taskId ? tasksById.get(n.taskId) : undefined
     return {
+      task: t ? { id: t.t.id, title: t.t.title, dueAt: t.t.dueAt, doneAt: t.t.doneAt, contactId: t.t.contactId, contactName: t.name, contactPhone: t.phone } : null,
       id: n.id, kind: n.kind, title: n.title, body: n.body, createdAt: n.createdAt, createdBy: n.createdBy,
       appointment: a ? { id: a.id, kind: a.kind, startsAt: a.startsAt, durationMin: a.durationMin, location: a.location, staffName: a.staffName, staffId: a.staffId, contactName: a.contactName } : null,
     }

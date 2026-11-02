@@ -5,6 +5,9 @@ One app that serves both:
 - **The property portal** at `/admin`: staff sign in to add and edit listings, upload photos,
   floorplans, EPC graphs, brochures and video tours, publish or withdraw listings, and handle
   viewing requests.
+- **The call log and contacts** (`/admin/my-day`, `/admin/contacts`): log any phone call or walk-in in
+  under a minute from a panel that opens anywhere in the portal (press **N**), with one record per person,
+  callbacks that pop up when due, and website enquiries landing on the same records.
 - **The office diary** at `/admin/diary`: book viewings and valuations in a few taps (day, time,
   how long, who's going), with on-screen alerts and a chime on every staff screen, emails with a
   calendar invite, reminders before each appointment, and a required outcome form afterwards.
@@ -62,6 +65,25 @@ bedrooms, a description, council tax band, tenure (for sales) and at least one p
    5 minutes with `Authorization: Bearer <CRON_SECRET>` (Vercel Cron, cron-job.org or a server crontab).
    While anyone has the portal open, reminders also fire from their screen.
 
+## Calls, contacts and callbacks
+
+- **Logging a call**: press **N** (or "Log a call" in the sidebar). Type the number first: anyone already
+  known appears as you type, matched however the number is written (`+44 7700…`, `07700…`). Pick who's
+  calling (buyer, tenant, seller, landlord, other) and only the relevant questions appear: property asked
+  about, areas, bedrooms, budget and position for applicants; the property address for owners. Every call
+  needs a next step: call back (day, time and who), book a viewing, book a valuation, or no action.
+  Booking a viewing or valuation goes straight to the diary with the caller filled in.
+- **One record per person**: calls, callbacks, website enquiries, viewings, valuations and outcomes all
+  build up on one timeline. A new number for a known person is kept as their second number.
+- **Callbacks** pop up with a chime for the person they're assigned to when due (and are emailed), sit on
+  their **My day** page until done, and are ticked off automatically when that person logs the call.
+  Giving someone else a callback alerts them straight away.
+- **My day** shows each person's overdue and upcoming callbacks, today's appointments, website leads nobody
+  has dealt with yet, and the calls logged today. "Whole office" shows everyone's.
+- **Privacy**: every opening and change of a contact record is logged; admins can see who looked at what,
+  and can archive a contact. There is no automatic deletion yet; agree a retention period (for example two
+  years with no contact) before go-live.
+
 ## The diary, alerts and outcomes
 
 - **Booking**: pick the type, the property (or type an address), a day chip, a time slot and a
@@ -96,4 +118,13 @@ calendar invites went out. It clears appointments in the local database first, s
 
 ```bash
 node scripts/e2e-diary.mjs http://localhost:3000 <admin-email> <password> <screenshot-dir>
+```
+
+`scripts/e2e-crm.mjs` covers the call log with two people: a website enquiry becoming a contact, calling
+it back and handing a callback to a colleague, a repeat caller with a differently written number (no
+duplicate), a new landlord booked straight into a valuation, and a due callback popping up and being closed
+by logging the call. It also clears contacts and callbacks locally first.
+
+```bash
+node scripts/e2e-crm.mjs http://localhost:3000 <admin-email> <password> <screenshot-dir>
 ```

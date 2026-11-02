@@ -23,6 +23,7 @@ export type BookingDefaults = {
   notes: string
   reminderMin: number
   enquiryId?: string
+  contactId?: string
 }
 
 export function BookingForm({ staff, props, busy, defaults, meId }: {
@@ -98,6 +99,7 @@ export function BookingForm({ staff, props, busy, defaults, meId }: {
     <form ref={formRef} className="booking" onSubmit={(e) => { e.preventDefault(); submit(false) }}>
       {defaults.id ? <input type="hidden" name="id" value={defaults.id} /> : null}
       {defaults.enquiryId ? <input type="hidden" name="enquiryId" value={defaults.enquiryId} /> : null}
+      {defaults.contactId ? <input type="hidden" name="contactId" value={defaults.contactId} /> : null}
       <input type="hidden" name="kind" value={kind} />
       <input type="hidden" name="propertyId" value={propertyId} />
       <input type="hidden" name="date" value={date} />

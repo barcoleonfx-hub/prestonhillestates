@@ -6,11 +6,12 @@ import type { Alert, PendingOutcome } from '@/lib/appointments'
 import { kindLabel } from '@/lib/appointment-options'
 import { durationLabel, fmtTime, fmtWhen } from '@/lib/time'
 import { OutcomeForm } from './diary/OutcomeForm'
+import { openCallLog } from './CallDrawer'
 
 const POLL_MS = 20_000
 const SOUND_KEY = 'phe_alert_sound'
 
-const TAG: Record<string, string> = { booked: 'New booking', changed: 'Changed', cancelled: 'Cancelled', reminder: 'Reminder' }
+const TAG: Record<string, string> = { booked: 'New booking', changed: 'Changed', cancelled: 'Cancelled', reminder: 'Reminder', callback: 'Callback due', callback_assigned: 'New callback for you' }
 
 function readSound(): boolean {
   try { return localStorage.getItem(SOUND_KEY) !== 'off' } catch { return true }
@@ -81,12 +82,12 @@ export function AlertCenter({ me, initialPending }: { me: { id: string; name: st
       const fresh = data.alerts.filter((a) => !seen.current.has(a.id))
       fresh.forEach((a) => seen.current.add(a.id))
       if (fresh.length) {
-        chime(fresh.some((a) => a.kind === 'reminder'))
+        chime(fresh.some((a) => a.kind === 'reminder' || a.kind === 'callback'))
         if (document.hidden && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
           for (const a of fresh.slice(0, 3)) {
             const ap = a.appointment
-            const body = ap ? `${fmtWhen(ap.startsAt)} · ${durationLabel(ap.durationMin)}\n${ap.location}\n${ap.staffId === me.id ? 'You are' : `${ap.staffName} is`} going` : a.body ?? ''
-            const n = new Notification(`${TAG[a.kind] ?? 'Alert'}: ${a.title}`, { body, tag: a.id, requireInteraction: a.kind === 'reminder' })
+            const body = a.task ? `${a.task.contactName ?? ''} ${a.task.contactPhone ?? ''}`.trim() : ap ? `${fmtWhen(ap.startsAt)} · ${durationLabel(ap.durationMin)}\n${ap.location}\n${ap.staffId === me.id ? 'You are' : `${ap.staffName} is`} going` : a.body ?? ''
+            const n = new Notification(`${TAG[a.kind] ?? 'Alert'}: ${a.title}`, { body, tag: a.id, requireInteraction: a.kind === 'reminder' || a.kind === 'callback' })
             n.onclick = () => { window.focus(); n.close() }
           }
         }
@@ -162,15 +163,16 @@ export function AlertCenter({ me, initialPending }: { me: { id: string; name: st
       </div>
 
       {alerts.length > 0 ? (
-        <div className="alert-stack" role="region" aria-label="Appointment alerts" aria-live="assertive">
+        <div className="alert-stack" role="region" aria-label="Alerts" aria-live="assertive">
           {alerts.slice(0, 4).map((a) => {
             const ap = a.appointment
-            const extra = a.body?.split('\n').slice(1).join(' ')
+            const tk = a.task
+            const extra = tk ? null : a.body?.split('\n').slice(1).join(' ')
             return (
               <article key={a.id} className={`alert-card k-${a.kind}`}>
                 <div className="alert-top">
                   <span className="alert-tag">{TAG[a.kind] ?? 'Alert'}</span>
-                  {ap ? <span className="alert-time">{fmtTime(ap.startsAt)}</span> : null}
+                  {ap ? <span className="alert-time">{fmtTime(ap.startsAt)}</span> : tk ? <span className="alert-time">{fmtTime(tk.dueAt)}</span> : null}
                 </div>
                 <h3>{a.title}</h3>
                 {ap ? (
@@ -181,10 +183,19 @@ export function AlertCenter({ me, initialPending }: { me: { id: string; name: st
                     {ap.contactName ? <><dt>Meeting</dt><dd>{ap.contactName}</dd></> : null}
                   </dl>
                 ) : null}
+                {tk ? (
+                  <dl>
+                    {tk.contactName ? <><dt>Who</dt><dd><b>{tk.contactName}</b></dd></> : null}
+                    {tk.contactPhone ? <><dt>Phone</dt><dd><a href={`tel:${tk.contactPhone}`}>{tk.contactPhone}</a></dd></> : null}
+                    <dt>Due</dt><dd>{fmtWhen(tk.dueAt)}</dd>
+                  </dl>
+                ) : null}
                 {extra ? <p className="alert-extra">{extra}</p> : null}
                 <div className="alert-actions">
                   <button type="button" className="btn btn-gold btn-sm" onClick={() => ack([a.id])}>Got it</button>
                   {ap ? <Link className="btn btn-ghost btn-sm" href={`/admin/diary/${ap.id}`} onClick={() => ack([a.id])}>Open</Link> : null}
+                  {tk?.contactId ? <button type="button" className="btn btn-dark btn-sm" onClick={() => { ack([a.id]); openCallLog({ contactId: tk.contactId!, direction: 'out' }) }}>Log the call</button> : null}
+                  {tk?.contactId ? <Link className="btn btn-ghost btn-sm" href={`/admin/contacts/${tk.contactId}`} onClick={() => ack([a.id])}>Their record</Link> : null}
                 </div>
               </article>
             )

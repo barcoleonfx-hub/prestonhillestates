@@ -17,6 +17,7 @@ const assert = (c, m) => { if (!c) { console.error('FAILED:', m); process.exit(1
 await db.batch([
   "DELETE FROM notification_reads",
   "DELETE FROM notifications",
+  "DELETE FROM tasks",
   "DELETE FROM appointments",
   "DELETE FROM admins WHERE email LIKE 'sarah.%@test.local'",
 ], 'write')

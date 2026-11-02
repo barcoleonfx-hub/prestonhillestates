@@ -1,5 +1,6 @@
 import { timingSafeEqual } from 'node:crypto'
 import { runDueReminders } from '@/lib/appointments'
+import { runDueTasks } from '@/lib/contacts'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,6 +14,6 @@ export async function GET(req: Request) {
   const given = Buffer.from((req.headers.get('authorization') || '').replace(/^Bearer\s+/i, ''))
   const want = Buffer.from(secret)
   if (given.length !== want.length || !timingSafeEqual(given, want)) return Response.json({ error: 'unauthorised' }, { status: 401 })
-  const sent = await runDueReminders()
-  return Response.json({ ok: true, sent })
+  const [sent, callbacks] = await Promise.all([runDueReminders(), runDueTasks()])
+  return Response.json({ ok: true, sent, callbacks })
 }

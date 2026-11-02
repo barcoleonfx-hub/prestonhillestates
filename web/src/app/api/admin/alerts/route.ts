@@ -1,4 +1,5 @@
 import { currentAdmin } from '@/lib/auth'
+import { runDueTasks } from '@/lib/contacts'
 import { markAlertsRead, needingOutcome, runDueReminders, toPending, unreadAlerts } from '@/lib/appointments'
 
 export const dynamic = 'force-dynamic'
@@ -7,7 +8,7 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
   const me = await currentAdmin()
   if (!me) return Response.json({ error: 'signed out' }, { status: 401 })
-  await runDueReminders()
+  await Promise.all([runDueReminders(), runDueTasks()])
   const [alerts, pending] = await Promise.all([unreadAlerts(me.id), needingOutcome(me.id)])
   return Response.json({ alerts, pending: pending.map(toPending), serverTime: new Date().toISOString() }, { headers: { 'Cache-Control': 'no-store' } })
 }

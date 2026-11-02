@@ -8,6 +8,8 @@ import { admins, appointments, enquiries, properties } from '@/db/schema'
 import { requireAdmin } from '@/lib/auth'
 import { APPT_KINDS, DURATIONS, INTEREST, NEXT_STEPS, OUTCOMES, REMINDERS } from '@/lib/appointment-options'
 import { announce, clashesFor, getAppointment } from '@/lib/appointments'
+import { upsertContact } from '@/lib/contacts'
+import { contacts } from '@/db/schema'
 import { durationLabel, fmtTime, fmtWhen, londonToIso } from '@/lib/time'
 import { now, uid } from '@/lib/util'
 
@@ -42,6 +44,7 @@ export async function saveAppointment(_prev: BookingState, form: FormData): Prom
   const reminderMin = Number(str(form, 'reminderMin')) || 30
   const enquiryId = str(form, 'enquiryId', 64) || null
   const force = form.get('force') === '1'
+  const givenContactId = str(form, 'contactId', 64) || null
 
   if (propertyId && !(await db.query.properties.findFirst({ where: eq(properties.id, propertyId) }))) return { error: 'Pick the property again, that one wasn’t found.', field: 'propertyId' }
   if (!propertyId && !address) return { error: 'Choose a property or type the address.', field: 'address' }
@@ -70,7 +73,12 @@ export async function saveAppointment(_prev: BookingState, form: FormData): Prom
   // If the reminder time has already passed (booked at short notice) the booking alert does the job.
   const reminderDue = new Date(startsAt).getTime() - reminderMin * 60000 <= Date.now()
   const ts = now()
-  const values = { kind, propertyId, address: propertyId ? null : address, startsAt, durationMin, staffId, contactName, contactPhone, contactEmail, notes, reminderMin, updatedAt: ts }
+  // Link the appointment to the person's contact record (found or created by phone/email) so it shows in their history.
+  let contactId = givenContactId && (await db.query.contacts.findFirst({ where: eq(contacts.id, givenContactId) })) ? givenContactId : null
+  if (!contactId && contactName && (contactPhone || contactEmail)) {
+    contactId = await upsertContact({ name: contactName, phone: contactPhone, email: contactEmail, role: kind === 'valuation' ? 'seller' : kind === 'viewing' ? 'buyer' : null, by: me.id, touch: false })
+  }
+  const values = { contactId, kind, propertyId, address: propertyId ? null : address, startsAt, durationMin, staffId, contactName, contactPhone, contactEmail, notes, reminderMin, updatedAt: ts }
 
   let apptId: string
   if (existing) {

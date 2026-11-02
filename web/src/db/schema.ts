@@ -135,6 +135,7 @@ export const enquiries = sqliteTable('enquiries', {
   postcode: text('postcode'),
   intent: text('intent'),
   handled: integer('handled', { mode: 'boolean' }).notNull().default(false),
+  contactId: text('contact_id'),
   createdAt: text('created_at').notNull(),
 })
 
@@ -163,6 +164,7 @@ export const appointments = sqliteTable(
     outcomeAt: text('outcome_at'),
     outcomeBy: text('outcome_by'),
     enquiryId: text('enquiry_id').references(() => enquiries.id, { onDelete: 'set null' }),
+    contactId: text('contact_id'),
     createdBy: text('created_by'),
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
@@ -178,6 +180,8 @@ export const notifications = sqliteTable('notifications', {
   body: text('body'),
   createdBy: text('created_by'),
   createdAt: text('created_at').notNull(),
+  targetAdminId: text('target_admin_id'),
+  taskId: text('task_id'),
 })
 
 export const notificationReads = sqliteTable('notification_reads', {
@@ -196,6 +200,83 @@ export const emailLog = sqliteTable('email_log', {
   createdAt: text('created_at').notNull(),
 })
 
+export const contacts = sqliteTable(
+  'contacts',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    phone: text('phone'),
+    phoneNorm: text('phone_norm'),
+    phone2: text('phone2'),
+    email: text('email'),
+    emailNorm: text('email_norm'),
+    roles: text('roles').notNull().default(''),
+    source: text('source'),
+    areas: text('areas'),
+    minBeds: integer('min_beds'),
+    maxPrice: integer('max_price'),
+    position: text('position'),
+    address: text('address'),
+    notes: text('notes'),
+    ownerId: text('owner_id').references(() => admins.id, { onDelete: 'set null' }),
+    archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
+    lastContactAt: text('last_contact_at'),
+    createdBy: text('created_by'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (t) => [index('contacts_phone_idx').on(t.phoneNorm), index('contacts_email_idx').on(t.emailNorm), index('contacts_last_idx').on(t.lastContactAt)],
+)
+
+export const calls = sqliteTable(
+  'calls',
+  {
+    id: text('id').primaryKey(),
+    contactId: text('contact_id').notNull().references(() => contacts.id, { onDelete: 'cascade' }),
+    direction: text('direction').notNull().default('in'),
+    callerType: text('caller_type').notNull(),
+    propertyId: text('property_id').references(() => properties.id, { onDelete: 'set null' }),
+    notes: text('notes'),
+    nextStep: text('next_step').notNull(),
+    createdBy: text('created_by').notNull(),
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [index('calls_contact_idx').on(t.contactId, t.createdAt), index('calls_created_idx').on(t.createdAt)],
+)
+
+export const tasks = sqliteTable(
+  'tasks',
+  {
+    id: text('id').primaryKey(),
+    contactId: text('contact_id').references(() => contacts.id, { onDelete: 'cascade' }),
+    callId: text('call_id').references(() => calls.id, { onDelete: 'set null' }),
+    kind: text('kind').notNull().default('callback'),
+    title: text('title').notNull(),
+    dueAt: text('due_at').notNull(),
+    assignedTo: text('assigned_to').notNull().references(() => admins.id),
+    doneAt: text('done_at'),
+    doneBy: text('done_by'),
+    doneNote: text('done_note'),
+    notifiedAt: text('notified_at'),
+    createdBy: text('created_by'),
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [index('tasks_open_idx').on(t.assignedTo, t.doneAt, t.dueAt), index('tasks_contact_idx').on(t.contactId)],
+)
+
+export const auditLog = sqliteTable('audit_log', {
+  id: text('id').primaryKey(),
+  adminId: text('admin_id').notNull(),
+  action: text('action').notNull(),
+  entity: text('entity').notNull(),
+  entityId: text('entity_id').notNull(),
+  detail: text('detail'),
+  at: text('at').notNull(),
+})
+
+export type Contact = typeof contacts.$inferSelect
+export type Call = typeof calls.$inferSelect
+export type Task = typeof tasks.$inferSelect
 export type Admin = typeof admins.$inferSelect
 export type Appointment = typeof appointments.$inferSelect
 export type Property = typeof properties.$inferSelect

@@ -33,7 +33,7 @@ export default async function EditAppointmentPage({ params }: { params: Promise<
         defaults={{
           id: a.id, kind: a.kind, propertyId: a.propertyId ?? '', address: a.address ?? '', date, time,
           durationMin: a.durationMin, staffId: a.staffId, contactName: a.contactName ?? '', contactPhone: a.contactPhone ?? '',
-          contactEmail: a.contactEmail ?? '', notes: a.notes ?? '', reminderMin: a.reminderMin,
+          contactEmail: a.contactEmail ?? '', notes: a.notes ?? '', reminderMin: a.reminderMin, contactId: a.contactId ?? undefined,
         }}
       />
     </>

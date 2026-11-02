@@ -4,6 +4,7 @@ import { and, eq } from 'drizzle-orm'
 import { db, ready } from '@/db/client'
 import { enquiries, properties } from '@/db/schema'
 import { now, uid } from '@/lib/util'
+import { upsertContact } from '@/lib/contacts'
 
 export type EnquiryState = { ok?: boolean; error?: string }
 
@@ -34,8 +35,10 @@ export async function sendEnquiry(_prev: EnquiryState, form: FormData): Promise<
     ? await db.query.properties.findFirst({ where: and(eq(properties.id, propertyId), eq(properties.published, true)) })
     : null
 
+  // Every website enquiry lands on the person's contact record, so a later phone call shows it.
+  const contactId = await upsertContact({ name, phone, email, role: property?.channel === 'let' ? 'tenant' : 'buyer', source: 'Our website' }).catch(() => null)
   await db.insert(enquiries).values({
-    id: uid(), propertyId: property?.id ?? null, kind: 'viewing',
+    id: uid(), propertyId: property?.id ?? null, kind: 'viewing', contactId,
     name, phone: phone || null, email: email || null, message: message || null, createdAt: now(),
   })
   return { ok: true }
@@ -67,8 +70,11 @@ export async function sendValuationRequest(_prev: ValuationState, form: FormData
   recent.set(key, [...times, Date.now()])
 
   await ready()
+  const contactId = await upsertContact({
+    name, phone, email, role: intent === 'letting' ? 'landlord' : 'seller', source: 'Our website', address: postcode,
+  }).catch(() => null)
   await db.insert(enquiries).values({
-    id: uid(), propertyId: null, kind: 'valuation', name, phone, email: email || null,
+    id: uid(), propertyId: null, kind: 'valuation', name, phone, email: email || null, contactId,
     postcode, intent, message: null, createdAt: now(),
   })
   return { ok: true }

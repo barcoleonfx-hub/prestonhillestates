@@ -5,6 +5,7 @@ import { enquiries, properties } from '@/db/schema'
 import { requireAdmin } from '@/lib/auth'
 import { displayAddressFor } from '@/lib/properties'
 import { setEnquiryHandled } from '../../actions'
+import { LogCallButton } from '../LogCallButton'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Enquiries' }
@@ -52,6 +53,17 @@ export default async function EnquiriesPage() {
                   {e.message ? <p className="msg">{e.message}</p> : null}
                 </div>
                 <div className="enq-actions">
+                {e.contactId ? <Link className="btn btn-ghost btn-sm" href={`/admin/contacts/${e.contactId}`}>Record</Link> : null}
+                {!e.handled ? (
+                  <LogCallButton
+                    label="Call them" className="btn btn-dark btn-sm"
+                    prefill={{
+                      name: e.name, phone: e.phone ?? undefined, email: e.email ?? undefined, enquiryId: e.id, direction: 'out', propertyId: e.propertyId ?? undefined,
+                      callerType: e.kind === 'valuation' ? (e.intent === 'letting' ? 'landlord' : 'seller') : p?.channel === 'let' ? 'tenant' : 'buyer',
+                      ...(e.contactId ? { contactId: e.contactId } : {}),
+                    }}
+                  />
+                ) : null}
                 <Link className="btn btn-gold btn-sm" href={`/admin/diary/new?enquiry=${e.id}`}>{e.kind === 'valuation' ? 'Book valuation' : 'Book viewing'}</Link>
                 <form action={setEnquiryHandled}>
                   <input type="hidden" name="id" value={e.id} />
