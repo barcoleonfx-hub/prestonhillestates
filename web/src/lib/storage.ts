@@ -19,11 +19,11 @@ export interface Storage {
 }
 
 // UPLOADS_DIR lets a host keep uploads on a persistent disk (e.g. /var/data/uploads).
-const UPLOAD_ROOT = path.resolve(process.cwd(), process.env.UPLOADS_DIR || 'uploads')
+const UPLOAD_ROOT = path.resolve(/* turbopackIgnore: true */ process.cwd(), process.env.UPLOADS_DIR || 'uploads')
 
 /** Resolves a storage key to a path inside the uploads folder, refusing anything that escapes it. */
 export function localPath(key: string): string {
-  const p = path.resolve(UPLOAD_ROOT, key)
+  const p = path.resolve(/* turbopackIgnore: true */ UPLOAD_ROOT, key)
   if (!p.startsWith(UPLOAD_ROOT + path.sep)) throw new Error('Invalid storage key')
   return p
 }
