@@ -1,0 +1,97 @@
+// Checks the valuation pop-up: timing, video with the form below it, validation, submission, once-per-visitor,
+// the phone layout and reduced motion. Usage: node scripts/e2e-popup.mjs <baseUrl> <email> <password> <screenshotDir>
+import { createRequire } from 'node:module'
+import path from 'node:path'
+const { chromium } = createRequire(import.meta.url)('playwright')
+
+const [base, email, password, shots] = process.argv.slice(2)
+const log = (...a) => console.log('•', ...a)
+const hideDev = (p) => p.addStyleTag({ content: 'nextjs-portal{display:none!important}' })
+const browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] })
+
+// ---- desktop ----
+const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } })
+const page = await ctx.newPage()
+page.on('pageerror', (e) => console.log('PAGE ERROR:', e.message))
+await page.goto(`${base}/properties`)
+await hideDev(page)
+if (await page.locator('.vp-dialog').count()) throw new Error('pop-up showed immediately')
+await page.waitForSelector('.vp-dialog', { timeout: 8000 })
+log('pop-up opened after delay')
+await page.waitForTimeout(2500)
+const playing = await page.evaluate(() => { const v = document.querySelector('.vp-media video'); return v && !v.paused && v.currentTime > 0 })
+log('video playing:', playing)
+await page.screenshot({ path: path.join(shots, 'p1-video.png') })
+log('form visible straight away:', await page.locator('.vp-dialog form').isVisible())
+await page.screenshot({ path: path.join(shots, 'p2-form.png') })
+
+await page.click('.vp-actions .btn-gold')
+await page.waitForSelector('.vp-error')
+log('empty form:', await page.textContent('.vp-error'))
+await page.fill('#vp-name', 'Test Seller')
+await page.fill('#vp-phone', '07700 900456')
+await page.fill('#vp-postcode', 'ha30')
+await page.click('.vp-actions .btn-gold')
+await page.waitForFunction(() => document.querySelector('.vp-error')?.textContent?.includes('postcode'))
+log('bad postcode:', await page.textContent('.vp-error'))
+log('fields kept after error:', await page.inputValue('#vp-name'))
+await page.fill('#vp-postcode', 'ha3 0ps')
+await page.check('input[name=intent][value=letting]', { force: true })
+await page.click('.vp-actions .btn-gold')
+await page.waitForSelector('.vp-done')
+log('submitted:', (await page.textContent('.vp-done p')).slice(0, 60))
+await page.screenshot({ path: path.join(shots, 'p3-thanks.png') })
+await page.click('.vp-done button')
+await page.waitForSelector('.vp-backdrop', { state: 'detached' })
+
+await page.reload()
+await page.waitForTimeout(6000)
+log('shown again after submitting:', (await page.locator('.vp-dialog').count()) > 0)
+
+// portal shows it
+await page.goto(`${base}/admin/login`)
+await page.fill('#email', email); await page.fill('#password', password)
+await page.click('button[type=submit]'); await page.waitForURL(`${base}/admin`)
+await page.goto(`${base}/admin/enquiries`); await hideDev(page)
+await page.waitForSelector('text=Test Seller')
+log('in portal:', (await page.locator('.enq-item').filter({ hasText: 'Test Seller' }).first().innerText()).replace(/\s+/g, ' ').slice(0, 140))
+await page.screenshot({ path: path.join(shots, 'p4-portal.png') })
+await ctx.close()
+
+// ---- closing with Escape suppresses it too ----
+const c2 = await browser.newContext({ viewport: { width: 1280, height: 800 } })
+const p2 = await c2.newPage()
+await p2.goto(`${base}/properties`)
+await p2.waitForSelector('.vp-dialog', { timeout: 8000 })
+await p2.keyboard.press('Escape')
+await p2.waitForSelector('.vp-backdrop', { state: 'detached' })
+await p2.reload(); await p2.waitForTimeout(6000)
+log('Escape closes and it stays closed on return:', (await p2.locator('.vp-dialog').count()) === 0)
+await c2.close()
+
+// ---- phone ----
+const c3 = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
+const p3 = await c3.newPage()
+await p3.goto(`${base}/properties`); await hideDev(p3)
+await p3.waitForTimeout(5000)
+log('phone: not shown on arrival:', (await p3.locator('.vp-dialog').count()) === 0)
+await p3.mouse.wheel(0, 600); await p3.evaluate(() => window.scrollTo(0, 600))
+await p3.waitForSelector('.vp-dialog', { timeout: 5000 })
+await p3.waitForTimeout(1500)
+await p3.screenshot({ path: path.join(shots, 'p5-phone-video.png') })
+await p3.screenshot({ path: path.join(shots, 'p6-phone-form.png') })
+log('phone: form visible:', await p3.locator('.vp-dialog form').isVisible())
+await c3.close()
+
+// ---- reduced motion ----
+const c4 = await browser.newContext({ viewport: { width: 1280, height: 800 }, reducedMotion: 'reduce' })
+const p4 = await c4.newPage()
+await p4.goto(`${base}/properties`)
+await p4.waitForSelector('.vp-dialog', { timeout: 8000 })
+await p4.waitForTimeout(500)
+const rm = await p4.evaluate(() => ({ form: !!document.querySelector('.vp-dialog form'), paused: document.querySelector('.vp-media video').paused }))
+log('reduced motion: form straight away & video not playing:', rm.form && rm.paused)
+await c4.close()
+
+await browser.close()
+log('DONE')

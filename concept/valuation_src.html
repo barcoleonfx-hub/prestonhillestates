@@ -1,0 +1,365 @@
+<title>Book a Valuation</title>
+<style>
+  @font-face {
+    font-family: 'Fraunces';
+    font-style: normal;
+    font-weight: 300 700;
+    font-display: swap;
+    src: url(data:font/woff2;base64,__ROMAN_B64__) format('woff2');
+  }
+  @font-face {
+    font-family: 'Fraunces';
+    font-style: italic;
+    font-weight: 300 700;
+    font-display: swap;
+    src: url(data:font/woff2;base64,__ITALIC_B64__) format('woff2');
+  }
+  :root {
+    --bg: #FBFAF6; --surface: #FFFFFF; --ink: #23211A; --ink-soft: #59554A; --faint: #98937F;
+    --gold: #C4972F; --gold-deep: #A47B1D; --gold-tint: #F7F0DE; --gold-wash: #FDF9EE;
+    --line: #EAE6DA; --line-soft: #F1EEE4; --charcoal: #211F19;
+    --shadow-sm: 0 1px 2px rgba(35,33,26,0.05), 0 4px 14px -6px rgba(35,33,26,0.08);
+    --shadow-lg: 0 2px 4px rgba(35,33,26,0.05), 0 24px 48px -20px rgba(35,33,26,0.16);
+    --focus: #2F6FED;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: "Helvetica Neue", Helvetica, Arial, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.6; -webkit-font-smoothing: antialiased; min-height: 100svh;
+    display: flex; flex-direction: column;
+  }
+  ::selection { background: var(--gold-tint); color: var(--ink); }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+  a { color: inherit; }
+  svg { display: block; }
+  .label { font-size: 0.68rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--faint); font-weight: 600; }
+  .label b { color: var(--gold-deep); font-weight: 600; }
+  @media (prefers-reduced-motion: reduce) { * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }
+
+  header.site { background: var(--bg); border-bottom: 1px solid var(--line); }
+  .navrow { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 12px clamp(20px,4vw,52px); max-width: 1240px; margin: 0 auto; }
+  .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; }
+  .brand .mark { width: 38px; height: 38px; flex: none; }
+  .brand .word { line-height: 1.1; }
+  .brand .word .n1 { font-weight: 700; font-size: 0.9rem; letter-spacing: 0.09em; color: var(--ink); }
+  .brand .word .n2 { font-weight: 300; font-size: 0.84rem; letter-spacing: 0.28em; color: var(--ink-soft); }
+  .navrow .back { font-size: 0.76rem; letter-spacing: 0.1em; text-transform: uppercase; text-decoration: none; color: var(--ink-soft); font-weight: 600; }
+  .navrow .back:hover { color: var(--gold-deep); }
+
+  main { flex: 1; display: grid; grid-template-columns: 0.9fr 1.1fr; gap: clamp(30px, 5vw, 80px); align-items: center; max-width: 1240px; margin: 0 auto; padding: clamp(40px, 7vh, 80px) clamp(20px,4vw,52px); width: 100%; }
+  @media (max-width: 920px) { main { grid-template-columns: 1fr; align-items: start; } }
+
+  .pitch h1 { font-family: 'Fraunces', Georgia, serif; font-weight: 400; font-size: clamp(2.2rem, 4.6vw, 3.8rem); line-height: 1.05; letter-spacing: -0.016em; margin-top: 18px; text-wrap: balance; }
+  .pitch h1 em { font-style: italic; font-weight: 340; color: var(--gold-deep); }
+  .pitch p.sub { margin-top: 20px; color: var(--ink-soft); max-width: 44ch; }
+  .assure { margin-top: 34px; display: flex; flex-direction: column; gap: 14px; }
+  .assure .item { display: flex; gap: 14px; align-items: baseline; color: var(--ink-soft); font-size: 0.93rem; max-width: 46ch; }
+  .assure .item::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--gold); flex: none; transform: translateY(-1px); }
+  .pitch .quote { margin-top: 40px; padding: 20px 24px; background: var(--surface); border-left: 3px solid var(--gold); border-radius: 0 14px 14px 0; box-shadow: var(--shadow-sm); max-width: 46ch; }
+  .pitch .quote p { font-family: 'Fraunces', Georgia, serif; font-style: italic; font-size: 1.05rem; line-height: 1.5; }
+  .pitch .quote cite { display: block; margin-top: 10px; font-style: normal; font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); font-weight: 600; }
+
+  /* wizard card */
+  .wizard { background: var(--surface); border: 1px solid var(--line); border-radius: 24px; box-shadow: var(--shadow-lg); padding: clamp(26px, 4vw, 44px); }
+  .progress { display: flex; align-items: center; gap: 10px; margin-bottom: 30px; }
+  .progress .seg { flex: 1; height: 3px; border-radius: 3px; background: var(--line-soft); overflow: hidden; }
+  .progress .seg i { display: block; height: 100%; width: 0%; background: var(--gold); transition: width 0.5s cubic-bezier(.2,.65,.2,1); }
+  .progress .seg.done i, .progress .seg.now i { width: 100%; }
+  .progress .stepnum { font-size: 0.66rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); font-weight: 700; white-space: nowrap; }
+
+  .step { display: none; }
+  .step.on { display: block; animation: fadeup 0.5s cubic-bezier(.2,.65,.2,1); }
+  @keyframes fadeup { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+  .step h2 { font-family: 'Fraunces', Georgia, serif; font-weight: 420; font-size: clamp(1.5rem, 2.6vw, 2rem); letter-spacing: -0.01em; }
+  .step .hint { margin-top: 8px; color: var(--faint); font-size: 0.88rem; }
+
+  .fields { margin-top: 28px; display: flex; flex-direction: column; gap: 24px; }
+  .fld label { display: block; font-size: 0.64rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--faint); font-weight: 700; margin-bottom: 9px; }
+  .fld input {
+    width: 100%; background: transparent; border: none; border-bottom: 1px solid var(--line);
+    font-family: 'Fraunces', Georgia, serif; font-size: 1.3rem; color: var(--ink); padding: 2px 0 10px; border-radius: 0;
+  }
+  .fld input::placeholder { color: #C9C4B0; }
+  .fld input:focus { outline: none; border-bottom-color: var(--gold); }
+  .fld.err label { color: #A8442E; }
+  .fld.err input { border-bottom-color: #C4714F; }
+  .fld .errmsg { display: none; margin-top: 7px; font-size: 0.76rem; color: #A8442E; }
+  .fld.err .errmsg { display: block; }
+
+  .choicegrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  @media (max-width: 560px) { .choicegrid { grid-template-columns: repeat(2, 1fr); } }
+  .choice {
+    border: 1.5px solid var(--line); border-radius: 14px; background: var(--bg);
+    padding: 14px 10px; text-align: center; cursor: pointer; font-family: inherit;
+    font-size: 0.84rem; font-weight: 600; color: var(--ink-soft);
+    transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+  }
+  .choice:hover { border-color: var(--gold); }
+  .choice.on { border-color: var(--gold); background: var(--gold-wash); color: var(--gold-deep); }
+
+  .stepper { display: inline-flex; align-items: center; gap: 22px; border: 1.5px solid var(--line); border-radius: 999px; padding: 8px 14px; }
+  .stepper button { border: none; background: var(--gold-tint); color: var(--gold-deep); width: 34px; height: 34px; border-radius: 50%; font-size: 1.15rem; font-weight: 700; cursor: pointer; font-family: inherit; }
+  .stepper button:hover { background: var(--gold); color: #FFFDF6; }
+  .stepper .n { font-family: 'Fraunces', Georgia, serif; font-size: 1.4rem; font-weight: 460; min-width: 2ch; text-align: center; font-variant-numeric: tabular-nums; }
+
+  .btnrow { display: flex; justify-content: space-between; align-items: center; gap: 14px; margin-top: 36px; }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+    font-size: 0.78rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+    cursor: pointer; border: none; border-radius: 999px; text-decoration: none;
+    padding: 15px 30px; transition: transform 0.2s ease, background 0.2s ease;
+    font-family: inherit;
+  }
+  .btn.gold { background: var(--gold); color: #FFFDF6; box-shadow: 0 10px 24px -12px rgba(196,151,47,0.65); }
+  .btn.gold:hover { background: var(--gold-deep); transform: translateY(-1px); }
+  .btn.plain { background: transparent; color: var(--faint); padding-left: 6px; }
+  .btn.plain:hover { color: var(--ink); }
+
+  /* success */
+  .success { text-align: center; padding: 20px 0 8px; }
+  .success .badge {
+    width: 92px; height: 92px; margin: 0 auto; border-radius: 50%;
+    background: var(--gold-wash); border: 1px solid var(--gold-tint);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .success .badge svg { width: 54%; height: 54%; }
+  .success h2 { margin-top: 22px; }
+  .success p.hint { max-width: 40ch; margin: 10px auto 0; }
+  .next { margin-top: 30px; text-align: left; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+  .next .n-item { display: flex; gap: 16px; padding: 16px 20px; border-top: 1px solid var(--line-soft); align-items: baseline; }
+  .next .n-item:first-child { border-top: none; }
+  .next .n-num { font-family: 'Fraunces', Georgia, serif; font-style: italic; color: var(--gold-deep); font-size: 0.95rem; flex: none; }
+  .next .n-item p { font-size: 0.9rem; color: var(--ink-soft); }
+  .next .n-item p b { color: var(--ink); font-weight: 600; }
+
+  footer.site { background: var(--charcoal); color: #C9C5B4; padding: 26px 0; }
+  footer.site .row { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; font-size: 0.76rem; max-width: 1240px; margin: 0 auto; padding: 0 clamp(20px,4vw,52px); }
+  footer.site a { color: #C9C5B4; text-decoration: none; }
+  footer.site a:hover { color: var(--gold); }
+</style>
+
+<svg style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true">
+  <symbol id="ph-logo" viewBox="0 0 100 100">
+    <rect x="59" y="15" width="7" height="14" rx="1.5" fill="#C4972F"/>
+    <path d="M50 13 L83 42 L74.5 42 L50 20.5 L25.5 42 L17 42 Z" fill="#C4972F"/>
+    <path d="M28 44 H72 V67 H28 Z M45 51 h9 v16 h-9 Z M59.5 51 h8 v8 h-8 Z" fill="#C4972F" fill-rule="evenodd"/>
+    <g fill="none" stroke="#C4972F" stroke-linecap="round">
+      <path d="M18 74 C 30 89.5, 70 89.5, 82 74" stroke-width="7.5"/>
+      <path d="M17.5 73 C 12.5 67.5, 13 60, 19 55.5" stroke-width="6.5"/>
+      <path d="M86.5 68 l7.5 -3.5" stroke-width="3.6"/>
+      <path d="M88 74.5 l8 -0.5" stroke-width="3.6"/>
+    </g>
+  </symbol>
+</svg>
+
+<header class="site">
+  <div class="navrow">
+    <a class="brand" href="https://claude.ai/code/artifact/d57dc6a2-4a48-43cb-a329-098245ec3198" aria-label="Preston Hill Estates home">
+      <svg class="mark" viewBox="0 0 100 100" aria-hidden="true"><use href="#ph-logo"/></svg>
+      <span class="word"><span class="n1">PRESTON HILL</span><br/><span class="n2">ESTATES</span></span>
+    </a>
+    <a class="back" href="https://claude.ai/code/artifact/d57dc6a2-4a48-43cb-a329-098245ec3198">← Back to homepage</a>
+  </div>
+</header>
+
+<main>
+  <div class="pitch">
+    <div class="label"><b>Free valuation</b> · No obligation</div>
+    <h1>Let's find out what your home is <em>worth.</em></h1>
+    <p class="sub">Three short steps. The branch reviews every request personally and comes back within one working day with a grounded figure and a time for a full appraisal at your door.</p>
+    <div class="assure">
+      <div class="item">Valued by people who have worked your street for two decades, not an algorithm.</div>
+      <div class="item">A full market appraisal at your door within 24 hours of your request.</div>
+      <div class="item">Nothing to pay and no commitment to sell or let with us afterwards.</div>
+    </div>
+    <div class="quote">
+      <p>“Never back away from a challenge. Whatever it takes, every client leaves this office with a smile.”</p>
+      <cite>Jamil Ahmed, Founder</cite>
+    </div>
+  </div>
+
+  <div class="wizard" id="wizard">
+    <div class="progress" aria-hidden="true">
+      <span class="stepnum" id="stepnum">Step 1 of 3</span>
+      <span class="seg now" id="seg1"><i></i></span>
+      <span class="seg" id="seg2"><i></i></span>
+      <span class="seg" id="seg3"><i></i></span>
+    </div>
+
+    <!-- step 1: address -->
+    <section class="step on" id="step1" aria-label="Step 1: the property">
+      <h2>Where is the property?</h2>
+      <p class="hint">The address helps us prepare local comparables before we speak.</p>
+      <div class="fields">
+        <div class="fld" id="f-addr">
+          <label for="in-addr">Street address</label>
+          <input id="in-addr" type="text" placeholder="e.g. 14 Woodcock Hill" autocomplete="street-address"/>
+          <p class="errmsg">Please enter the property's address.</p>
+        </div>
+        <div class="fld" id="f-pc">
+          <label for="in-pc">Postcode</label>
+          <input id="in-pc" type="text" placeholder="e.g. HA3 0PS" autocomplete="postal-code" style="max-width: 200px; text-transform: uppercase;"/>
+          <p class="errmsg">Please enter the postcode.</p>
+        </div>
+      </div>
+      <div class="btnrow">
+        <span></span>
+        <button class="btn gold" data-next="2" type="button">Continue</button>
+      </div>
+    </section>
+
+    <!-- step 2: property details -->
+    <section class="step" id="step2" aria-label="Step 2: about the property">
+      <h2>Tell us about it</h2>
+      <p class="hint">A rough picture is enough. We confirm the details when we visit.</p>
+      <div class="fields">
+        <div>
+          <label class="label" style="display:block; margin-bottom:10px;">Property type</label>
+          <div class="choicegrid" id="g-type">
+            <button class="choice on" type="button">House</button>
+            <button class="choice" type="button">Flat</button>
+            <button class="choice" type="button">Maisonette</button>
+            <button class="choice" type="button">Bungalow</button>
+          </div>
+        </div>
+        <div>
+          <label class="label" style="display:block; margin-bottom:10px;">Bedrooms</label>
+          <div class="stepper">
+            <button type="button" id="bed-minus" aria-label="Fewer bedrooms">−</button>
+            <span class="n" id="bed-n">3</span>
+            <button type="button" id="bed-plus" aria-label="More bedrooms">+</button>
+          </div>
+        </div>
+        <div>
+          <label class="label" style="display:block; margin-bottom:10px;">I'm thinking of</label>
+          <div class="choicegrid" id="g-intent" style="grid-template-columns: repeat(3, 1fr);">
+            <button class="choice on" type="button">Selling</button>
+            <button class="choice" type="button">Letting</button>
+            <button class="choice" type="button">Just curious</button>
+          </div>
+        </div>
+      </div>
+      <div class="btnrow">
+        <button class="btn plain" data-back="1" type="button">← Back</button>
+        <button class="btn gold" data-next="3" type="button">Continue</button>
+      </div>
+    </section>
+
+    <!-- step 3: contact -->
+    <section class="step" id="step3" aria-label="Step 3: your details">
+      <h2>Where should we reach you?</h2>
+      <p class="hint">A member of the branch replies within one working day.</p>
+      <div class="fields">
+        <div class="fld" id="f-name">
+          <label for="in-name">Your name</label>
+          <input id="in-name" type="text" placeholder="Full name" autocomplete="name"/>
+          <p class="errmsg">Please tell us your name.</p>
+        </div>
+        <div class="fld" id="f-phone">
+          <label for="in-phone">Phone</label>
+          <input id="in-phone" type="tel" placeholder="Mobile number" autocomplete="tel"/>
+          <p class="errmsg">Please enter a phone number.</p>
+        </div>
+        <div class="fld">
+          <label for="in-email">Email <span style="color:var(--line); text-transform:none; letter-spacing:0;">(optional)</span></label>
+          <input id="in-email" type="email" placeholder="you@example.com" autocomplete="email"/>
+        </div>
+      </div>
+      <div class="btnrow">
+        <button class="btn plain" data-back="2" type="button">← Back</button>
+        <button class="btn gold" id="submitBtn" type="button">Request my valuation</button>
+      </div>
+    </section>
+
+    <!-- step 4: success -->
+    <section class="step" id="step4" aria-label="Request received">
+      <div class="success">
+        <div class="badge"><svg viewBox="0 0 100 100"><use href="#ph-logo"/></svg></div>
+        <h2>Thank you. We're on it.</h2>
+        <p class="hint" id="successLine">Your request has been passed to the branch.</p>
+        <div class="next">
+          <div class="n-item"><span class="n-num">No. 1</span><p><b>Within one working day</b> a member of the team calls to talk through the property and your plans.</p></div>
+          <div class="n-item"><span class="n-num">No. 2</span><p><b>Within 24 hours of that call</b> we visit for a full market appraisal, at a time that suits you.</p></div>
+          <div class="n-item"><span class="n-num">No. 3</span><p><b>You decide.</b> Our figure and advice are yours to keep, with no obligation either way.</p></div>
+        </div>
+        <p class="label" style="margin-top:24px;">In a hurry? Call the branch on <a href="tel:+442081277001" style="color:var(--gold-deep);">020 8127 7001</a></p>
+      </div>
+    </section>
+  </div>
+</main>
+
+<footer class="site">
+  <div class="row">
+    <span id="copyright">© Preston Hill Estates · Company No. 05058532</span>
+    <span>Design concept · this form does not send yet</span>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  document.getElementById('copyright').textContent =
+    '© ' + new Date().getFullYear() + ' Preston Hill Estates · Company No. 05058532';
+
+  /* choice groups */
+  ['g-type', 'g-intent'].forEach(function (gid) {
+    $(gid).querySelectorAll('.choice').forEach(function (c) {
+      c.addEventListener('click', function () {
+        $(gid).querySelectorAll('.choice').forEach(function (x) { x.classList.remove('on'); });
+        c.classList.add('on');
+      });
+    });
+  });
+
+  /* bedroom stepper */
+  var beds = 3;
+  var draw = function () { $('bed-n').textContent = beds; };
+  $('bed-minus').addEventListener('click', function () { beds = Math.max(0, beds - 1); draw(); });
+  $('bed-plus').addEventListener('click', function () { beds = Math.min(10, beds + 1); draw(); });
+
+  /* step machine */
+  function show(n) {
+    [1, 2, 3, 4].forEach(function (i) { $('step' + i).classList.toggle('on', i === n); });
+    var label = n <= 3 ? 'Step ' + n + ' of 3' : 'Done';
+    $('stepnum').textContent = label;
+    [1, 2, 3].forEach(function (i) {
+      var seg = $('seg' + i);
+      seg.classList.toggle('done', n > i || n === 4);
+      seg.classList.toggle('now', n === i);
+    });
+    $('wizard').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+  function valid(fields) {
+    var ok = true;
+    fields.forEach(function (pair) {
+      var fld = $(pair[0]), input = $(pair[1]);
+      var bad = !input.value.trim();
+      fld.classList.toggle('err', bad);
+      if (bad) ok = false;
+    });
+    return ok;
+  }
+  document.querySelectorAll('[data-next]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var to = +b.getAttribute('data-next');
+      if (to === 2 && !valid([['f-addr', 'in-addr'], ['f-pc', 'in-pc']])) return;
+      show(to);
+    });
+  });
+  document.querySelectorAll('[data-back]').forEach(function (b) {
+    b.addEventListener('click', function () { show(+b.getAttribute('data-back')); });
+  });
+  $('submitBtn').addEventListener('click', function () {
+    if (!valid([['f-name', 'in-name'], ['f-phone', 'in-phone']])) return;
+    var addr = $('in-addr').value.trim(), pc = $('in-pc').value.trim().toUpperCase();
+    $('successLine').textContent = 'Your request for ' + addr + ', ' + pc + ' has been passed to the branch.';
+    show(4);
+  });
+  /* clear error state on typing */
+  ['in-addr', 'in-pc', 'in-name', 'in-phone'].forEach(function (id) {
+    $(id).addEventListener('input', function () { this.closest('.fld').classList.remove('err'); });
+  });
+})();
+</script>

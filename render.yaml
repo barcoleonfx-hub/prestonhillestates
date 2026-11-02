@@ -1,0 +1,53 @@
+# One-click hosting for the website and staff portal on Render (render.com).
+# In Render: New → Blueprint → pick this repository. It creates one web service with a persistent disk
+# that holds the database and uploaded photos/videos. You'll be asked for the values marked "sync: false".
+services:
+  - type: web
+    name: prestonhill
+    runtime: node
+    rootDir: web
+    plan: starter
+    region: frankfurt
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /properties
+    disk:
+      name: data
+      mountPath: /var/data
+      sizeGB: 10
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL
+        value: file:/var/data/prestonhill.db
+      - key: STORAGE_DRIVER
+        value: local
+      - key: UPLOADS_DIR
+        value: /var/data/uploads
+      - key: OUTBOX_DIR
+        value: /var/data/outbox
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: CRON_SECRET
+        generateValue: true
+      # The first admin account, created on first start. Change the password after signing in.
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ADMIN_NAME
+        value: Jamil Ahmed
+      # The address the portal will live at, used in email links, e.g. https://prestonhill.onrender.com
+      - key: PORTAL_URL
+        sync: false
+      # Outgoing email (Office 365: smtp.office365.com, port 587). Leave blank to start; emails are kept on the disk.
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: MAIL_FROM
+        value: Preston Hill Estates <info@prestonhillestates.com>
