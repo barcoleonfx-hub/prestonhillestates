@@ -18,7 +18,8 @@ export interface Storage {
   publicUrl(key: string): string
 }
 
-const UPLOAD_ROOT = path.resolve(process.cwd(), 'uploads')
+// UPLOADS_DIR lets a host keep uploads on a persistent disk (e.g. /var/data/uploads).
+const UPLOAD_ROOT = path.resolve(process.cwd(), process.env.UPLOADS_DIR || 'uploads')
 
 /** Resolves a storage key to a path inside the uploads folder, refusing anything that escapes it. */
 export function localPath(key: string): string {

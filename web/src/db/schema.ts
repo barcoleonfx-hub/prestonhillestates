@@ -274,6 +274,12 @@ export const auditLog = sqliteTable('audit_log', {
   at: text('at').notNull(),
 })
 
+export const jobs = sqliteTable('jobs', {
+  name: text('name').primaryKey(),
+  lastRunAt: text('last_run_at').notNull(),
+  detail: text('detail'),
+})
+
 export type Contact = typeof contacts.$inferSelect
 export type Call = typeof calls.$inferSelect
 export type Task = typeof tasks.$inferSelect

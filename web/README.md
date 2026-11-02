@@ -49,6 +49,24 @@ bedrooms, a description, council tax band, tenure (for sales) and at least one p
 
 ## Going live
 
+### Quickest: Render (one service with a disk; at the time of writing roughly $10 a month, check render.com/pricing)
+
+`render.yaml` at the root of the repository sets everything up: the website and portal on one Node
+service, with a persistent disk for the database, photos, videos and saved emails.
+
+1. Create an account at render.com and connect GitHub.
+2. **New → Blueprint**, choose this repository and the branch to deploy.
+3. Fill in the values it asks for: `ADMIN_EMAIL` and `ADMIN_PASSWORD` (the first admin account),
+   `PORTAL_URL` (the address Render gives you, e.g. `https://prestonhill.onrender.com`), and the
+   `SMTP_*` details when you have them (they can be added later under Environment).
+4. Deploy. Sign in at `<address>/admin`, change your password, and add staff under **Staff**.
+5. For reminders and the daily clean-up when nobody has the portal open, add a Render Cron Job (or use
+   cron-job.org) that calls `<address>/api/cron/reminders` every 5 minutes with the header
+   `Authorization: Bearer <CRON_SECRET>` (the value is under Environment).
+6. Later, point `prestonhillestates.com` at it under **Settings → Custom domains**.
+
+### Larger setup: managed database and media bucket
+
 1. **Database**: create a libSQL database (e.g. Turso) and set `DATABASE_URL` and `DATABASE_AUTH_TOKEN`.
 2. **Media**: create an S3-compatible bucket (Cloudflare R2 is cheap for video; no egress fees),
    expose it on a public URL, and set `STORAGE_DRIVER=s3` plus the `S3_*` and `MEDIA_PUBLIC_BASE_URL`
@@ -81,8 +99,10 @@ bedrooms, a description, council tax band, tenure (for sales) and at least one p
 - **My day** shows each person's overdue and upcoming callbacks, today's appointments, website leads nobody
   has dealt with yet, and the calls logged today. "Whole office" shows everyone's.
 - **Privacy**: every opening and change of a contact record is logged; admins can see who looked at what,
-  and can archive a contact. There is no automatic deletion yet; agree a retention period (for example two
-  years with no contact) before go-live.
+  and can archive a contact. Once a day, contacts with no calls, enquiries or bookings for 2 years
+  (`RETENTION_MONTHS`) are deleted with their call history, unless a callback or appointment is still open.
+  Website enquiries older than that are deleted, and old diary entries keep the date and address but lose
+  the visitor's name, number and notes. The privacy policy should say the same.
 
 ## The diary, alerts and outcomes
 

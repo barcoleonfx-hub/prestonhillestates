@@ -219,4 +219,10 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       `ALTER TABLE notifications ADD COLUMN task_id TEXT REFERENCES tasks(id) ON DELETE CASCADE`,
     ],
   },
+  {
+    id: '005_jobs',
+    sql: [
+      `CREATE TABLE jobs (name TEXT PRIMARY KEY, last_run_at TEXT NOT NULL, detail TEXT)`,
+    ],
+  },
 ]

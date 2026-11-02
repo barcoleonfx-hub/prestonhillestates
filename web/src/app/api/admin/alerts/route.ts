@@ -1,5 +1,7 @@
 import { currentAdmin } from '@/lib/auth'
+import { after } from 'next/server'
 import { runDueTasks } from '@/lib/contacts'
+import { runRetention } from '@/lib/retention'
 import { markAlertsRead, needingOutcome, runDueReminders, toPending, unreadAlerts } from '@/lib/appointments'
 
 export const dynamic = 'force-dynamic'
@@ -9,6 +11,8 @@ export async function GET() {
   const me = await currentAdmin()
   if (!me) return Response.json({ error: 'signed out' }, { status: 401 })
   await Promise.all([runDueReminders(), runDueTasks()])
+  // Daily clean-up of old personal details; runs at most once a day whoever triggers it.
+  after(() => runRetention().catch((e) => console.error('retention failed', e)))
   const [alerts, pending] = await Promise.all([unreadAlerts(me.id), needingOutcome(me.id)])
   return Response.json({ alerts, pending: pending.map(toPending), serverTime: new Date().toISOString() }, { headers: { 'Cache-Control': 'no-store' } })
 }

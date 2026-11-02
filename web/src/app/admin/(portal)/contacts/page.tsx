@@ -6,6 +6,7 @@ import { requireAdmin } from '@/lib/auth'
 import { CALLER_TYPES, moneyShort, normPhone, roleLabel, rolesOf } from '@/lib/crm-options'
 import { dayLabel, isoToLondon, todayLondon } from '@/lib/time'
 import { LogCallButton } from '../LogCallButton'
+import { RETENTION_MONTHS } from '@/lib/retention'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Contacts' }
@@ -41,6 +42,7 @@ export default async function ContactsPage({ searchParams }: { searchParams: Pro
         <div>
           <h1>Contacts</h1>
           <p className="sub">Everyone who has called, walked in or enquired on the website. One record per person, matched by phone number or email.</p>
+          <p className="sub">To comply with data protection rules, anyone we haven’t been in touch with for {RETENTION_MONTHS / 12} years is deleted automatically, unless they have a callback or appointment still open.</p>
         </div>
         <div className="actions"><LogCallButton className="btn btn-gold" /></div>
       </div>

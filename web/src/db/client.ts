@@ -37,10 +37,30 @@ export async function migrate(c: Client = client): Promise<string[]> {
   return applied
 }
 
+/**
+ * On a fresh install with no accounts, creates the first admin from ADMIN_EMAIL / ADMIN_PASSWORD / ADMIN_NAME,
+ * so a hosted copy can be signed into without shell access. Does nothing once any account exists.
+ */
+async function bootstrapAdmin(c: Client = client) {
+  const email = process.env.ADMIN_EMAIL?.trim().toLowerCase()
+  const password = process.env.ADMIN_PASSWORD
+  if (!email || !password) return
+  if (password.length < 10) { console.warn('ADMIN_PASSWORD must be at least 10 characters; first admin not created.'); return }
+  const { rows } = await c.execute('SELECT count(*) AS n FROM admins')
+  if (Number(rows[0].n) > 0) return
+  const { hash } = await import('bcryptjs')
+  const { randomUUID } = await import('node:crypto')
+  await c.execute({
+    sql: "INSERT INTO admins (id, email, name, password_hash, role, active, created_at) VALUES (?, ?, ?, ?, 'admin', 1, ?)",
+    args: [randomUUID(), email, process.env.ADMIN_NAME?.trim() || 'Admin', await hash(password, 12), new Date().toISOString()],
+  })
+  console.log(`Created first admin ${email}`)
+}
+
 /** Ensures the schema exists before the first query in this process. */
 export function ready(): Promise<void> {
   if (!globalForDb.__phMigrated) {
-    globalForDb.__phMigrated = migrate().then(() => undefined)
+    globalForDb.__phMigrated = migrate().then(() => bootstrapAdmin()).then(() => undefined)
   }
   return globalForDb.__phMigrated
 }

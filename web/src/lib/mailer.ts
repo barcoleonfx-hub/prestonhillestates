@@ -55,7 +55,7 @@ export async function sendMail(mail: Mail): Promise<void> {
         await t.sendMail({ from: from(), to, subject: mail.subject, text: mail.text, html: mail.html, attachments })
         await log(to, mail, 'sent')
       } else {
-        const dir = path.join(process.cwd(), 'data', 'outbox')
+        const dir = path.resolve(process.cwd(), process.env.OUTBOX_DIR || 'data/outbox')
         await mkdir(dir, { recursive: true })
         const raw = await new Promise<Buffer>((resolve, reject) => {
           nodemailer.createTransport({ streamTransport: true, buffer: true, newline: 'unix' }).sendMail(
