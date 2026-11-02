@@ -1,6 +1,11 @@
 # Preston Hill Estates — website and property portal
 
-One app that serves both:
+One app that serves everything:
+
+- **The homepage** at `/`: the approved design (gold logo, rotating seal, 2004 timeline, founder story),
+  with live "Featured this week" listings, a working property search, and the valuation form and video
+  pop-up sending straight into the portal. Its source is `concept/homepage_src.html`; after editing it run
+  `node scripts/build-home.mjs` to regenerate `src/app/(home)/home.css` and `home-content.ts`.
 
 - **The property portal** at `/admin`: staff sign in to add and edit listings, upload photos,
   floorplans, EPC graphs, brochures and video tours, publish or withdraw listings, and handle

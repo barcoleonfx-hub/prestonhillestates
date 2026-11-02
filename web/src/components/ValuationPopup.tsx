@@ -1,7 +1,7 @@
 'use client'
 import { startTransition, useActionState, useCallback, useEffect, useRef, useState } from 'react'
 import { usePathname } from 'next/navigation'
-import { sendValuationRequest, type ValuationState } from '@/app/(site)/actions'
+import { sendValuationRequest, type ValuationState } from '@/app/(main)/(site)/actions'
 import { LogoMark } from './Logo'
 
 const STORE_KEY = 'phe_valuation_popup'

@@ -1,11 +1,11 @@
 import type { Metadata } from 'next'
 import localFont from 'next/font/local'
-import './globals.css'
+import '../globals.css'
 
 const fraunces = localFont({
   src: [
-    { path: './fonts/fraunces-roman.woff2', style: 'normal', weight: '300 700' },
-    { path: './fonts/fraunces-italic.woff2', style: 'italic', weight: '300 700' },
+    { path: '../fonts/fraunces-roman.woff2', style: 'normal', weight: '300 700' },
+    { path: '../fonts/fraunces-italic.woff2', style: 'italic', weight: '300 700' },
   ],
   variable: '--font-serif',
   display: 'swap',

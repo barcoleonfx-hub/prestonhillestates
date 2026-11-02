@@ -149,6 +149,8 @@
     .searchbar .cell { border: none !important; }
     .searchbar .toggle { grid-column: 1 / -1; justify-content: center; }
     .searchbar .go { grid-column: 1 / -1; }
+    .searchbar > * { min-width: 0; }
+    .searchbar .cell input, .searchbar .cell select { width: 100%; min-width: 0; }
   }
   .searchbar .toggle { display: flex; align-items: center; gap: 4px; padding: 4px 8px 4px 6px; }
   .searchbar .toggle button {
@@ -333,6 +335,7 @@
   .svc .link { display: inline-flex; align-items: center; gap: 8px; margin-top: 20px; font-size: 0.74rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold-deep); text-decoration: none; }
   .svc .link .ar { transition: transform 0.25s ease; }
   .svc:hover .link .ar { transform: translateX(5px); }
+  .svc { overflow: hidden; }
   .svc .ghost-glyph { position: absolute; right: -18px; bottom: -22px; width: 130px; height: auto; opacity: 0.07; }
 
   /* ---------- valuation ---------- */
