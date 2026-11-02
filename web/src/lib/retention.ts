@@ -1,5 +1,5 @@
 import 'server-only'
-import { client, ready } from '@/db/client'
+import { getClient, ready } from '@/db/client'
 
 /** How long personal details are kept after the last contact. Agreed with the office: 2 years. */
 export const RETENTION_MONTHS = Math.max(6, Number(process.env.RETENTION_MONTHS) || 24)
@@ -19,6 +19,7 @@ export type RetentionResult = { ran: boolean; contacts?: number; enquiries?: num
  */
 export async function runRetention(opts: { force?: boolean } = {}): Promise<RetentionResult> {
   await ready()
+  const client = getClient()
   const nowIso = new Date().toISOString()
   const dayAgo = new Date(Date.now() - 24 * 3600000).toISOString()
   if (!opts.force) {

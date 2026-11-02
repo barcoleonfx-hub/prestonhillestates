@@ -1,5 +1,5 @@
 import { createClient, type Client } from '@libsql/client'
-import { drizzle } from 'drizzle-orm/libsql'
+import { drizzle, type LibSQLDatabase } from 'drizzle-orm/libsql'
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 import * as schema from './schema'
@@ -14,14 +14,26 @@ function makeClient(): Client {
   return createClient({ url, authToken: process.env.DATABASE_AUTH_TOKEN || undefined })
 }
 
-const globalForDb = globalThis as unknown as { __phClient?: Client; __phMigrated?: Promise<void> }
+type DB = LibSQLDatabase<typeof schema>
+const globalForDb = globalThis as unknown as { __phClient?: Client; __phDb?: DB; __phMigrated?: Promise<void> }
 
-export const client = globalForDb.__phClient ?? makeClient()
-globalForDb.__phClient = client
+/**
+ * The connection opens on first use, not when this file is loaded. Hosts such as Render build the site
+ * before the storage disk is attached, and the build loads every page's code, so opening at load time
+ * would fail the build.
+ */
+export function getClient(): Client {
+  return (globalForDb.__phClient ??= makeClient())
+}
 
-export const db = drizzle(client, { schema })
+export const db: DB = new Proxy({} as DB, {
+  get(_target, prop) {
+    const real = (globalForDb.__phDb ??= drizzle(getClient(), { schema }))
+    return Reflect.get(real, prop, real)
+  },
+})
 
-export async function migrate(c: Client = client): Promise<string[]> {
+export async function migrate(c: Client = getClient()): Promise<string[]> {
   await c.execute('PRAGMA foreign_keys = ON').catch(() => {})
   await c.execute('CREATE TABLE IF NOT EXISTS _migrations (id TEXT PRIMARY KEY, applied_at TEXT NOT NULL)')
   const done = new Set((await c.execute('SELECT id FROM _migrations')).rows.map((r) => String(r.id)))
@@ -41,7 +53,7 @@ export async function migrate(c: Client = client): Promise<string[]> {
  * On a fresh install with no accounts, creates the first admin from ADMIN_EMAIL / ADMIN_PASSWORD / ADMIN_NAME,
  * so a hosted copy can be signed into without shell access. Does nothing once any account exists.
  */
-async function bootstrapAdmin(c: Client = client) {
+async function bootstrapAdmin(c: Client = getClient()) {
   const email = process.env.ADMIN_EMAIL?.trim().toLowerCase()
   const password = process.env.ADMIN_PASSWORD
   if (!email || !password) return
