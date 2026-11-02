@@ -8,6 +8,8 @@ const ICONS: Record<string, React.ReactNode> = {
   mail: <path d="M3 6h18v12H3zM3 7l9 6 9-6" />,
   day: <path d="M12 3v2M12 19v2M5 12H3M21 12h-2M6.3 6.3 4.9 4.9M19.1 19.1l-1.4-1.4M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z" />,
   people: <path d="M4 5h16v14H4zM8 10a2 2 0 1 0 4 0 2 2 0 0 0-4 0M6.5 16c.5-1.6 1.8-2.5 3.5-2.5s3 .9 3.5 2.5M15 10h3M15 13h3" />,
+  pulse: <path d="M3 12h4l2.5-6 4 12L16 12h5" />,
+  cal: <path d="M4 6h16v14H4zM4 10h16M8 3v4M16 3v4M8 14h2M12 14h2M16 14h0M8 17h2M12 17h2" />,
   diary: <path d="M4 6h16v14H4zM4 10h16M8 3v4M16 3v4M8 14h3" />,
   team: <path d="M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20c.6-3.4 3.2-5.5 6.5-5.5s5.9 2.1 6.5 5.5M16 4.3a3.5 3.5 0 0 1 0 6.4M18.5 14.8c1.6.8 2.7 2.6 3 5.2" />,
   user: <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c.8-4 4-6.5 8-6.5s7.2 2.5 8 6.5" />,
@@ -31,6 +33,8 @@ export function NavLinks({ newEnquiries, today, outcomes, callbacks, isAdmin }: 
       <Link href="/admin/my-day" className={on('/admin/my-day')}>
         <Icon name="day" />My day{callbacks > 0 ? <span className="count" title="Callbacks due today">{callbacks}</span> : null}
       </Link>
+      <Link href="/admin/activity" className={on('/admin/activity')}><Icon name="pulse" />Activity</Link>
+      <Link href="/admin/calendar" className={on('/admin/calendar')}><Icon name="cal" />Calendar</Link>
       <Link href="/admin/contacts" className={on('/admin/contacts')}><Icon name="people" />Contacts</Link>
       <Link href="/admin/diary" className={on('/admin/diary')}>
         <Icon name="diary" />Diary

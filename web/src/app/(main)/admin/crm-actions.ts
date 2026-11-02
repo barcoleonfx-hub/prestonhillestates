@@ -31,7 +31,7 @@ export async function logCall(_prev: CallState, form: FormData): Promise<CallSta
   const source = SOURCES.includes(str(form, 'source') as (typeof SOURCES)[number]) ? str(form, 'source') : null
   const enquiryId = str(form, 'enquiryId', 64) || null
 
-  if (!contactId && !name && !phone) return { error: 'Add their name or number.', field: 'phone' }
+  if (!contactId && !name && !phone && !email) return { error: 'Add their name, number or email.', field: direction.startsWith('email') ? 'email' : 'phone' }
   if (phone && normPhone(phone).length < 7) return { error: 'That phone number looks too short.', field: 'phone' }
   if (email && !EMAIL.test(email)) return { error: 'That email address doesn’t look right.', field: 'email' }
   if (!CALLER_TYPES.some((c) => c.value === callerType)) return { error: 'Choose who’s calling: buyer, tenant, seller, landlord or other.', field: 'callerType' }

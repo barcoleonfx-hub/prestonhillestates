@@ -88,6 +88,16 @@ service, with a persistent disk for the database, photos, videos and saved email
    5 minutes with `Authorization: Bearer <CRON_SECRET>` (Vercel Cron, cron-job.org or a server crontab).
    While anyone has the portal open, reminders also fire from their screen.
 
+## The office front page, activity and calendar
+
+- **Dashboard** is the office's front page: website enquiries waiting for a reply (with Call them / Book
+  buttons), everything logged today, today's diary, callbacks and listing counts.
+- **Activity** lists every call, email, walk-in, website enquiry, booking and outcome for any day, with
+  filters by type and by person, and counts for the day.
+- **Calendar** is a month view of appointments, callbacks and website enquiries for everyone or just you;
+  click a day to see the detail and book on it.
+- Emails are logged in the same panel as calls: choose **They emailed** or **We emailed**.
+
 ## Calls, contacts and callbacks
 
 - **Logging a call**: press **N** (or "Log a call" in the sidebar). Type the number first: anyone already
