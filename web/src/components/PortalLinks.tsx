@@ -1,10 +1,10 @@
 import { existsSync } from 'node:fs'
 import path from 'node:path'
-import { PORTALS } from '@/lib/site'
+import { ACCREDITATIONS, PORTALS } from '@/lib/site'
 
-function logoFor(key: string): string | null {
-  for (const ext of ['svg', 'png', 'webp']) {
-    if (existsSync(path.join(process.cwd(), 'public', 'portals', `${key}.${ext}`))) return `/portals/${key}.${ext}`
+function logoFor(folder: string, key: string): string | null {
+  for (const ext of ['svg', 'png', 'webp', 'jpg']) {
+    if (existsSync(path.join(process.cwd(), 'public', folder, `${key}.${ext}`))) return `/${folder}/${key}.${ext}`
   }
   return null
 }
@@ -14,18 +14,28 @@ export function PortalLinks({ tone = 'light' }: { tone?: 'light' | 'dark' }) {
   return (
     <div className={`portal-links ${tone}`}>
       {PORTALS.map((p) => {
-        const logo = logoFor(p.key)
+        const logo = logoFor('portals', p.key)
         return (
-          <a
-            key={p.key}
-            className="portal-link"
-            href={p.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label={`Preston Hill Estates on ${p.name} (opens in a new tab)`}
-          >
+          <a key={p.key} className="portal-link" href={p.url} target="_blank" rel="noopener noreferrer"
+            aria-label={`Preston Hill Estates on ${p.name} (opens in a new tab)`}>
             {logo ? <img src={logo} alt={p.name} /> : <span className="pname">{p.name}</span>}
             <span className="pgo" aria-hidden="true">↗</span>
+          </a>
+        )
+      })}
+    </div>
+  )
+}
+
+/** The schemes the branch belongs to, linked to each scheme's site; logos replace the names once added. */
+export function AccreditationLinks() {
+  return (
+    <div className="acc-links">
+      {ACCREDITATIONS.map((a) => {
+        const logo = logoFor('accreditations', a.key)
+        return (
+          <a key={a.key} href={a.url} target="_blank" rel="noopener noreferrer" aria-label={`${a.name} (opens in a new tab)`}>
+            {logo ? <img src={logo} alt={a.name} /> : a.name}
           </a>
         )
       })}

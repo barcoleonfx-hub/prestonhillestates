@@ -36,10 +36,36 @@ roman, italic = font_b64("roman"), font_b64("italic")
 photo = here.parent / "IMG_7649.jpg"
 founder = base64.b64encode(photo.read_bytes()).decode() if photo.exists() else ""
 
+MIME = {".png": "image/png", ".svg": "image/svg+xml", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}
+
+def badge(key):
+    """Logo for a link marked data-badge="key", from badges/<key>.<ext> (or web/public/{portals,accreditations})."""
+    folders = [here / "badges", here.parent / "web/public/portals", here.parent / "web/public/accreditations"]
+    for folder in folders:
+        for ext, mime in MIME.items():
+            f = folder / f"{key}{ext}"
+            if f.exists():
+                return f"data:{mime};base64,{base64.b64encode(f.read_bytes()).decode()}"
+    return None
+
+def inline_badges(html):
+    # <a ... data-badge="key" ... aria-label="Name (opens…)">Name ...</a>: swap the visible name for the logo.
+    def swap(m):
+        tag, key, inner = m.group(1), m.group(2), m.group(3)
+        uri = badge(key)
+        if not uri:
+            return m.group(0)
+        label = re.search(r'aria-label="([^"]*)"', tag)
+        alt = re.sub(r"\s*\(opens in a new tab\)", "", label.group(1)) if label else key
+        inner = re.sub(r"^[^<]+", f'<img src="{uri}" alt="{alt}"> ', inner)
+        return tag + inner + "</a>"
+    return re.sub(r'(<a [^>]*data-badge="([a-z]+)"[^>]*>)(.*?)</a>', swap, html)
+
 for name in ["homepage", "listing", "valuation"]:
     src = (here / f"{name}_src.html").read_text()
     src = (src.replace("__ROMAN_B64__", roman)
               .replace("__ITALIC_B64__", italic)
               .replace("__FOUNDER_B64__", founder))
+    src = inline_badges(src)
     (dist / f"{name}.html").write_text(src)
     print(f"built dist/{name}.html ({len(src):,} bytes)")

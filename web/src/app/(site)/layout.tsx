@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { LogoMark } from '@/components/Logo'
-import { PortalLinks } from '@/components/PortalLinks'
+import { AccreditationLinks, PortalLinks } from '@/components/PortalLinks'
 import './site.css'
 
 export default function SiteLayout({ children }: { children: React.ReactNode }) {
@@ -48,7 +48,7 @@ export default function SiteLayout({ children }: { children: React.ReactNode }) 
             </div>
             <div>
               <h4>Accredited</h4>
-              <p>The Property Ombudsman · PRS · safeagent · myDeposits</p>
+              <AccreditationLinks />
             </div>
           </div>
           <div className="legal">
