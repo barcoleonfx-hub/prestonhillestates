@@ -5,6 +5,9 @@ One app that serves both:
 - **The property portal** at `/admin`: staff sign in to add and edit listings, upload photos,
   floorplans, EPC graphs, brochures and video tours, publish or withdraw listings, and handle
   viewing requests.
+- **The office diary** at `/admin/diary`: book viewings and valuations in a few taps (day, time,
+  how long, who's going), with on-screen alerts and a chime on every staff screen, emails with a
+  calendar invite, reminders before each appointment, and a required outcome form afterwards.
 - **The public website**: `/properties` (search) and `/properties/<ref>-<address>` (listing pages),
   which read live from the same database. Published listings are also available as JSON at
   `/api/public/properties`.
@@ -50,8 +53,31 @@ bedrooms, a description, council tax band, tenure (for sales) and at least one p
    browser uploads files straight to the bucket.
 3. **Hosting**: deploy the `web` folder to any Node host (Vercel, Render, Railway or a VPS).
    Set `AUTH_SECRET` to a long random value.
-4. Run `npm run db:migrate` against the production database, then `npm run create-admin` for each
-   member of staff.
+4. Run `npm run db:migrate` against the production database, then `npm run create-admin` once to
+   make the first admin. Everyone else is added from **Staff** in the portal.
+5. **Email**: set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` and `MAIL_FROM` (an Office 365 or
+   Google Workspace mailbox works), and `PORTAL_URL` for links in the emails. Without SMTP, emails are
+   written to `data/outbox` instead.
+6. **Reminders when nobody is signed in**: set `CRON_SECRET` and call `/api/cron/reminders` every
+   5 minutes with `Authorization: Bearer <CRON_SECRET>` (Vercel Cron, cron-job.org or a server crontab).
+   While anyone has the portal open, reminders also fire from their screen.
+
+## The diary, alerts and outcomes
+
+- **Booking**: pick the type, the property (or type an address), a day chip, a time slot and a
+  duration, then the person going. Slots that person is already booked for are striped red, and the
+  server refuses a double booking unless you choose "Book anyway". "Book viewing" on a website
+  enquiry fills in the caller's details.
+- **Alerts**: every open portal tab checks in every 20 seconds. New bookings, changes, cancellations and
+  reminders appear as cards with a chime until each person clicks "Got it". Browsers only play sound
+  after the page has been clicked once, and desktop pop-ups need "Turn on desktop alerts" once per browser.
+- **Emails**: all active staff get an email for each booking, change, cancellation and reminder. Booking
+  emails carry an `.ics` invite so it can go straight into Outlook, Google or Apple calendars.
+- **Outcomes**: 15 minutes after an appointment ends, the person who went is locked out of the portal
+  by a form until they record whether it went ahead, how it went, notes and the next step. Admins see
+  every overdue outcome in the diary and can fill them in.
+- **Staff roles**: admins can add staff, switch accounts off, reset passwords and manage roles.
+  Negotiators can do everything else.
 
 ## Testing
 
@@ -61,4 +87,13 @@ change the cover photo, publish, view it on the public site and send a viewing r
 
 ```bash
 node scripts/e2e.mjs http://localhost:3000 <admin-email> <password> <assets-dir> <screenshot-dir>
+```
+
+`scripts/e2e-diary.mjs` signs in two people at once: an admin adds a negotiator, books a viewing for
+them, checks the alert reaches only the other screen, checks double booking is caught, fires the
+reminder, then confirms the negotiator is locked out until the outcome is recorded and that emails with
+calendar invites went out. It clears appointments in the local database first, so don't point it at real data.
+
+```bash
+node scripts/e2e-diary.mjs http://localhost:3000 <admin-email> <password> <screenshot-dir>
 ```

@@ -29,7 +29,7 @@ export async function verifyLogin(email: string, password: string): Promise<Sess
   // Compare against a dummy hash when the user is unknown so timing doesn't reveal which emails exist.
   dummyHash ??= await bcrypt.hash('no-account-placeholder', 12)
   const ok = await bcrypt.compare(password, user?.passwordHash ?? dummyHash)
-  if (!user || !ok) return null
+  if (!user || !ok || !user.active) return null
   await db.update(admins).set({ lastLoginAt: now() }).where(eq(admins.id, user.id))
   return { id: user.id, email: user.email, name: user.name, role: user.role }
 }
@@ -65,7 +65,7 @@ export async function currentAdmin(): Promise<SessionUser | null> {
     await ready()
     // Re-check the account still exists so removed admins lose access immediately.
     const user = await db.query.admins.findFirst({ where: eq(admins.id, payload.sub) })
-    if (!user) return null
+    if (!user || !user.active) return null
     return { id: user.id, email: user.email, name: user.name, role: user.role }
   } catch {
     return null
@@ -77,6 +77,19 @@ export async function requireAdmin(): Promise<SessionUser> {
   const user = await currentAdmin()
   if (!user) redirect('/admin/login')
   return user
+}
+
+/** For admin-only pages and actions such as managing staff accounts. */
+export async function requireRole(role: 'admin'): Promise<SessionUser> {
+  const user = await requireAdmin()
+  if (user.role !== role) redirect('/admin')
+  return user
+}
+
+export async function checkPassword(userId: string, password: string): Promise<boolean> {
+  await ready()
+  const user = await db.query.admins.findFirst({ where: eq(admins.id, userId) })
+  return !!user && (await bcrypt.compare(password, user.passwordHash))
 }
 
 export async function hashPassword(password: string) {

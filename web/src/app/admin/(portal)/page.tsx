@@ -4,6 +4,9 @@ import { db, ready } from '@/db/client'
 import { enquiries, properties } from '@/db/schema'
 import { coversFor, displayAddressFor, priceLabel, statusLabel } from '@/lib/properties'
 import { requireAdmin } from '@/lib/auth'
+import { listBetween } from '@/lib/appointments'
+import { kindLabel } from '@/lib/appointment-options'
+import { addDays, endIso, fmtTime, londonToIso, todayLondon } from '@/lib/time'
 import { createProperty } from '../actions'
 
 export const dynamic = 'force-dynamic'
@@ -15,8 +18,10 @@ async function n(where?: SQL) {
 }
 
 export default async function Dashboard() {
-  await requireAdmin()
+  const me = await requireAdmin()
   await ready()
+  const today = todayLondon()
+  const todays = (await listBetween(londonToIso(today, '00:00')!, londonToIso(addDays(today, 1), '00:00')!)).filter((a) => a.status !== 'cancelled')
   const [liveSale, liveLet, drafts, progressing, newEnq] = await Promise.all([
     n(and(eq(properties.published, true), eq(properties.channel, 'sale'))),
     n(and(eq(properties.published, true), eq(properties.channel, 'let'))),
@@ -40,6 +45,31 @@ export default async function Dashboard() {
           <form action={createProperty}><input type="hidden" name="channel" value="let" /><button className="btn btn-dark" type="submit">Add property to let</button></form>
         </div>
       </div>
+
+      <section className="card card-pad today-card">
+        <div className="today-head">
+          <h2>Today’s diary</h2>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Link className="btn btn-gold btn-sm" href="/admin/diary/new">Book appointment</Link>
+            <Link className="btn btn-ghost btn-sm" href="/admin/diary">Full diary</Link>
+          </div>
+        </div>
+        {todays.length === 0 ? (
+          <p className="card-sub" style={{ marginTop: 8 }}>Nothing booked for today.</p>
+        ) : (
+          <ul className="today-list">
+            {todays.map((a) => (
+              <li key={a.id} className={a.staffId === me.id ? 'mine' : undefined}>
+                <Link href={`/admin/diary/${a.id}`}>
+                  <span className="num"><b>{fmtTime(a.startsAt)}</b> to {fmtTime(endIso(a.startsAt, a.durationMin))}</span>
+                  <span>{kindLabel(a.kind)} · {a.location || 'No address'}</span>
+                  <span className="who">{a.staffId === me.id ? 'You' : a.staffName}{a.status === 'completed' ? ' · done' : ''}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <div className="stats">
         <Link href="/admin/properties?channel=sale&published=live" className="card stat" style={{ textDecoration: 'none' }}><div className="n">{liveSale}</div><div className="k">Live for sale</div></Link>

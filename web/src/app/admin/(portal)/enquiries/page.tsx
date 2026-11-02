@@ -51,11 +51,14 @@ export default async function EnquiriesPage() {
                   ) : null}
                   {e.message ? <p className="msg">{e.message}</p> : null}
                 </div>
+                <div className="enq-actions">
+                <Link className="btn btn-gold btn-sm" href={`/admin/diary/new?enquiry=${e.id}`}>{e.kind === 'valuation' ? 'Book valuation' : 'Book viewing'}</Link>
                 <form action={setEnquiryHandled}>
                   <input type="hidden" name="id" value={e.id} />
                   <input type="hidden" name="handled" value={e.handled ? '0' : '1'} />
                   <button className="btn btn-ghost btn-sm" type="submit">{e.handled ? 'Mark as new' : 'Mark handled'}</button>
                 </form>
+                </div>
               </div>
             ))}
           </div>

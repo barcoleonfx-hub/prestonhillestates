@@ -6,6 +6,8 @@ export const admins = sqliteTable('admins', {
   name: text('name').notNull(),
   passwordHash: text('password_hash').notNull(),
   role: text('role').notNull().default('admin'),
+  active: integer('active', { mode: 'boolean' }).notNull().default(true),
+  phone: text('phone'),
   createdAt: text('created_at').notNull(),
   lastLoginAt: text('last_login_at'),
 })
@@ -136,6 +138,66 @@ export const enquiries = sqliteTable('enquiries', {
   createdAt: text('created_at').notNull(),
 })
 
+export const appointments = sqliteTable(
+  'appointments',
+  {
+    id: text('id').primaryKey(),
+    kind: text('kind').notNull().default('viewing'),
+    propertyId: text('property_id').references(() => properties.id, { onDelete: 'set null' }),
+    address: text('address'),
+    startsAt: text('starts_at').notNull(),
+    durationMin: integer('duration_min').notNull().default(30),
+    staffId: text('staff_id').notNull().references(() => admins.id),
+    contactName: text('contact_name'),
+    contactPhone: text('contact_phone'),
+    contactEmail: text('contact_email'),
+    notes: text('notes'),
+    status: text('status').notNull().default('scheduled'),
+    reminderMin: integer('reminder_min').notNull().default(30),
+    remindedAt: text('reminded_at'),
+    cancelReason: text('cancel_reason'),
+    outcome: text('outcome'),
+    outcomeInterest: text('outcome_interest'),
+    outcomeNotes: text('outcome_notes'),
+    outcomeNext: text('outcome_next'),
+    outcomeAt: text('outcome_at'),
+    outcomeBy: text('outcome_by'),
+    enquiryId: text('enquiry_id').references(() => enquiries.id, { onDelete: 'set null' }),
+    createdBy: text('created_by'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (t) => [index('appointments_start_idx').on(t.startsAt), index('appointments_staff_idx').on(t.staffId, t.status)],
+)
+
+export const notifications = sqliteTable('notifications', {
+  id: text('id').primaryKey(),
+  kind: text('kind').notNull(),
+  appointmentId: text('appointment_id').references(() => appointments.id, { onDelete: 'cascade' }),
+  title: text('title').notNull(),
+  body: text('body'),
+  createdBy: text('created_by'),
+  createdAt: text('created_at').notNull(),
+})
+
+export const notificationReads = sqliteTable('notification_reads', {
+  notificationId: text('notification_id').notNull(),
+  adminId: text('admin_id').notNull(),
+  readAt: text('read_at').notNull(),
+})
+
+export const emailLog = sqliteTable('email_log', {
+  id: text('id').primaryKey(),
+  toAddr: text('to_addr').notNull(),
+  subject: text('subject').notNull(),
+  status: text('status').notNull(),
+  error: text('error'),
+  appointmentId: text('appointment_id'),
+  createdAt: text('created_at').notNull(),
+})
+
+export type Admin = typeof admins.$inferSelect
+export type Appointment = typeof appointments.$inferSelect
 export type Property = typeof properties.$inferSelect
 export type Media = typeof media.$inferSelect
 export type Room = typeof rooms.$inferSelect
