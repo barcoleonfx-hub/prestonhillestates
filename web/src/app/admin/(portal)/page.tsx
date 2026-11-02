@@ -87,13 +87,13 @@ export default async function Dashboard() {
           <h2>Latest enquiries</h2>
           <div className="enq" style={{ marginTop: 8 }}>
             {latestEnq.length === 0 ? (
-              <p style={{ color: 'var(--faint)', fontSize: '0.88rem', padding: '18px 0' }}>Viewing requests from the website will appear here.</p>
+              <p style={{ color: 'var(--faint)', fontSize: '0.88rem', padding: '18px 0' }}>Valuation and viewing requests from the website will appear here.</p>
             ) : (
               latestEnq.map((e) => (
                 <div className="enq-item" key={e.id}>
                   <div>
                     <div className="who">{e.name}</div>
-                    <div className="what">{e.phone || e.email} · {new Date(e.createdAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}</div>
+                    <div className="what">{e.kind === 'valuation' ? `Valuation · ${e.postcode}` : 'Viewing'} · {e.phone || e.email} · {new Date(e.createdAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}</div>
                   </div>
                   {e.handled ? <span className="pill">Handled</span> : <span className="pill gold">New</span>}
                 </div>

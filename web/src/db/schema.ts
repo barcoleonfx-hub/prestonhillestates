@@ -130,6 +130,8 @@ export const enquiries = sqliteTable('enquiries', {
   phone: text('phone'),
   email: text('email'),
   message: text('message'),
+  postcode: text('postcode'),
+  intent: text('intent'),
   handled: integer('handled', { mode: 'boolean' }).notNull().default(false),
   createdAt: text('created_at').notNull(),
 })

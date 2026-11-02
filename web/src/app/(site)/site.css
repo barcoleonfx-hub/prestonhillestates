@@ -143,3 +143,60 @@
 .acc-links a { color: #C9C5B4; }
 .acc-links img[alt="myDeposits"] { height: 46px; padding: 3px; }
 .acc-links img { height: 34px; width: auto; display: block; background: #fff; border-radius: 6px; padding: 4px 6px; }
+
+/* ---------- valuation pop-up ---------- */
+.vp-backdrop {
+  --vpw: min(880px, calc(100vw - 32px));
+  position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 16px;
+  background: rgba(20, 18, 12, 0.55); backdrop-filter: blur(3px);
+  opacity: 0; transition: opacity 0.35s ease;
+}
+.vp-backdrop.in { opacity: 1; }
+.vp-dialog {
+  width: var(--vpw); max-height: calc(100vh - 32px); overflow: auto; background: var(--bg);
+  border-radius: 22px; box-shadow: 0 40px 90px -30px rgba(0,0,0,0.6);
+  transform: translateY(18px) scale(0.98); transition: transform 0.45s cubic-bezier(.2,.65,.2,1);
+}
+.vp-backdrop.in .vp-dialog { transform: none; }
+.vp-media { position: relative; height: calc(var(--vpw) * 0.5625); background: #0d0f16; overflow: hidden; transition: height 0.9s cubic-bezier(.2,.65,.2,1); }
+.vp-dialog.form-shown .vp-media { height: calc(var(--vpw) * 0.32); }
+.vp-media video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 74%; }
+.vp-shade { position: absolute; inset: 0; background: linear-gradient(0deg, rgba(10,10,14,0.55) 0%, rgba(10,10,14,0) 45%), linear-gradient(180deg, rgba(10,10,14,0.35) 0%, rgba(10,10,14,0) 30%); pointer-events: none; }
+.vp-brand { position: absolute; left: 22px; top: 18px; display: flex; align-items: center; gap: 12px; color: #FBFAF3; }
+.vp-brand svg { width: 38px; height: 38px; }
+.vp-brand span { font-family: var(--serif); font-size: 1.15rem; font-style: italic; text-shadow: 0 1px 12px rgba(0,0,0,0.5); }
+.vp-close { position: absolute; right: 14px; top: 14px; width: 40px; height: 40px; border-radius: 50%; border: 0; background: rgba(0,0,0,0.45); color: #fff; display: grid; place-items: center; cursor: pointer; backdrop-filter: blur(6px); }
+.vp-close:hover { background: rgba(0,0,0,0.7); }
+.vp-tools { position: absolute; right: 14px; bottom: 14px; display: flex; gap: 8px; }
+.vp-tools button { font: inherit; font-size: 0.74rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #fff; background: rgba(0,0,0,0.45); border: 1px solid rgba(255,255,255,0.28); border-radius: 999px; padding: 8px 14px; cursor: pointer; backdrop-filter: blur(6px); }
+.vp-tools button:hover { background: rgba(0,0,0,0.7); }
+.vp-formwrap { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.9s cubic-bezier(.2,.65,.2,1); }
+.vp-dialog.form-shown .vp-formwrap { grid-template-rows: 1fr; }
+.vp-forminner { overflow: hidden; min-height: 0; }
+.vp-forminner form, .vp-done { padding: 22px 28px 24px; display: flex; flex-direction: column; gap: 14px; }
+.vp-head h2, .vp-done h2 { font-family: var(--serif); font-weight: 420; font-size: 1.7rem; letter-spacing: -0.012em; margin-top: 4px; }
+.vp-head h2 em { font-style: italic; color: var(--gold-deep); }
+.vp-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 14px; }
+.vp-grid .input[aria-invalid="true"] { border-color: var(--danger); }
+.vp-intent { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.vp-intent .flabel { font-size: 0.78rem; font-weight: 600; color: var(--ink-soft); }
+.vp-error { color: var(--danger); font-size: 0.86rem; }
+.vp-actions { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.vp-later { background: none; border: 0; font: inherit; font-size: 0.86rem; color: var(--faint); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.vp-later:hover { color: var(--ink); }
+.vp-small { font-size: 0.76rem; color: var(--faint); }
+.vp-done p { color: var(--ink-soft); max-width: 52ch; }
+.vp-done .btn { align-self: flex-start; }
+
+@media (max-width: 640px) {
+  .vp-backdrop { --vpw: 100vw; place-items: end center; padding: 0; }
+  .vp-dialog { border-radius: 22px 22px 0 0; max-height: 92vh; transform: translateY(100%); }
+  .vp-backdrop.in .vp-dialog { transform: none; }
+  .vp-dialog.form-shown .vp-media { height: calc(var(--vpw) * 0.36); }
+  .vp-grid { grid-template-columns: 1fr; }
+  .vp-forminner form, .vp-done { padding: 18px 18px 22px; }
+  .vp-brand span { font-size: 0.95rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vp-backdrop, .vp-dialog, .vp-media, .vp-formwrap { transition: none !important; }
+}

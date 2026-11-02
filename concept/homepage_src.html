@@ -399,6 +399,64 @@
   .foot-brand .w span { display: block; font-weight: 300; letter-spacing: 0.26em; font-size: 0.88rem; color: #A5A18D; }
   .accred { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 0.74rem; letter-spacing: 0.06em; color: #8F8A76; }
   .foot-legal { border-top: 1px solid rgba(201,197,180,0.14); display: flex; justify-content: space-between; gap: 14px; flex-wrap: wrap; padding: 20px clamp(20px,4vw,52px); font-size: 0.7rem; color: #7B7663; }
+  /* ---------- valuation pop-up ---------- */
+  .vp-backdrop { --vpw: min(880px, calc(100vw - 32px)); position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 16px; background: rgba(20,18,12,0.55); backdrop-filter: blur(3px); opacity: 0; transition: opacity 0.35s ease; }
+  .vp-backdrop[hidden] { display: none; }
+  .vp-backdrop.in { opacity: 1; }
+  .vp-dialog { width: var(--vpw); max-height: calc(100vh - 32px); overflow: auto; background: var(--bg); border-radius: 22px; box-shadow: 0 40px 90px -30px rgba(0,0,0,0.6); transform: translateY(18px) scale(0.98); transition: transform 0.45s cubic-bezier(.2,.65,.2,1); }
+  .vp-backdrop.in .vp-dialog { transform: none; }
+  .vp-media { position: relative; height: calc(var(--vpw) * 0.5625); background: #0d0f16; overflow: hidden; transition: height 0.9s cubic-bezier(.2,.65,.2,1); }
+  .vp-dialog.form-shown .vp-media { height: calc(var(--vpw) * 0.32); }
+  .vp-media video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 74%; }
+  .vp-shade { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(0deg, rgba(10,10,14,0.55) 0%, rgba(10,10,14,0) 45%), linear-gradient(180deg, rgba(10,10,14,0.35) 0%, rgba(10,10,14,0) 30%); }
+  .vp-brand { position: absolute; left: 22px; top: 18px; display: flex; align-items: center; gap: 12px; color: #FBFAF3; }
+  .vp-brand svg { width: 38px; height: 38px; }
+  .vp-brand span { font-family: 'Fraunces', Georgia, serif; font-size: 1.15rem; font-style: italic; text-shadow: 0 1px 12px rgba(0,0,0,0.5); }
+  .vp-close { position: absolute; right: 14px; top: 14px; width: 40px; height: 40px; border-radius: 50%; border: 0; background: rgba(0,0,0,0.45); color: #fff; display: grid; place-items: center; cursor: pointer; backdrop-filter: blur(6px); }
+  .vp-close:hover { background: rgba(0,0,0,0.7); }
+  .vp-tools { position: absolute; right: 14px; bottom: 14px; display: flex; gap: 8px; }
+  .vp-tools button { font: inherit; font-size: 0.74rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #fff; background: rgba(0,0,0,0.45); border: 1px solid rgba(255,255,255,0.28); border-radius: 999px; padding: 8px 14px; cursor: pointer; backdrop-filter: blur(6px); }
+  .vp-tools button:hover { background: rgba(0,0,0,0.7); }
+  .vp-dialog.form-shown .vp-skip { display: none; }
+  .vp-formwrap { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.9s cubic-bezier(.2,.65,.2,1); }
+  .vp-dialog.form-shown .vp-formwrap { grid-template-rows: 1fr; }
+  .vp-forminner { overflow: hidden; min-height: 0; }
+  .vp-forminner form, .vp-done { padding: 22px 28px 24px; display: flex; flex-direction: column; gap: 14px; }
+  .vp-done[hidden] { display: none; }
+  .vp-head .label { color: var(--gold-deep); }
+  .vp-head h2, .vp-done h2 { font-family: 'Fraunces', Georgia, serif; font-weight: 420; font-size: 1.7rem; letter-spacing: -0.012em; margin-top: 4px; }
+  .vp-head h2 em { font-style: italic; color: var(--gold-deep); }
+  .vp-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 14px; }
+  .vp-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .vp-field label, .vp-intent .flabel { font-size: 0.78rem; font-weight: 600; color: var(--ink-soft); }
+  .vp-field .hint { color: var(--faint); font-weight: 500; }
+  .vp-field input { width: 100%; font: inherit; font-size: 0.92rem; color: var(--ink); background: #fff; border: 1.5px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  .vp-field input:focus { outline: none; border-color: var(--gold); }
+  .vp-field input[aria-invalid="true"] { border-color: #A8442E; }
+  .vp-intent { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .vp-seg { display: inline-flex; background: var(--line-soft); border-radius: 999px; padding: 3px; gap: 2px; }
+  .vp-seg label { position: relative; }
+  .vp-seg input { position: absolute; opacity: 0; inset: 0; cursor: pointer; }
+  .vp-seg span { display: block; padding: 7px 16px; border-radius: 999px; font-size: 0.86rem; font-weight: 600; color: var(--ink-soft); }
+  .vp-seg input:checked + span { background: var(--charcoal); color: #fff; }
+  .vp-seg input:focus-visible + span { outline: 2px solid var(--focus); }
+  .vp-error { color: #A8442E; font-size: 0.86rem; }
+  .vp-actions { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+  .vp-later { background: none; border: 0; font: inherit; font-size: 0.86rem; color: var(--faint); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+  .vp-later:hover { color: var(--ink); }
+  .vp-small { font-size: 0.76rem; color: var(--faint); }
+  .vp-done p { color: var(--ink-soft); max-width: 52ch; }
+  .vp-done .btn { align-self: flex-start; }
+  @media (max-width: 640px) {
+    .vp-backdrop { --vpw: 100vw; place-items: end center; padding: 0; }
+    .vp-dialog { border-radius: 22px 22px 0 0; max-height: 92vh; transform: translateY(100%); }
+    .vp-backdrop.in .vp-dialog { transform: none; }
+    .vp-dialog.form-shown .vp-media { height: calc(var(--vpw) * 0.36); }
+    .vp-grid { grid-template-columns: 1fr; }
+    .vp-forminner form, .vp-done { padding: 18px 18px 22px; }
+    .vp-brand span { font-size: 0.95rem; }
+  }
+  @media (prefers-reduced-motion: reduce) { .vp-backdrop, .vp-dialog, .vp-media, .vp-formwrap { transition: none !important; } }
 </style>
 
 <!-- ————— shared symbols ————— -->
@@ -773,6 +831,53 @@
   </div>
 </footer>
 
+<div class="vp-backdrop" id="vp" hidden>
+  <div class="vp-dialog" role="dialog" aria-modal="true" aria-labelledby="vp-title">
+    <div class="vp-media">
+      <video id="vp-video" muted playsinline preload="none" aria-hidden="true"></video>
+      <div class="vp-shade"></div>
+      <div class="vp-brand"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#ph-logo"/></svg><span>22 years on Preston Road.</span></div>
+      <button type="button" class="vp-close" aria-label="Close"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+      <div class="vp-tools">
+        <button type="button" class="vp-sound" aria-pressed="false">Sound on</button>
+        <button type="button" class="vp-skip">Skip</button>
+      </div>
+    </div>
+    <div class="vp-formwrap">
+      <div class="vp-forminner">
+        <form id="vp-form" novalidate>
+          <div class="vp-head"><span class="label">Free valuation · no obligation</span><h2 id="vp-title">What&rsquo;s your home <em>worth?</em></h2></div>
+          <div class="vp-grid">
+            <div class="vp-field"><label for="vp-name">Your name</label><input id="vp-name" name="name" autocomplete="name"/></div>
+            <div class="vp-field"><label for="vp-phone">Phone number</label><input id="vp-phone" name="phone" type="tel" autocomplete="tel"/></div>
+            <div class="vp-field"><label for="vp-email">Email <span class="hint">(optional)</span></label><input id="vp-email" name="email" type="email" autocomplete="email"/></div>
+            <div class="vp-field"><label for="vp-postcode">Property postcode</label><input id="vp-postcode" name="postcode" autocomplete="postal-code" style="text-transform: uppercase;"/></div>
+          </div>
+          <div class="vp-intent">
+            <span class="flabel">I&rsquo;m thinking of</span>
+            <div class="vp-seg" role="radiogroup" aria-label="I&rsquo;m thinking of">
+              <label><input type="radio" name="intent" value="selling" checked/><span>Selling</span></label>
+              <label><input type="radio" name="intent" value="letting"/><span>Letting</span></label>
+              <label><input type="radio" name="intent" value="unsure"/><span>Not sure yet</span></label>
+            </div>
+          </div>
+          <p class="vp-error" role="alert" hidden></p>
+          <div class="vp-actions">
+            <button class="btn gold" type="submit">Request my free valuation</button>
+            <button type="button" class="vp-later">Maybe later</button>
+          </div>
+          <p class="vp-small">We&rsquo;ll only use your details to arrange your valuation.</p>
+        </form>
+        <div class="vp-done" role="status" hidden>
+          <h2>Thank you.</h2>
+          <p>A member of the branch will call you within one working day to arrange your free valuation.</p>
+          <button type="button" class="btn dark vp-done-close">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 (function () {
   /* nav shadow on scroll */
@@ -836,4 +941,80 @@
   document.getElementById('copyright').textContent =
     '© ' + new Date().getFullYear() + ' Preston Hill Estates · Company No. 05058532';
 })();
+  /* ---------- valuation pop-up (preview: once per browser session) ---------- */
+  (function () {
+    var root = document.getElementById('vp'); if (!root) return;
+    var dialog = root.querySelector('.vp-dialog'), video = document.getElementById('vp-video');
+    var form = document.getElementById('vp-form'), err = root.querySelector('.vp-error'), done = root.querySelector('.vp-done');
+    var KEY = 'phe_vp_preview', REVEAL = 2.5, lastFocus = null, opened = false;
+    var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var phone = window.matchMedia('(max-width: 640px)').matches;
+    try { if (sessionStorage.getItem(KEY)) return; } catch (e) {}
+
+    function reveal() { dialog.classList.add('form-shown'); }
+    function open() {
+      if (opened) return; opened = true;
+      lastFocus = document.activeElement;
+      video.src = window.matchMedia('(max-width: 700px)').matches ? 'video/wembley-720.mp4' : 'video/wembley-1080.mp4';
+      video.poster = reduced ? 'video/wembley-last.jpg' : 'video/wembley-first.jpg';
+      root.hidden = false;
+      requestAnimationFrame(function () { root.classList.add('in'); });
+      root.querySelector('.vp-close').focus();
+      if (reduced) { reveal(); root.querySelector('.vp-sound').hidden = true; }
+      else { video.preload = 'auto'; var pr = video.play(); if (pr && pr.catch) pr.catch(reveal); }
+    }
+    function close() {
+      try { sessionStorage.setItem(KEY, '1'); } catch (e) {}
+      root.classList.remove('in'); video.pause();
+      setTimeout(function () { root.hidden = true; if (lastFocus && lastFocus.focus) lastFocus.focus(); }, 350);
+    }
+    video.addEventListener('timeupdate', function () { if (video.duration && video.duration - video.currentTime <= REVEAL) reveal(); });
+    video.addEventListener('ended', reveal);
+    video.addEventListener('error', reveal);
+    root.querySelector('.vp-close').addEventListener('click', close);
+    root.querySelector('.vp-later').addEventListener('click', close);
+    root.querySelector('.vp-done-close').addEventListener('click', close);
+    root.addEventListener('mousedown', function (e) { if (e.target === root) close(); });
+    root.querySelector('.vp-skip').addEventListener('click', function () {
+      if (video.duration) { video.currentTime = Math.max(video.duration - 0.05, 0); video.pause(); }
+      reveal();
+    });
+    var sound = root.querySelector('.vp-sound');
+    sound.addEventListener('click', function () {
+      video.muted = !video.muted; sound.textContent = video.muted ? 'Sound on' : 'Sound off';
+      sound.setAttribute('aria-pressed', String(!video.muted)); video.play().catch(function () {});
+    });
+    document.addEventListener('keydown', function (e) {
+      if (root.hidden) return;
+      if (e.key === 'Escape') { e.preventDefault(); close(); }
+      if (e.key === 'Tab') {
+        var items = [].slice.call(dialog.querySelectorAll('button, input, a[href]')).filter(function (el) { return el.offsetParent !== null && !el.disabled; });
+        if (!items.length) return;
+        var first = items[0], last = items[items.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    });
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      [].forEach.call(form.querySelectorAll('input'), function (i) { i.removeAttribute('aria-invalid'); });
+      function fail(id, msg) { var el = document.getElementById(id); el.setAttribute('aria-invalid', 'true'); el.focus(); err.textContent = msg; err.hidden = false; }
+      var name = form.name.value.trim(), tel = form.phone.value.trim(), mail = form.email.value.trim();
+      var pc = form.postcode.value.trim().toUpperCase().replace(/\s+/g, ' ');
+      if (!name) return fail('vp-name', 'Please tell us your name.');
+      if (!/^[0-9+()\s-]{7,20}$/.test(tel)) return fail('vp-phone', tel ? 'That phone number doesn’t look right.' : 'Add a phone number so the branch can call you.');
+      if (mail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) return fail('vp-email', 'That email address doesn’t look right.');
+      if (!/^[A-Z]{1,2}[0-9][A-Z0-9]? ?[0-9][A-Z]{2}$/.test(pc)) return fail('vp-postcode', 'Enter the full postcode of the property, e.g. HA3 0PS.');
+      err.hidden = true; form.hidden = true; done.hidden = false;
+      done.querySelector('button').focus();
+    });
+
+    if (phone) {
+      var t = setTimeout(open, 10000);
+      window.addEventListener('scroll', function onS() { if (window.scrollY > 240) { clearTimeout(t); window.removeEventListener('scroll', onS); open(); } }, { passive: true });
+    } else {
+      setTimeout(open, 4000);
+    }
+  })();
+
 </script>

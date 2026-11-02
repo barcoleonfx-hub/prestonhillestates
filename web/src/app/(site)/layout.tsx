@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { LogoMark } from '@/components/Logo'
 import { AccreditationLinks, PortalLinks } from '@/components/PortalLinks'
+import { ValuationPopup } from '@/components/ValuationPopup'
 import './site.css'
 
 export default function SiteLayout({ children }: { children: React.ReactNode }) {
@@ -57,6 +58,7 @@ export default function SiteLayout({ children }: { children: React.ReactNode }) 
           </div>
         </div>
       </footer>
+      <ValuationPopup />
     </>
   )
 }

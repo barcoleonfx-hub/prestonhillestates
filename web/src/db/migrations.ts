@@ -76,4 +76,11 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       )`,
     ],
   },
+  {
+    id: '002_enquiry_valuation_fields',
+    sql: [
+      `ALTER TABLE enquiries ADD COLUMN postcode TEXT`,
+      `ALTER TABLE enquiries ADD COLUMN intent TEXT`,
+    ],
+  },
 ]

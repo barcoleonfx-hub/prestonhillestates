@@ -24,7 +24,7 @@ export default async function EnquiriesPage() {
       <div className="page-head">
         <div>
           <h1>Enquiries</h1>
-          <p className="sub">Viewing requests sent from property pages on the website.</p>
+          <p className="sub">Valuation and viewing requests sent from the website.</p>
         </div>
       </div>
       <section className="card card-pad">
@@ -36,13 +36,19 @@ export default async function EnquiriesPage() {
               <div className="enq-item" key={e.id}>
                 <div style={{ minWidth: 0 }}>
                   <div className="who">
-                    {e.name} {e.handled ? <span className="pill">Handled</span> : <span className="pill gold">New</span>}
+                    {e.name} {e.handled ? <span className="pill">Handled</span> : <span className="pill gold">New</span>}{' '}
+                    <span className="pill">{e.kind === 'valuation' ? 'Valuation request' : 'Viewing request'}</span>
                   </div>
                   <div className="what">
                     {[e.phone, e.email].filter(Boolean).join(' · ')} ·{' '}
                     {new Date(e.createdAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}
                     {p ? <> · <Link href={`/admin/properties/${p.id}`}>{p.ref} {displayAddressFor(p)}</Link></> : null}
                   </div>
+                  {e.kind === 'valuation' ? (
+                    <p className="msg">
+                      Property postcode <b>{e.postcode}</b> · {e.intent === 'selling' ? 'Thinking of selling' : e.intent === 'letting' ? 'Thinking of letting' : 'Not sure yet'}
+                    </p>
+                  ) : null}
                   {e.message ? <p className="msg">{e.message}</p> : null}
                 </div>
                 <form action={setEnquiryHandled}>
