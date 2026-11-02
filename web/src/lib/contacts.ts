@@ -130,7 +130,7 @@ export async function timelineFor(contact: Contact): Promise<TimelineItem[]> {
   for (const { c, ref } of callRows) {
     items.push({
       id: c.id, at: c.createdAt, type: 'call', by: who(c.createdBy),
-      title: `${({ in: 'Called in', out: 'We called', walk_in: 'Came into the office' } as Record<string, string>)[c.direction] ?? 'Call'} as ${roleLabel(c.callerType).toLowerCase()}${ref ? ` about ${ref}` : ''}`,
+      title: `${({ in: 'Called in', out: 'We called', walk_in: 'Came into the office', email_in: 'Emailed us', email_out: 'We emailed' } as Record<string, string>)[c.direction] ?? 'Call'} as ${roleLabel(c.callerType).toLowerCase()}${ref ? ` about ${ref}` : ''}`,
       body: c.notes,
     })
   }

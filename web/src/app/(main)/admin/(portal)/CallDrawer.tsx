@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { startTransition, useActionState, useCallback, useEffect, useRef, useState } from 'react'
 import { logCall, type CallState } from '../crm-actions'
-import { CALL_NEXT, CALLER_TYPES, DIRECTIONS, moneyShort, POSITIONS, roleLabel, SOURCES } from '@/lib/crm-options'
+import { CALL_NEXT, CALLER_TYPES, DIRECTIONS, isEmailDirection, moneyShort, POSITIONS, roleLabel, SOURCES } from '@/lib/crm-options'
 import { addDays, dayLabel, fmtWhen, isoToLondon, todayLondon } from '@/lib/time'
 
 export type DrawerStaff = { id: string; name: string }
@@ -88,6 +88,7 @@ function CallForm({ me, staff, props, prefill, onClose, onAnother }: {
   const [direction, setDirection] = useState(prefill.direction ?? 'in')
   const [phone, setPhone] = useState(prefill.phone ?? '')
   const [name, setName] = useState(prefill.name ?? '')
+  const [email, setEmail] = useState(prefill.email ?? '')
   const [matches, setMatches] = useState<Match[]>([])
   const [brief, setBrief] = useState<Brief | null>(null)
   const [callerType, setCallerType] = useState(prefill.callerType ?? '')
@@ -119,7 +120,7 @@ function CallForm({ me, staff, props, prefill, onClose, onAnother }: {
   // Search as they type the number (or a name) so repeat callers are recognised before you've said hello.
   useEffect(() => {
     if (brief) return
-    const q = phone.trim() || name.trim()
+    const q = (isEmailDirection(direction) ? email.trim() || phone.trim() : phone.trim() || email.trim()) || name.trim()
     if (q.replace(/\D/g, '').length < 4 && !/[a-z]{2}/i.test(q)) { setMatches([]); return }
     const ctrl = new AbortController()
     const t = setTimeout(async () => {
@@ -129,7 +130,7 @@ function CallForm({ me, staff, props, prefill, onClose, onAnother }: {
       } catch { /* aborted */ }
     }, 180)
     return () => { clearTimeout(t); ctrl.abort() }
-  }, [phone, name, brief])
+  }, [phone, email, name, brief, direction])
 
   useEffect(() => {
     if (!state.ok) return
@@ -165,7 +166,7 @@ function CallForm({ me, staff, props, prefill, onClose, onAnother }: {
       <div className="call-drawer" role="dialog" aria-modal="false" aria-label="Call logged">
         <div className="cd-done">
           <div className="cd-tick" aria-hidden="true">✓</div>
-          <h2>Call logged</h2>
+          <h2>{isEmailDirection(direction) ? 'Email logged' : 'Call logged'}</h2>
           <p>{next === 'callback' ? `Callback set for ${assignTo === me.id ? 'you' : staff.find((s) => s.id === assignTo)?.name}, ${['Today', 'Tomorrow'].includes(dayLabel(cbDate, today)) ? dayLabel(cbDate, today).toLowerCase() : `on ${dayLabel(cbDate, today)}`} at ${cbTime}. It will pop up when it’s due.` : 'Saved to their record.'}</p>
           <div className="cd-done-actions">
             <button type="button" className="btn btn-gold" onClick={onAnother}>Log another call</button>
@@ -181,7 +182,7 @@ function CallForm({ me, staff, props, prefill, onClose, onAnother }: {
     <div className="call-drawer" role="dialog" aria-modal="false" aria-labelledby="cd-title">
       <form ref={formRef} onSubmit={submit} onChange={() => setDirty(true)}>
         <div className="cd-head">
-          <h2 id="cd-title">Log a call</h2>
+          <h2 id="cd-title">{isEmailDirection(direction) ? 'Log an email' : 'Log a call'}</h2>
           <button type="button" className="iconbtn" onClick={close} aria-label="Close">✕</button>
         </div>
 
@@ -239,11 +240,19 @@ function CallForm({ me, staff, props, prefill, onClose, onAnother }: {
             </div>
           ) : (
             <>
-              <div className={`field${err('phone')}`}>
-                <label htmlFor="cd-phone">Their number</label>
-                <input ref={phoneRef} className="input cd-phone" id="cd-phone" name="phone" type="tel" inputMode="tel" autoComplete="off"
-                  value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="07… or 020…" />
-              </div>
+              {isEmailDirection(direction) ? (
+                <div className={`field${err('email')}`}>
+                  <label htmlFor="cd-email">Their email</label>
+                  <input className="input cd-phone" id="cd-email" name="email" type="email" autoComplete="off"
+                    value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" />
+                </div>
+              ) : (
+                <div className={`field${err('phone')}`}>
+                  <label htmlFor="cd-phone">Their number</label>
+                  <input ref={phoneRef} className="input cd-phone" id="cd-phone" name="phone" type="tel" inputMode="tel" autoComplete="off"
+                    value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="07… or 020…" />
+                </div>
+              )}
               {matches.length ? (
                 <div className="cd-matches" role="listbox" aria-label="People we already know">
                   <p className="hint">Already in contacts? Tap to pick them.</p>
@@ -258,13 +267,17 @@ function CallForm({ me, staff, props, prefill, onClose, onAnother }: {
               ) : null}
               <div className="grid2">
                 <div className="field"><label htmlFor="cd-name">Name</label><input className="input" id="cd-name" name="name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" placeholder="e.g. Mrs Patel" /></div>
-                <div className={`field${err('email')}`}><label htmlFor="cd-email">Email <span className="hint">(optional)</span></label><input className="input" id="cd-email" name="email" type="email" defaultValue={prefill.email} autoComplete="off" /></div>
+                {isEmailDirection(direction) ? (
+                  <div className={`field${err('phone')}`}><label htmlFor="cd-phone">Phone <span className="hint">(optional)</span></label><input className="input" id="cd-phone" name="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="off" /></div>
+                ) : (
+                  <div className={`field${err('email')}`}><label htmlFor="cd-email">Email <span className="hint">(optional)</span></label><input className="input" id="cd-email" name="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="off" /></div>
+                )}
               </div>
             </>
           )}
 
           <fieldset className={`field${err('callerType')}`}>
-            <legend className="flabel">Who’s calling? <span className="req">Required</span></legend>
+            <legend className="flabel">{isEmailDirection(direction) ? 'Who’s it from?' : 'Who’s calling?'} <span className="req">Required</span></legend>
             <div className="chips">
               {CALLER_TYPES.map((t) => (
                 <label key={t.value} className="chip"><input type="radio" name="_ct" checked={callerType === t.value} onChange={() => { setCallerType(t.value); setPosition('') }} /><span>{t.label}</span></label>
@@ -329,7 +342,7 @@ function CallForm({ me, staff, props, prefill, onClose, onAnother }: {
 
           <div className="field">
             <label htmlFor="cd-notes">Notes</label>
-            <textarea className="textarea" id="cd-notes" name="notes" rows={3} placeholder="What they said, what they want, anything to remember" />
+            <textarea className="textarea" id="cd-notes" name="notes" rows={3} placeholder={isEmailDirection(direction) ? 'What the email said, or paste the important part' : 'What they said, what they want, anything to remember'} />
           </div>
 
           <fieldset className={`field${err('next')}${err('cb')}`}>
@@ -371,7 +384,7 @@ function CallForm({ me, staff, props, prefill, onClose, onAnother }: {
         <div className="cd-foot">
           {state.error ? <div className="notice err" role="alert">{state.error}</div> : null}
           <button className="btn btn-gold" type="submit" disabled={pending}>
-            {pending ? 'Saving…' : next === 'viewing' ? 'Save and book viewing' : next === 'valuation' ? 'Save and book valuation' : 'Save call'}
+            {pending ? 'Saving…' : next === 'viewing' ? 'Save and book viewing' : next === 'valuation' ? 'Save and book valuation' : isEmailDirection(direction) ? 'Save email' : 'Save call'}
           </button>
         </div>
       </form>

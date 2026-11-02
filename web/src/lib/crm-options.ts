@@ -14,10 +14,14 @@ export const DIRECTIONS = [
   { value: 'in', label: 'They called' },
   { value: 'out', label: 'We called' },
   { value: 'walk_in', label: 'Walk-in' },
+  { value: 'email_in', label: 'They emailed' },
+  { value: 'email_out', label: 'We emailed' },
 ] as const
 
+export const isEmailDirection = (d: string) => d === 'email_in' || d === 'email_out'
+
 export const directionLabel = (d: string) =>
-  ({ in: 'Incoming call', out: 'Outgoing call', walk_in: 'Walk-in' } as Record<string, string>)[d] ?? 'Call'
+  ({ in: 'Incoming call', out: 'Outgoing call', walk_in: 'Walk-in', email_in: 'Email received', email_out: 'Email sent' } as Record<string, string>)[d] ?? 'Call'
 
 export const SOURCES = [
   'Zoopla', 'OnTheMarket', 'Our website', 'For sale / to let board', 'Walked past the office',
