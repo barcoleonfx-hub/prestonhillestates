@@ -45,6 +45,7 @@ export function NavLinks({ newEnquiries, today, outcomes, callbacks, isAdmin }: 
         <Icon name="mail" />Enquiries{newEnquiries > 0 ? <span className="count">{newEnquiries}</span> : null}
       </Link>
       {isAdmin ? <Link href="/admin/staff" className={on('/admin/staff')}><Icon name="team" />Staff</Link> : null}
+      {isAdmin ? <Link href="/admin/import" className={on('/admin/import')}><Icon name="mail" />Import emails</Link> : null}
       <Link href="/admin/account" className={on('/admin/account')}><Icon name="user" />Your account</Link>
       <a href="/properties" target="_blank" rel="noreferrer"><Icon name="site" />View website</a>
     </nav>

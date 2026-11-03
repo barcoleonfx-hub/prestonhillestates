@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { enquiryLabel } from '@/lib/enquiry-labels'
 import { and, count, desc, eq, gte } from 'drizzle-orm'
 import { db } from '@/db/client'
 import { admins, calls, contacts, enquiries, properties } from '@/db/schema'
@@ -99,7 +100,7 @@ export default async function MyDayPage({ searchParams }: { searchParams: Promis
                 {leads.map(({ e, ref, channel }) => (
                   <li key={e.id}>
                     <span className="lead-main">
-                      <b>{e.name}</b> <span className="pill">{e.kind === 'valuation' ? `Valuation · ${e.postcode}` : e.kind === 'buyer' ? 'Buyer registration' : `Viewing${ref ? ` · ${ref}` : ''}`}</span>
+                      <b>{e.name}</b> <span className="pill">{e.kind === 'valuation' ? `Valuation · ${e.postcode}` : `${enquiryLabel(e)}${ref ? ` · ${ref}` : ''}`}</span>
                       <span className="lead-meta">{[e.phone, e.email].filter(Boolean).join(' · ')} · {dayLabel(isoToLondon(e.createdAt).date, today)} {fmtTime(e.createdAt)}</span>
                     </span>
                     <LogCallButton

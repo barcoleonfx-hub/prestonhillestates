@@ -225,4 +225,14 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       `CREATE TABLE jobs (name TEXT PRIMARY KEY, last_run_at TEXT NOT NULL, detail TEXT)`,
     ],
   },
+  {
+    id: '006_enquiry_source',
+    sql: [
+      // Where an enquiry came from (website form, Zoopla, OnTheMarket, email), and the email's Message-ID
+      // so the same email is never imported twice.
+      `ALTER TABLE enquiries ADD COLUMN source TEXT NOT NULL DEFAULT 'website'`,
+      `ALTER TABLE enquiries ADD COLUMN external_id TEXT`,
+      `CREATE UNIQUE INDEX enquiries_external_idx ON enquiries (external_id)`,
+    ],
+  },
 ]
