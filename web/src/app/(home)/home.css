@@ -388,7 +388,8 @@
 
   /* ---------- footer ---------- */
   footer.site { background: var(--charcoal); color: #C9C5B4; padding: clamp(60px, 9vh, 90px) 0 0; }
-  .foot-grid { display: grid; grid-template-columns: 1.5fr 1fr 1fr 1.2fr; gap: clamp(28px, 4vw, 60px); padding-bottom: clamp(46px, 7vh, 70px); }
+  .foot-grid { display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr 1.2fr; gap: clamp(24px, 3.4vw, 52px); padding-bottom: clamp(46px, 7vh, 70px); }
+  @media (max-width: 1080px) { .foot-grid { grid-template-columns: 1fr 1fr 1fr; } }
   @media (max-width: 880px) { .foot-grid { grid-template-columns: 1fr 1fr; } }
   @media (max-width: 560px) { .foot-grid { grid-template-columns: 1fr; } }
   footer.site h4 { font-size: 0.64rem; letter-spacing: 0.22em; text-transform: uppercase; color: #7B7663; margin-bottom: 18px; font-weight: 600; }
