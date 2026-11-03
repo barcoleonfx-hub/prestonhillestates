@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { and, desc, eq, like, or, sql, type SQL } from 'drizzle-orm'
+import { and, desc, eq, isNotNull, like, or, sql, type SQL } from 'drizzle-orm'
 import { db, ready } from '@/db/client'
 import { contacts, enquiries, properties } from '@/db/schema'
 import { requireAdmin } from '@/lib/auth'
@@ -64,14 +64,17 @@ function Item({ e, p, dnc }: Row) {
   )
 }
 
-export default async function EnquiriesPage({ searchParams }: { searchParams: Promise<{ q?: string; source?: string; outcome?: string }> }) {
+export default async function EnquiriesPage({ searchParams }: { searchParams: Promise<{ q?: string; source?: string; outcome?: string; imported?: string; show?: string }> }) {
   await requireAdmin()
   await ready()
   const sp = await searchParams
   const q = (sp.q ?? '').trim().slice(0, 80)
   const source = sp.source && sp.source in ENQUIRY_SOURCES ? sp.source : ''
   const outcome = ENQUIRY_OUTCOMES.some((o) => o.value === sp.outcome) || sp.outcome === 'none' ? sp.outcome! : ''
+  const imported = sp.imported === '1'
+  const show = sp.show ?? ''
   const where: SQL[] = []
+  if (imported) where.push(isNotNull(enquiries.externalId))
   if (q) {
     const t = `%${q.toLowerCase()}%`
     where.push(or(like(sql`lower(${enquiries.name})`, t), like(sql`lower(coalesce(${enquiries.email}, ''))`, t), like(sql`replace(coalesce(${enquiries.phone}, ''), ' ', '')`, `%${q.replace(/\s/g, '')}%`), like(sql`lower(coalesce(${enquiries.message}, ''))`, t))!)
@@ -86,21 +89,32 @@ export default async function EnquiriesPage({ searchParams }: { searchParams: Pr
     .leftJoin(contacts, eq(enquiries.contactId, contacts.id))
     .where(where.length ? and(...where) : undefined)
     .orderBy(desc(enquiries.createdAt))
-    .limit(500)
+    .limit(5000)
 
   const recentFrom = new Date(Date.now() - RECENT_DAYS * 86400000).toISOString()
   const open = rows.filter((r) => !r.e.handled)
   const recent = rows.filter((r) => r.e.handled && r.e.createdAt >= recentFrom)
   const older = rows.filter((r) => r.e.handled && r.e.createdAt < recentFrom)
-  const href = (p: Record<string, string>) => `/admin/enquiries?${new URLSearchParams(Object.entries({ ...(q ? { q } : {}), ...(source ? { source } : {}), ...(outcome ? { outcome } : {}), ...p }).filter(([, v]) => v))}`
+  const href = (p: Record<string, string>) => `/admin/enquiries?${new URLSearchParams(Object.entries({ ...(q ? { q } : {}), ...(source ? { source } : {}), ...(outcome ? { outcome } : {}), ...(imported ? { imported: '1' } : {}), ...p }).filter(([, v]) => v))}`
 
-  const Group = ({ title, sub, list }: { title: string; sub: string; list: Row[] }) => (
-    <section className="card card-pad enq-group">
-      <h2>{title} · {list.length}</h2>
-      <p className="card-sub">{sub}</p>
-      {list.length ? <div className="enq">{list.map((r) => <Item key={r.e.id} {...r} />)}</div> : <p className="card-sub" style={{ marginTop: 8 }}>None.</p>}
-    </section>
-  )
+  // Long groups show the newest 60, with a link to show the lot.
+  const PAGE = 60
+  const Group = ({ id, title, sub, list }: { id: string; title: string; sub: string; list: Row[] }) => {
+    const all = show === id
+    const visible = all ? list : list.slice(0, PAGE)
+    return (
+      <section className="card card-pad enq-group" id={id}>
+        <h2>{title} · {list.length}</h2>
+        <p className="card-sub">{sub}</p>
+        {list.length ? <div className="enq">{visible.map((r) => <Item key={r.e.id} {...r} />)}</div> : <p className="card-sub" style={{ marginTop: 8 }}>None.</p>}
+        {list.length > PAGE ? (
+          <p style={{ marginTop: 12 }}>
+            <Link className="btn btn-ghost btn-sm" href={`${href({ show: all ? '' : id })}#${id}`}>{all ? `Show the newest ${PAGE} only` : `Show all ${list.length}`}</Link>
+          </p>
+        ) : null}
+      </section>
+    )
+  }
 
   return (
     <>
@@ -115,11 +129,13 @@ export default async function EnquiriesPage({ searchParams }: { searchParams: Pr
         <div className="field"><label htmlFor="eq-q">Search</label><input className="input" id="eq-q" name="q" defaultValue={q} placeholder="Name, phone, email or property" /></div>
         {source ? <input type="hidden" name="source" value={source} /> : null}
         {outcome ? <input type="hidden" name="outcome" value={outcome} /> : null}
+        {imported ? <input type="hidden" name="imported" value="1" /> : null}
         <button className="btn btn-dark" type="submit">Search</button>
         <div className="seg" role="group" aria-label="Source">
           <Link className={!source ? 'on' : undefined} href={href({ source: '' })}>All</Link>
           {Object.entries(ENQUIRY_SOURCES).map(([v, l]) => <Link key={v} className={source === v ? 'on' : undefined} href={href({ source: v })}>{l}</Link>)}
         </div>
+        <Link className={`btn btn-sm ${imported ? 'btn-dark' : 'btn-ghost'}`} href={href({ imported: imported ? '' : '1' })}>Imported from email</Link>
         <div className="seg" role="group" aria-label="Outcome">
           <Link className={!outcome ? 'on' : undefined} href={href({ outcome: '' })}>Any outcome</Link>
           <Link className={outcome === 'none' ? 'on' : undefined} href={href({ outcome: 'none' })}>Not recorded</Link>
@@ -128,9 +144,9 @@ export default async function EnquiriesPage({ searchParams }: { searchParams: Pr
       </form>
 
       <div className="enq-groups">
-        <Group title="Needs a reply" sub="Nobody has dealt with these yet." list={open} />
-        <Group title={`Recent enquiries · last ${Math.round(RECENT_DAYS / 30)} months`} sub="Most likely to say yes. Good people to call about new properties." list={recent} />
-        <Group title="Older enquiries" sub={`More than ${Math.round(RECENT_DAYS / 30)} months ago. Still worth a call if a property fits.`} list={older} />
+        <Group id="open" title="Needs a reply" sub="Nobody has dealt with these yet." list={open} />
+        <Group id="recent" title={`Recent enquiries · last ${Math.round(RECENT_DAYS / 30)} months`} sub="Most likely to say yes. Good people to call about new properties." list={recent} />
+        <Group id="older" title="Older enquiries" sub={`More than ${Math.round(RECENT_DAYS / 30)} months ago. Still worth a call if a property fits.`} list={older} />
       </div>
     </>
   )

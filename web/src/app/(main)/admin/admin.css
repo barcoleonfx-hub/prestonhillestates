@@ -563,3 +563,11 @@ kbd { font: 600 0.68rem/1 var(--sans, inherit); padding: 3px 6px; border-radius:
 .pm-reasons { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
 .pm-reasons span { font-size: 0.72rem; font-weight: 700; padding: 3px 8px; border-radius: 999px; background: #E8EEF8; color: #2B4C7E; }
 @media (max-width: 640px) { .pm-row { grid-template-columns: 1fr; } .pm-score { display: none; } }
+.imp-table tr.off { cursor: default; }
+.imp-table tr.off td { color: var(--faint); }
+.imp-group details > summary { list-style: none; cursor: pointer; }
+.imp-group details > summary::-webkit-details-marker { display: none; }
+.imp-group details > summary h2::after { content: ' ▸'; color: var(--faint); font-size: 0.8em; }
+.imp-group details[open] > summary h2::after { content: ' ▾'; }
+.imp-past { max-width: 1100px; margin-top: 18px; }
+.imp-done { max-width: 1100px; }

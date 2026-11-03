@@ -208,6 +208,8 @@ export async function analyse(raw: string, nowMs = Date.now()): Promise<ImportRo
     return null
   }
   const from = first(mail.from)
+  // Not an email at all (e.g. an index file or a text note).
+  if (!from && !mail.date && !mail.subject && !mail.messageId) return null
   const replyTo = first(mail.replyTo)
   const subject = (mail.subject ?? '').slice(0, 200)
   const text = emailText(mail).replace(/\r/g, '').replace(/\n{3,}/g, '\n\n').trim()

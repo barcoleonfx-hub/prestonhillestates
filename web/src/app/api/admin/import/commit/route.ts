@@ -3,7 +3,7 @@ import { db, ready } from '@/db/client'
 import { contacts, enquiries, properties } from '@/db/schema'
 import { currentAdmin } from '@/lib/auth'
 import { audit, upsertContact } from '@/lib/contacts'
-import { dropBatch, readBatch, validBatch } from '@/lib/import-batches'
+import { dropBatch, importable, readBatch, validBatch } from '@/lib/import-batches'
 import { uid } from '@/lib/util'
 
 export const dynamic = 'force-dynamic'
@@ -46,7 +46,10 @@ export async function POST(req: Request) {
   const body = (await req.json().catch(() => ({}))) as { batch?: string; keys?: unknown }
   if (!validBatch(body.batch ?? null) || !Array.isArray(body.keys)) return Response.json({ error: 'Bad request' }, { status: 400 })
   const want = new Set(body.keys.filter((k): k is string => typeof k === 'string'))
-  const rows = (await readBatch(body.batch!)).filter((r) => want.has(r.key) && r.category !== 'skipped')
+  const batch = await readBatch(body.batch!)
+  if (!batch.length) return Response.json({ error: 'This upload has expired, usually because the portal restarted after an update. Please upload the file again.' }, { status: 410 })
+  // Skipped emails can be ticked by hand, except ones already in the portal or past the retention limit.
+  const rows = batch.filter((r) => want.has(r.key) && (r.category !== 'skipped' || importable(r)))
   await ready()
   const startedAt = new Date().toISOString()
 

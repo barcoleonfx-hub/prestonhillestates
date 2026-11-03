@@ -26,3 +26,7 @@ export async function dropBatch(id: string) {
 
 export const uploadPath = (id: string, n: number) => path.join(/* turbopackIgnore: true */ DIR, `${id}-${n}.upload`)
 export const ensureDir = () => mkdir(DIR, { recursive: true })
+
+/** A skipped email staff may still tick: not a duplicate and not past the retention limit. */
+export const importable = (r: Pick<ImportRow, 'category' | 'reason'>) =>
+  r.category !== 'skipped' || !/already imported|older than/i.test(r.reason ?? '')
