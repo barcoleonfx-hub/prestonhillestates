@@ -141,7 +141,7 @@ export async function timelineFor(contact: Contact): Promise<TimelineItem[]> {
   for (const { e, ref } of enqRows) {
     items.push({
       id: e.id, at: e.createdAt, type: 'enquiry',
-      title: e.kind === 'valuation' ? `Asked for a valuation on the website (${e.postcode})` : `Sent a viewing request on the website${ref ? ` for ${ref}` : ''}`,
+      title: e.kind === 'valuation' ? `Asked for a valuation on the website (${e.postcode})` : e.kind === 'buyer' ? 'Registered as a buyer on the website' : `Sent a viewing request on the website${ref ? ` for ${ref}` : ''}`,
       body: e.message,
     })
   }

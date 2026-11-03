@@ -2,7 +2,7 @@
 
 import { and, eq } from 'drizzle-orm'
 import { db, ready } from '@/db/client'
-import { enquiries, properties } from '@/db/schema'
+import { contacts, enquiries, properties } from '@/db/schema'
 import { now, uid } from '@/lib/util'
 import { upsertContact } from '@/lib/contacts'
 
@@ -86,6 +86,43 @@ export async function sendValuationRequest(_prev: ValuationState, form: FormData
   await db.insert(enquiries).values({
     id: uid(), propertyId: null, kind: 'valuation', name, phone, email: email || null, contactId,
     postcode, intent, message: details, createdAt: now(),
+  })
+  return { ok: true }
+}
+
+export type BuyerState = { ok?: boolean; error?: string; field?: string }
+
+/** "Register as a buyer" from the borrowing calculator: becomes a buyer contact with a budget, and a lead to call. */
+export async function registerBuyer(_prev: BuyerState, form: FormData): Promise<BuyerState> {
+  if (String(form.get('company') || '')) return { ok: true }
+  const name = String(form.get('name') || '').trim().slice(0, 120)
+  const phone = String(form.get('phone') || '').trim().slice(0, 40)
+  const email = String(form.get('email') || '').trim().slice(0, 200)
+  const areas = String(form.get('areas') || '').trim().slice(0, 200)
+  const budget = Math.round(Number(form.get('budget')) || 0)
+  const summary = String(form.get('summary') || '').trim().slice(0, 600)
+
+  if (!name) return { error: 'Please tell us your name.', field: 'name' }
+  if (!phone && !email) return { error: 'Add a phone number or email so we can send you homes.', field: 'phone' }
+  if (phone && !/^[0-9+()\s-]{7,20}$/.test(phone)) return { error: 'That phone number doesn’t look right.', field: 'phone' }
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: 'That email address doesn’t look right.', field: 'email' }
+
+  const key = (phone.replace(/\D/g, '') || email.toLowerCase())
+  const times = (recent.get(key) || []).filter((t) => t > Date.now() - 3600_000)
+  if (times.length >= 5) return { ok: true }
+  recent.set(key, [...times, Date.now()])
+
+  await ready()
+  const contactId = await upsertContact({ name, phone, email, role: 'buyer', source: 'Our website' }).catch(() => null)
+  if (contactId) {
+    const patch: { maxPrice?: number; areas?: string } = {}
+    if (budget >= 10_000 && budget <= 50_000_000) patch.maxPrice = budget
+    if (areas) patch.areas = areas
+    if (Object.keys(patch).length) await db.update(contacts).set(patch).where(eq(contacts.id, contactId)).catch(() => {})
+  }
+  await db.insert(enquiries).values({
+    id: uid(), propertyId: null, kind: 'buyer', contactId, name, phone: phone || null, email: email || null,
+    message: [summary, areas ? `Areas: ${areas}` : ''].filter(Boolean).join('\n') || null, createdAt: now(),
   })
   return { ok: true }
 }
