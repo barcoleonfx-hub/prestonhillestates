@@ -187,3 +187,65 @@ export async function archiveContact(form: FormData) {
   await audit(me.id, archived ? 'archive' : 'restore', 'contact', id)
   revalidatePath('/admin', 'layout')
 }
+
+// ---------- enquiry outcomes ----------
+
+const OUTCOME_VALUES = ['not_interested', 'open', 'other_requirements', 'do_not_call']
+
+/** Quick outcome on an enquiry. "Do not call back" also marks the person so they're never suggested again. */
+export async function setEnquiryOutcome(form: FormData) {
+  const me = await requireAdmin()
+  await ready()
+  const id = str(form, 'id', 64)
+  const raw = str(form, 'outcome', 40)
+  const outcome = OUTCOME_VALUES.includes(raw) ? raw : null
+  const e = await db.query.enquiries.findFirst({ where: eq(enquiries.id, id) })
+  if (!e) return
+  await db.update(enquiries).set({ outcome, outcomeAt: outcome ? now() : null, outcomeBy: outcome ? me.id : null, handled: true }).where(eq(enquiries.id, id))
+  if (e.contactId) {
+    if (outcome === 'do_not_call') await db.update(contacts).set({ doNotContact: true, updatedAt: now() }).where(eq(contacts.id, e.contactId))
+    else if (e.outcome === 'do_not_call') await db.update(contacts).set({ doNotContact: false, updatedAt: now() }).where(eq(contacts.id, e.contactId))
+    await audit(me.id, 'enquiry_outcome', 'contact', e.contactId, outcome ?? 'cleared')
+  }
+  revalidatePath('/admin', 'layout')
+}
+
+/** "Other requirements": what they'd consider instead, saved on the person for future matching. */
+export async function saveOtherRequirements(_prev: SimpleState, form: FormData): Promise<SimpleState> {
+  const me = await requireAdmin()
+  await ready()
+  const id = str(form, 'id', 64)
+  const e = await db.query.enquiries.findFirst({ where: eq(enquiries.id, id) })
+  if (!e?.contactId) return { error: 'This enquiry isn’t linked to a contact.' }
+  const c = await db.query.contacts.findFirst({ where: eq(contacts.id, e.contactId) })
+  if (!c) return { error: 'That contact no longer exists.' }
+  const maxRaw = str(form, 'maxPrice', 30)
+  const maxPrice = maxRaw ? parseMoney(maxRaw) : null
+  if (maxRaw && maxPrice == null) return { error: 'Write the budget as a number, like 450k or 1800.' }
+  const minBeds = str(form, 'minBeds') === '' ? null : Number(str(form, 'minBeds'))
+  const areas = str(form, 'areas', 200) || null
+  const wantedType = str(form, 'wantedType', 40) || null
+  const notes = str(form, 'notes', 1000)
+  const channel = str(form, 'channel', 10)
+  await db.update(contacts).set({
+    maxPrice: maxPrice ?? c.maxPrice, minBeds: minBeds ?? c.minBeds, areas: areas ?? c.areas, wantedType: wantedType ?? c.wantedType,
+    roles: channel === 'let' ? addRole(c.roles, 'tenant') : channel === 'sale' ? addRole(c.roles, 'buyer') : c.roles,
+    notes: notes ? [c.notes, `Requirements (${new Date().toLocaleDateString('en-GB')}): ${notes}`].filter(Boolean).join('\n') : c.notes,
+    updatedAt: now(),
+  }).where(eq(contacts.id, c.id))
+  await db.update(enquiries).set({ outcome: 'other_requirements', outcomeAt: now(), outcomeBy: me.id, handled: true }).where(eq(enquiries.id, id))
+  await audit(me.id, 'update', 'contact', c.id, 'other requirements')
+  revalidatePath('/admin', 'layout')
+  return { ok: true }
+}
+
+/** Mark or unmark a person as not to be contacted (from their record). */
+export async function setDoNotContact(form: FormData) {
+  const me = await requireAdmin()
+  await ready()
+  const id = str(form, 'id', 64)
+  const on = form.get('on') === '1'
+  await db.update(contacts).set({ doNotContact: on, updatedAt: now() }).where(eq(contacts.id, id))
+  await audit(me.id, on ? 'do_not_contact' : 'allow_contact', 'contact', id)
+  revalidatePath('/admin', 'layout')
+}

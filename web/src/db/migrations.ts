@@ -235,4 +235,15 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       `CREATE UNIQUE INDEX enquiries_external_idx ON enquiries (external_id)`,
     ],
   },
+  {
+    id: '007_enquiry_outcomes',
+    sql: [
+      // What happened with an enquiry after we followed it up, and a do-not-contact flag on the person.
+      `ALTER TABLE enquiries ADD COLUMN outcome TEXT`,
+      `ALTER TABLE enquiries ADD COLUMN outcome_at TEXT`,
+      `ALTER TABLE enquiries ADD COLUMN outcome_by TEXT`,
+      `ALTER TABLE contacts ADD COLUMN do_not_contact INTEGER NOT NULL DEFAULT 0`,
+      `ALTER TABLE contacts ADD COLUMN wanted_type TEXT`,
+    ],
+  },
 ]

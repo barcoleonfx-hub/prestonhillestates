@@ -11,7 +11,7 @@ export type DrawerProperty = { id: string; ref: string; label: string; channel: 
 
 type Match = { id: string; name: string; phone: string | null; email: string | null; roles: string[]; lastContactAt: string | null; ownerName: string | null; openTasks: number; address: string | null }
 type Brief = {
-  contact: { id: string; name: string; phone: string | null; email: string | null; roles: string[]; areas: string | null; minBeds: number | null; maxPrice: number | null; position: string | null; address: string | null; ownerName: string | null; source: string | null }
+  contact: { id: string; name: string; phone: string | null; email: string | null; roles: string[]; areas: string | null; minBeds: number | null; maxPrice: number | null; position: string | null; address: string | null; ownerName: string | null; source: string | null; doNotContact?: boolean }
   recent: { id: string; at: string; title: string; body?: string | null; by?: string | null }[]
   tasks: { id: string; title: string; dueAt: string; assigneeName: string; mine: boolean }[]
 }
@@ -207,6 +207,7 @@ function CallForm({ me, staff, props, prefill, onClose, onAnother }: {
 
           {c ? (
             <div className="cd-known">
+              {c.doNotContact ? <div className="notice err" role="alert">This person asked not to be called back. Only log a call if they contacted us.</div> : null}
               <div className="cd-known-top">
                 <div>
                   <div className="cd-name">{c.name}</div>

@@ -138,6 +138,9 @@ export const enquiries = sqliteTable('enquiries', {
   contactId: text('contact_id'),
   source: text('source').notNull().default('website'),
   externalId: text('external_id'),
+  outcome: text('outcome'),
+  outcomeAt: text('outcome_at'),
+  outcomeBy: text('outcome_by'),
   createdAt: text('created_at').notNull(),
 })
 
@@ -222,6 +225,8 @@ export const contacts = sqliteTable(
     notes: text('notes'),
     ownerId: text('owner_id').references(() => admins.id, { onDelete: 'set null' }),
     archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
+    doNotContact: integer('do_not_contact', { mode: 'boolean' }).notNull().default(false),
+    wantedType: text('wanted_type'),
     lastContactAt: text('last_contact_at'),
     createdBy: text('created_by'),
     createdAt: text('created_at').notNull(),

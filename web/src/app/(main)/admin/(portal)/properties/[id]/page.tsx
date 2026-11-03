@@ -5,6 +5,7 @@ import { displayAddressFor, getProperty, slugFor } from '@/lib/properties'
 import { deleteProperty } from '../../../actions'
 import { PropertyEditor } from './PropertyEditor'
 import { DeleteButton } from './DeleteButton'
+import { PropertyMatches } from './PropertyMatches'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Edit property' }
@@ -37,6 +38,9 @@ export default async function EditPropertyPage({ params }: { params: Promise<{ i
             <DeleteButton />
           </form>
         </div>
+      </div>
+      <div style={{ marginBottom: 22 }}>
+        <PropertyMatches property={p} />
       </div>
       <PropertyEditor property={p} />
     </>
