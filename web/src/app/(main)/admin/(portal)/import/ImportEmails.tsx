@@ -1,5 +1,6 @@
 'use client'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useMemo, useRef, useState } from 'react'
 
 type Row = {
@@ -16,6 +17,11 @@ const GROUPS: { id: Row['category']; title: string; hint: string; tick: boolean 
 const SRC: Record<string, string> = { zoopla: 'Zoopla', onthemarket: 'OnTheMarket', website: 'Website', email: 'Email' }
 const INTENT: Record<string, string> = { buy: 'Buying', rent: 'Renting', valuation: 'Valuation' }
 const day = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+// Skipped emails can still be ticked by hand, unless they're already in the portal or too old to keep.
+const canTick = (r: Row) => r.category !== 'skipped' || !/already imported|older than/i.test(r.reason ?? '')
+// Apple Mail puts these index files next to the "mbox" file in an exported folder.
+const APPLE_INDEX = /^(table_of_contents|info\.plist)$/i
+type Done = { imported: number; contacts: number }
 const newBatch = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `b${Date.now()}${Math.random().toString(36).slice(2)}`)
 
 export function ImportEmails({ retentionYears }: { retentionYears: number }) {
@@ -24,28 +30,37 @@ export function ImportEmails({ retentionYears }: { retentionYears: number }) {
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [done, setDone] = useState<{ imported: number; contacts: number } | null>(null)
+  const [done, setDone] = useState<Done | null>(null)
+  const router = useRouter()
   const fileRef = useRef<HTMLInputElement>(null)
   const dirRef = useRef<HTMLInputElement>(null)
 
   const upload = async (list: FileList | null) => {
     if (!list?.length) return
     // From a chosen ".mbox" folder only the "mbox" file matters; ignore Apple's index files.
-    const files = [...list].filter((f) => /(^|\/)mbox$|\.mbox$|\.mbx$|\.eml$/i.test(f.webkitRelativePath || f.name) || (!f.name.includes('.') && f.size > 0))
+    const files = [...list].filter((f) => !APPLE_INDEX.test(f.name) && !f.name.startsWith('.') && f.size > 0
+      && (/(^|\/)mbox$|\.mbox$|\.mbx$|\.eml$/i.test(f.webkitRelativePath || f.name) || !f.name.includes('.')))
     if (!files.length) { setError('That doesn’t look like an exported mailbox. Choose the “mbox” file inside the exported folder, or .eml files.'); return }
     setError(null)
     let latest = rows
+    const problems: string[] = []
     for (let i = 0; i < files.length; i++) {
       const f = files[i]
-      setBusy(`Reading ${f.name}${files.length > 1 ? ` (${i + 1} of ${files.length})` : ''}… ${(f.size / 1048576).toFixed(1)} MB`)
-      const res = await fetch(`/api/admin/import/upload?batch=${batch}&n=${i}&name=${encodeURIComponent(f.name)}`, { method: 'POST', body: f })
-      const r = (await res.json().catch(() => ({ error: 'The upload failed.' }))) as { rows?: Row[]; error?: string }
-      if (!res.ok || !r.rows) { setError(r.error ?? 'The upload failed.'); break }
-      latest = r.rows
+      setBusy(`Reading ${f.name}${files.length > 1 ? ` (${i + 1} of ${files.length})` : ''}… ${(f.size / 1048576).toFixed(1)} MB. Large mailboxes can take a few minutes.`)
+      try {
+        const res = await fetch(`/api/admin/import/upload?batch=${batch}&n=${i}&name=${encodeURIComponent(f.name)}`, { method: 'POST', body: f })
+        const r = (await res.json().catch(() => ({ error: `The upload of ${f.name} failed (error ${res.status}).` }))) as { rows?: Row[]; error?: string }
+        if (!res.ok || !r.rows) problems.push(r.error ?? `The upload of ${f.name} failed.`)
+        else latest = r.rows
+      } catch {
+        problems.push(`The upload of ${f.name} was interrupted. Check the connection and try again.`)
+      }
     }
     setRows(latest)
     setPicked(new Set(latest.filter((r) => GROUPS.find((g) => g.id === r.category)?.tick).map((r) => r.key)))
     setBusy(null)
+    if (problems.length) setError(problems.join(' '))
+    else if (!latest.length) setError('No emails were found in that upload. In the exported folder, choose the file called “mbox”.')
     if (fileRef.current) fileRef.current.value = ''
     if (dirRef.current) dirRef.current.value = ''
   }
@@ -58,10 +73,11 @@ export function ImportEmails({ retentionYears }: { retentionYears: number }) {
   const commit = async () => {
     setBusy(`Importing ${picked.size} enquiries…`)
     const res = await fetch('/api/admin/import/commit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ batch, keys: [...picked] }) })
-    const r = (await res.json().catch(() => ({}))) as { imported?: number; contacts?: number; error?: string }
+    const r = (await res.json().catch(() => ({}))) as Partial<Done> & { error?: string }
     setBusy(null)
     if (!res.ok) return setError(r.error ?? 'The import failed.')
     setDone({ imported: r.imported ?? 0, contacts: r.contacts ?? 0 })
+    router.refresh() // updates the "Imported so far" list below
   }
 
   const skipped = useMemo(() => rows.filter((r) => r.category === 'skipped'), [rows])
@@ -71,10 +87,14 @@ export function ImportEmails({ retentionYears }: { retentionYears: number }) {
     return (
       <section className="card card-pad imp-done">
         <h2>Imported {done.imported} enquir{done.imported === 1 ? 'y' : 'ies'}</h2>
-        <p className="card-sub">Linked to {done.contacts} contact{done.contacts === 1 ? '' : 's'}. They appear on their original dates in Activity, Contacts and Enquiries, marked as already handled.</p>
+        <p className="card-sub">
+          {done.imported
+            ? <>Linked to {done.contacts} contact{done.contacts === 1 ? '' : 's'}. They’re listed below and appear on their original dates in Enquiries, Contacts, Activity and the Calendar, marked as already handled.</>
+            : <>Nothing new was saved: the ticked emails were already in the portal.</>}
+        </p>
         <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
-          <Link className="btn btn-gold" href="/admin/contacts">See contacts</Link>
-          <Link className="btn btn-ghost" href="/admin/enquiries">See enquiries</Link>
+          <Link className="btn btn-gold" href="/admin/enquiries?imported=1">See them in Enquiries</Link>
+          <Link className="btn btn-ghost" href="/admin/contacts">See contacts</Link>
           <button className="btn btn-ghost" type="button" onClick={() => location.reload()}>Import more</button>
         </div>
       </section>
@@ -109,7 +129,7 @@ export function ImportEmails({ retentionYears }: { retentionYears: number }) {
       {rows.length > 0 ? (
         <>
           <div className="imp-bar card">
-            <div><b>{picked.size}</b> of {rows.length - skipped.length} ticked to import{skipped.length ? ` · ${skipped.length} skipped` : ''}</div>
+            <div><b>{picked.size}</b> of {rows.length - skipped.length} ticked to import{skipped.length ? ` · ${skipped.length} skipped` : ''}{skipped.length && skipped.length === rows.length ? '. Everything in this file was skipped; see why below.' : ''}</div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => fileRef.current?.click()} disabled={!!busy}>Add more files</button>
               <input ref={fileRef} type="file" hidden multiple onChange={(e) => upload(e.target.files)} />
@@ -153,10 +173,33 @@ export function ImportEmails({ retentionYears }: { retentionYears: number }) {
             )
           })}
           {skipped.length ? (
-            <section className="card card-pad">
-              <details>
-                <summary className="det-sum">Skipped · {skipped.length}</summary>
-                <ul className="imp-reasons">{reasons.map(([why, n]) => <li key={why}><b>{n}</b> {why}</li>)}</ul>
+            <section className="card imp-group">
+              <details open={skipped.length === rows.length}>
+                <summary className="imp-group-head">
+                  <div>
+                    <h2>Skipped · {skipped.length}</h2>
+                    <p className="card-sub">{reasons.map(([why, n]) => `${n} ${why.toLowerCase()}`).join(' · ')}. Open to check them; you can tick any that are real enquiries.</p>
+                  </div>
+                </summary>
+                <div className="table-wrap">
+                  <table className="list imp-table">
+                    <thead><tr><th /><th>Date</th><th>Name</th><th>About</th><th>Why skipped</th></tr></thead>
+                    <tbody>
+                      {skipped.map((r) => {
+                        const ok = canTick(r)
+                        return (
+                          <tr key={r.key} className={`${picked.has(r.key) ? 'on' : ''}${ok ? '' : ' off'}`} onClick={() => ok && toggle(r.key)}>
+                            <td><input type="checkbox" checked={picked.has(r.key)} disabled={!ok} onChange={() => toggle(r.key)} onClick={(e) => e.stopPropagation()} aria-label={`Import ${r.name}`} /></td>
+                            <td className="num addr-sub">{day(r.date)}</td>
+                            <td><div className="addr-main">{r.name}</div><div className="addr-sub">{[r.phone, r.email].filter(Boolean).join(' · ')}</div></td>
+                            <td className="addr-sub imp-about"><div className="imp-about-main">{r.about ?? r.subject}</div></td>
+                            <td className="addr-sub">{r.reason}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </details>
             </section>
           ) : null}

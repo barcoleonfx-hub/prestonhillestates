@@ -32,13 +32,15 @@ export async function POST(req: Request) {
     await pipeline(Readable.fromWeb(req.body as unknown as WebStream), createWriteStream(tmp))
     const found: ImportRow[] = []
     const seen = new Set((await readBatch(batch)).map((r) => r.key))
-    const add = (r: ImportRow | null) => { if (r && !seen.has(r.key)) { seen.add(r.key); found.push(r) } }
+    let parsed = 0
+    const add = (r: ImportRow | null) => { if (r) parsed++; if (r && !seen.has(r.key)) { seen.add(r.key); found.push(r) } }
     if (name.endsWith('.eml')) {
       const { readFile } = await import('node:fs/promises')
       add(await analyse(await readFile(tmp, 'utf8')))
     } else {
       for await (const raw of mboxMessages(tmp)) add(await analyse(raw))
     }
+    if (!parsed) return Response.json({ error: `No emails found in “${url.searchParams.get('name') || 'that file'}”. In the exported folder, choose the file called “mbox”.` }, { status: 422 })
     // Mark anything already in the portal.
     await ready()
     const keys = found.map((r) => r.key)
