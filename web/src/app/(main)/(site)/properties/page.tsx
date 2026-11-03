@@ -65,7 +65,18 @@ export default async function PropertySearch({ searchParams }: { searchParams: S
           </div>
           <button className="btn btn-gold go" type="submit" style={{ height: 42 }}>Search</button>
         </form>
-        {channel !== 'let' ? <p className="borrow-note">Not sure of your budget? <a href="/mortgage-calculator">See how much you could borrow</a>.</p> : null}
+        {channel !== 'let' ? (
+          <a className="borrow-banner" href="/mortgage-calculator">
+            <span className="bb-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M8 7h8M8 11h2M12 11h2M16 11h0M8 15h2M12 15h2M8 18h2M12 18h4" /></svg>
+            </span>
+            <span className="bb-text">
+              <b>Not sure of your budget?</b>
+              <span>See how much you could borrow, what you could afford and the monthly repayments. It takes a minute.</span>
+            </span>
+            <span className="btn btn-gold bb-btn">See how much you could borrow</span>
+          </a>
+        ) : null}
       </section>
 
       <div className="results-meta">

@@ -93,7 +93,7 @@ export default async function PropertyPage({ params }: { params: Params }) {
         <div className="price">
           <div className="p">{priceLabel(p)}</div>
           <div className="n">{isLet ? labelFor(FURNISHING, p.furnishing) || 'Rent' : labelFor(TENURES, p.tenure) || 'Asking price'}</div>
-          {!isLet ? <a className="borrow-link" href="/mortgage-calculator">How much could I borrow?</a> : null}
+          {!isLet ? <a className="borrow-link" href="/mortgage-calculator">Could you afford this? <b>See how much you could borrow →</b></a> : null}
         </div>
       </div>
 
