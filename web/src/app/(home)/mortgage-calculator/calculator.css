@@ -1,0 +1,40 @@
+/* Borrowing calculator. Uses the homepage tokens and some valuation-page pieces (.vx-intent, .vx-big). */
+.mc-hero { padding-top: clamp(130px, 18vh, 180px); padding-bottom: clamp(30px, 5vh, 50px); }
+.mc { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: 'in out' 'sign sign'; gap: 20px; align-items: start; }
+@media (max-width: 900px) { .mc { grid-template-columns: 1fr; grid-template-areas: 'in' 'out' 'sign'; } }
+.mc-inputs { grid-area: in; background: var(--surface); border: 1px solid var(--line); border-radius: 26px; padding: clamp(22px, 3vw, 34px); box-shadow: var(--shadow-sm); display: flex; flex-direction: column; gap: 18px; }
+.mc-field { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.mc-field > label, .mc-label { font-size: 0.7rem; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; color: var(--ink-soft); }
+.mc-hint { font-size: 0.8rem; color: var(--faint); text-transform: none; letter-spacing: 0; font-weight: 500; }
+.mc-field input { font: inherit; font-size: 1.05rem; color: var(--ink); background: #FDFCF8; border: 1.5px solid var(--line); border-radius: 14px; padding: 13px 15px; width: 100%; }
+.mc-field input:focus { outline: none; border-color: var(--gold); background: #fff; }
+.mc-field input[aria-invalid='true'] { border-color: #A8442E; }
+.mc-money { position: relative; }
+.mc-money span { position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: var(--faint); font-weight: 600; }
+.mc-money input { padding-left: 32px; font-variant-numeric: tabular-nums; font-weight: 600; }
+.mc-assume summary { cursor: pointer; font-weight: 600; color: var(--gold-deep); font-size: 0.92rem; }
+.mc-assume .mc-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+.mc-result { grid-area: out; position: sticky; top: 100px; background: var(--charcoal); color: #E9E5D8; border-radius: 26px; padding: clamp(24px, 3.4vw, 40px); }
+@media (max-width: 900px) { .mc-result { position: static; } }
+.mc-kicker { font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; font-weight: 700; color: #E8C877; }
+.mc-big { margin-top: 10px; font-size: clamp(2rem, 4vw, 3rem); line-height: 1.1; color: #FBFAF3; font-weight: 400; font-variant-numeric: tabular-nums; }
+.mc-big span { font-size: 0.5em; color: #A9A38F; font-style: italic; }
+.mc-line { margin-top: 14px; color: #D9D5C6; line-height: 1.6; }
+.mc-line b { color: #FBFAF3; }
+.mc-facts { margin: 22px 0 0; display: grid; gap: 12px; border-top: 1px solid rgba(255,255,255,0.12); padding-top: 18px; }
+.mc-facts div { display: grid; grid-template-columns: 130px 1fr; gap: 12px; }
+.mc-facts dt { font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: #A9A38F; font-weight: 700; padding-top: 3px; }
+.mc-facts dd { margin: 0; color: #D9D5C6; line-height: 1.5; }
+.mc-facts b { color: #FBFAF3; }
+@media (max-width: 520px) { .mc-facts div { grid-template-columns: 1fr; gap: 2px; } }
+.mc-cta { margin-top: 24px; width: 100%; }
+.mc-warn { margin-top: 22px; font-size: 0.78rem; line-height: 1.55; color: #A9A38F; }
+.mc-warn b { color: #E9E5D8; }
+.mc-signup { grid-area: sign; background: var(--gold-tint); border: 1px solid #EEDFB8; border-radius: 26px; padding: clamp(22px, 3.4vw, 36px); display: flex; flex-direction: column; gap: 16px; position: relative; }
+.mc-signup h3 { font-family: 'Fraunces', Georgia, serif; font-weight: 450; font-size: 1.6rem; color: var(--ink); }
+.mc-signup p { color: var(--ink-soft); margin-top: 4px; }
+.mc-signup-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 900px) { .mc-signup-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 520px) { .mc-signup-grid { grid-template-columns: 1fr; } }
+.mc-signup .btn { align-self: flex-start; border: 0; cursor: pointer; font: inherit; }
+.mc-signup-done h3 { color: var(--gold-deep); }

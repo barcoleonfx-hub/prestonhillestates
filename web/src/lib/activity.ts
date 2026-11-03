@@ -122,8 +122,8 @@ type EnquiryRow = typeof enquiries.$inferSelect
 export function enquiryItem(e: EnquiryRow, ref: string | null, channel: string | null): ActivityItem {
   return {
     id: e.id, at: e.createdAt, type: 'enquiry',
-    label: e.kind === 'valuation' ? 'Website valuation request' : 'Website viewing request',
-    title: `${e.name}${e.kind === 'valuation' ? ` · ${e.postcode ?? ''} · ${e.intent === 'letting' ? 'thinking of letting' : e.intent === 'selling' ? 'thinking of selling' : 'not sure yet'}` : ref ? ` · ${ref}` : ''}`,
+    label: e.kind === 'valuation' ? 'Website valuation request' : e.kind === 'buyer' ? 'Website buyer registration' : 'Website viewing request',
+    title: e.kind === 'buyer' ? `${e.name} · looking to buy` : `${e.name}${e.kind === 'valuation' ? ` · ${e.postcode ?? ''} · ${e.intent === 'letting' ? 'thinking of letting' : e.intent === 'selling' ? 'thinking of selling' : 'not sure yet'}` : ref ? ` · ${ref}` : ''}`,
     body: e.message, contactId: e.contactId, contactName: e.name, contactPhone: e.phone,
     staffId: null, staffName: null, href: e.contactId ? `/admin/contacts/${e.contactId}` : '/admin/enquiries', open: !e.handled,
     enquiry: { id: e.id, kind: e.kind, name: e.name, phone: e.phone, email: e.email, propertyId: e.propertyId, intent: e.intent, channel },

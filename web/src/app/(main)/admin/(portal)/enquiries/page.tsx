@@ -38,7 +38,7 @@ export default async function EnquiriesPage() {
                 <div style={{ minWidth: 0 }}>
                   <div className="who">
                     {e.name} {e.handled ? <span className="pill">Handled</span> : <span className="pill gold">New</span>}{' '}
-                    <span className="pill">{e.kind === 'valuation' ? 'Valuation request' : 'Viewing request'}</span>
+                    <span className="pill">{e.kind === 'valuation' ? 'Valuation request' : e.kind === 'buyer' ? 'Buyer registration' : 'Viewing request'}</span>
                   </div>
                   <div className="what">
                     {[e.phone, e.email].filter(Boolean).join(' · ')} ·{' '}

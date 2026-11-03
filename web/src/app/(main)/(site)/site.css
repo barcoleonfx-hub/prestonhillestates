@@ -199,3 +199,7 @@
 @media (prefers-reduced-motion: reduce) {
   .vp-backdrop, .vp-dialog { transition: none !important; }
 }
+
+.borrow-link { display: inline-block; margin-top: 6px; font-size: 0.82rem; font-weight: 600; color: var(--gold-deep); }
+.borrow-note { margin-top: 14px; font-size: 0.9rem; color: var(--ink-soft); }
+.borrow-note a { color: var(--gold-deep); font-weight: 600; }
