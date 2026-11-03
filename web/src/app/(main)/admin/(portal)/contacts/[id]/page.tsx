@@ -8,7 +8,7 @@ import { activeStaff } from '@/lib/appointments'
 import { audit, getContact, openTasks, timelineFor } from '@/lib/contacts'
 import { moneyShort, roleLabel, rolesOf } from '@/lib/crm-options'
 import { fmtTime, fmtWhen, isoToLondon, dayLabel, todayLondon } from '@/lib/time'
-import { archiveContact } from '../../../crm-actions'
+import { archiveContact, setDoNotContact } from '../../../crm-actions'
 import { LogCallButton } from '../../LogCallButton'
 import { TaskDoneButton } from '../../TaskDoneButton'
 import { AddCallbackForm, EditContactForm } from './ContactForms'
@@ -41,7 +41,7 @@ export default async function ContactPage({ params }: { params: Promise<{ id: st
       <div className="page-head">
         <div>
           <p className="crumb"><Link href="/admin/contacts">Contacts</Link></p>
-          <h1>{c.name}{c.archived ? <span className="pill draft" style={{ marginLeft: 10, verticalAlign: 6 }}>Archived</span> : null}</h1>
+          <h1>{c.name}{c.archived ? <span className="pill draft" style={{ marginLeft: 10, verticalAlign: 6 }}>Archived</span> : null}{c.doNotContact ? <span className="pill warn" style={{ marginLeft: 10, verticalAlign: 6 }}>Do not call back</span> : null}</h1>
           <p className="sub contact-sub">
             {c.phone ? <a href={`tel:${c.phone}`}>{c.phone}</a> : null}
             {c.phone2 ? <a href={`tel:${c.phone2}`}>{c.phone2}</a> : null}
@@ -50,6 +50,11 @@ export default async function ContactPage({ params }: { params: Promise<{ id: st
           </p>
         </div>
         <div className="actions">
+          <form action={setDoNotContact}>
+            <input type="hidden" name="id" value={c.id} />
+            <input type="hidden" name="on" value={c.doNotContact ? '0' : '1'} />
+            <button className={`btn ${c.doNotContact ? 'btn-ghost' : 'btn-danger'}`} type="submit">{c.doNotContact ? 'Allow calls again' : 'Do not call back'}</button>
+          </form>
           <LogCallButton prefill={{ contactId: c.id, direction: 'out' }} className="btn btn-gold" />
           <Link className="btn btn-ghost" href={`/admin/diary/new?contact=${c.id}&kind=viewing`}>Book viewing</Link>
           <Link className="btn btn-ghost" href={`/admin/diary/new?contact=${c.id}&kind=valuation`}>Book valuation</Link>

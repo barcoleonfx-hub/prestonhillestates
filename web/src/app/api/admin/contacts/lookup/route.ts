@@ -17,7 +17,7 @@ export async function GET(req: Request) {
     return Response.json({
       contact: {
         id: c.id, name: c.name, phone: c.phone, email: c.email, roles: rolesOf(c.roles), areas: c.areas, minBeds: c.minBeds,
-        maxPrice: c.maxPrice, position: c.position, address: c.address, ownerName: c.ownerName, source: c.source,
+        maxPrice: c.maxPrice, position: c.position, address: c.address, ownerName: c.ownerName, source: c.source, doNotContact: c.doNotContact,
       },
       recent: timeline.filter((t) => t.type !== 'created').slice(0, 4),
       tasks: open.map((t) => ({ id: t.id, title: t.title, dueAt: t.dueAt, assigneeName: t.assigneeName, mine: t.assignedTo === me.id })),

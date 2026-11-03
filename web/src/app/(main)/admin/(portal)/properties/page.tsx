@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { requireAdmin } from '@/lib/auth'
 import { CHANNELS, STATUSES } from '@/lib/options'
 import { displayAddressFor, listForAdmin, priceLabel, statusLabel } from '@/lib/properties'
+import { matchCounts } from '@/lib/matching'
 import { createProperty } from '../../actions'
 
 export const dynamic = 'force-dynamic'
@@ -15,6 +16,7 @@ export default async function PropertiesPage({ searchParams }: { searchParams: S
   const sp = await searchParams
   const filters = { q: one(sp.q), channel: one(sp.channel), status: one(sp.status), published: one(sp.published) }
   const rows = await listForAdmin(filters)
+  const counts = await matchCounts(rows)
   const filtered = Object.values(filters).some(Boolean)
 
   return (
@@ -69,7 +71,7 @@ export default async function PropertiesPage({ searchParams }: { searchParams: S
             <table className="list">
               <thead>
                 <tr>
-                  <th></th><th>Property</th><th>Price</th><th>Beds</th><th>Status</th><th>Website</th><th>Updated</th>
+                  <th></th><th>Property</th><th>Price</th><th>Beds</th><th>Status</th><th>Website</th><th>To call</th><th>Updated</th>
                 </tr>
               </thead>
               <tbody>
@@ -88,6 +90,13 @@ export default async function PropertiesPage({ searchParams }: { searchParams: S
                     <td className="num">{p.bedrooms ?? '–'}</td>
                     <td><span className="pill">{statusLabel(p.status)}</span></td>
                     <td>{p.published ? <span className="pill live"><span className="dot" />Live</span> : <span className="pill draft">Draft</span>}</td>
+                    <td>
+                      {counts[p.id]?.total ? (
+                        <a href={`/admin/properties/${p.id}#matches`} className="pill gold" title={`${counts[p.id].recent} recent, ${counts[p.id].total - counts[p.id].recent} older`}>
+                          {counts[p.id].total} to call{counts[p.id].recent ? ` · ${counts[p.id].recent} recent` : ''}
+                        </a>
+                      ) : <span className="addr-sub">–</span>}
+                    </td>
                     <td className="num" style={{ color: 'var(--faint)', fontSize: '0.8rem' }}>
                       {new Date(p.updatedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                     </td>

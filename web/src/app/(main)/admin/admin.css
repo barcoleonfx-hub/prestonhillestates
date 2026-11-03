@@ -527,3 +527,39 @@ kbd { font: 600 0.68rem/1 var(--sans, inherit); padding: 3px 6px; border-radius:
 .imp-about-main { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); font-weight: 500; }
 .imp-details { font-size: 0.76rem; color: var(--faint); margin-top: 2px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .imp-reasons { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 4px; font-size: 0.88rem; color: var(--ink-soft); }
+
+/* ---------- enquiry outcomes ---------- */
+.eo { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
+.eo-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.eo-chip { font: inherit; font-size: 0.78rem; font-weight: 600; padding: 6px 12px; border-radius: 999px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink-soft); cursor: pointer; }
+.eo-chip:hover { border-color: var(--gold); }
+.eo-chip.on.t-muted { background: #EFEDE6; border-color: #CFCAB9; color: var(--ink); }
+.eo-chip.on.t-ok { background: var(--ok-tint); border-color: var(--ok); color: var(--ok); }
+.eo-chip.on.t-gold { background: var(--gold-tint); border-color: var(--gold); color: var(--gold-deep); }
+.eo-chip.on.t-warn { background: var(--danger-tint); border-color: var(--danger); color: var(--danger); }
+.eo-chip:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.eo-req { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 12px; background: var(--gold-wash); border: 1px solid var(--gold-tint); max-width: 720px; }
+.eo-req-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.eo-req-grid .eo-wide { grid-column: span 2; }
+@media (max-width: 760px) { .eo-req-grid { grid-template-columns: 1fr 1fr; } }
+.eo-saved { font-size: 0.82rem; color: var(--ok); font-weight: 600; }
+.enq-groups { display: flex; flex-direction: column; gap: 16px; }
+.enq-group h2 { font-size: 1.05rem; }
+.enq-item.dnc { opacity: 0.7; }
+.enq-msg summary { cursor: pointer; font-size: 0.86rem; color: var(--ink-soft); margin-top: 4px; }
+.enq-msg[open] summary { color: var(--faint); }
+
+/* ---------- applicants to call ---------- */
+.pm-h { font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); margin: 18px 0 8px; }
+.pm-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.pm-row { display: grid; grid-template-columns: 46px 1fr auto; gap: 14px; align-items: start; padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: 14px; }
+.pm-score { width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 0.9rem; background: var(--gold-tint); color: var(--gold-deep); }
+.pm-main { min-width: 0; }
+.pm-top { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.pm-name { font-weight: 700; color: var(--ink); text-decoration: none; }
+.pm-meta { display: flex; gap: 12px; flex-wrap: wrap; font-size: 0.8rem; color: var(--faint); margin-top: 2px; }
+.pm-meta a { color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.pm-what { font-size: 0.84rem; color: var(--ink-soft); margin-top: 4px; }
+.pm-reasons { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.pm-reasons span { font-size: 0.72rem; font-weight: 700; padding: 3px 8px; border-radius: 999px; background: #E8EEF8; color: #2B4C7E; }
+@media (max-width: 640px) { .pm-row { grid-template-columns: 1fr; } .pm-score { display: none; } }
