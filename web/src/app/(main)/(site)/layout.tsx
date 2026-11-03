@@ -20,6 +20,7 @@ export default function SiteLayout({ children }: { children: React.ReactNode }) 
           <nav className="site-links" aria-label="Main">
             <Link className="l" href="/properties?channel=sale">Buy</Link>
             <Link className="l" href="/properties?channel=let">Rent</Link>
+            <a className="l" href="/valuation">Free valuation</a>
             <a className="l" href="tel:+442081277001">020 8127 7001</a>
             <Link className="btn btn-gold" href="/properties">Search homes</Link>
           </nav>
