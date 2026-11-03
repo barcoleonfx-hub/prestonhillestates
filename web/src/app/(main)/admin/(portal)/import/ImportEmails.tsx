@@ -21,7 +21,9 @@ const day = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'n
 const canTick = (r: Row) => r.category !== 'skipped' || !/already imported|older than/i.test(r.reason ?? '')
 // Apple Mail puts these index files next to the "mbox" file in an exported folder.
 const APPLE_INDEX = /^(table_of_contents|info\.plist)$/i
-type Done = { imported: number; contacts: number }
+type Done = { imported: number; contacts: number; failed: { name: string; date: string; error: string }[] }
+const CHUNK = 100
+type ChunkResult = { imported?: number; contactIds?: string[]; failed?: Done['failed']; error?: string }
 const newBatch = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `b${Date.now()}${Math.random().toString(36).slice(2)}`)
 
 export function ImportEmails({ retentionYears }: { retentionYears: number }) {
@@ -70,13 +72,46 @@ export function ImportEmails({ retentionYears }: { retentionYears: number }) {
     const n = new Set(s); rows.filter((r) => r.category === id).forEach((r) => (on ? n.add(r.key) : n.delete(r.key))); return n
   })
 
+  // Sent in chunks of 100 so a big mailbox never depends on one long request. Each chunk is retried
+  // a few times, and re-running is safe because anything already saved is skipped.
   const commit = async () => {
-    setBusy(`Importing ${picked.size} enquiries…`)
-    const res = await fetch('/api/admin/import/commit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ batch, keys: [...picked] }) })
-    const r = (await res.json().catch(() => ({}))) as Partial<Done> & { error?: string }
+    setError(null)
+    const order = new Map(rows.map((r) => [r.key, r.date]))
+    const keys = [...picked].sort((a, b) => ((order.get(a) ?? '') < (order.get(b) ?? '') ? -1 : 1))
+    let imported = 0
+    const people = new Set<string>()
+    const failed: Done['failed'] = []
+    for (let i = 0; i < keys.length; i += CHUNK) {
+      setBusy(`Importing… ${Math.min(i, keys.length)} of ${keys.length} done. Keep this page open.`)
+      const last = i + CHUNK >= keys.length
+      let r: ChunkResult | null = null
+      let problem = ''
+      for (let attempt = 0; attempt < 3 && !r; attempt++) {
+        if (attempt) await new Promise((ok) => setTimeout(ok, 2000 * attempt))
+        try {
+          const res = await fetch('/api/admin/import/commit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ batch, keys: keys.slice(i, i + CHUNK), last }) })
+          const body = (await res.json().catch(() => null)) as ChunkResult | null
+          if (res.ok && body) r = body
+          else {
+            problem = body?.error ?? `The server didn’t answer properly (error ${res.status}).`
+            if (res.status < 500) break // a real refusal (e.g. upload expired): retrying won't help
+          }
+        } catch {
+          problem = 'The connection dropped.'
+        }
+      }
+      if (!r) {
+        setBusy(null)
+        setError(`${imported ? `${imported} enquiries were saved, then the import stopped. ` : ''}${problem} Click Import again to carry on: anything already saved is skipped, nothing is duplicated.`)
+        router.refresh()
+        return
+      }
+      imported += r.imported ?? 0
+      r.contactIds?.forEach((id) => people.add(id))
+      failed.push(...(r.failed ?? []))
+    }
     setBusy(null)
-    if (!res.ok) return setError(r.error ?? 'The import failed.')
-    setDone({ imported: r.imported ?? 0, contacts: r.contacts ?? 0 })
+    setDone({ imported, contacts: people.size, failed })
     router.refresh() // updates the "Imported so far" list below
   }
 
@@ -92,6 +127,12 @@ export function ImportEmails({ retentionYears }: { retentionYears: number }) {
             ? <>Linked to {done.contacts} contact{done.contacts === 1 ? '' : 's'}. They’re listed below and appear on their original dates in Enquiries, Contacts, Activity and the Calendar, marked as already handled.</>
             : <>Nothing new was saved: the ticked emails were already in the portal.</>}
         </p>
+        {done.failed.length ? (
+          <details className="notice err" style={{ marginTop: 12 }}>
+            <summary>{done.failed.length} email{done.failed.length === 1 ? '' : 's'} couldn’t be imported. Show which</summary>
+            <ul className="imp-reasons">{done.failed.slice(0, 50).map((f, i) => <li key={i}><b>{f.name}</b> · {day(f.date)} · {f.error}</li>)}</ul>
+          </details>
+        ) : null}
         <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
           <Link className="btn btn-gold" href="/admin/enquiries?imported=1">See them in Enquiries</Link>
           <Link className="btn btn-ghost" href="/admin/contacts">See contacts</Link>
