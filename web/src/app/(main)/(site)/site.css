@@ -200,6 +200,20 @@
   .vp-backdrop, .vp-dialog { transition: none !important; }
 }
 
-.borrow-link { display: inline-block; margin-top: 6px; font-size: 0.82rem; font-weight: 600; color: var(--gold-deep); }
-.borrow-note { margin-top: 14px; font-size: 0.9rem; color: var(--ink-soft); }
-.borrow-note a { color: var(--gold-deep); font-weight: 600; }
+.borrow-link { display: inline-block; margin-top: 10px; padding: 8px 14px; border-radius: 999px; background: var(--gold-tint); color: var(--ink); font-size: 0.82rem; text-decoration: none; }
+.borrow-link b { color: var(--gold-deep); font-weight: 700; }
+.borrow-link:hover { background: #F1E4C3; }
+
+/* Prominent budget prompt under the sales search */
+.borrow-banner { display: flex; align-items: center; gap: 18px; margin-top: 18px; padding: 18px 22px; border-radius: 18px; background: var(--charcoal); color: #E9E5D8; text-decoration: none; box-shadow: 0 14px 34px -18px rgba(33,31,25,0.55); transition: transform 0.2s, box-shadow 0.2s; }
+.borrow-banner:hover { transform: translateY(-2px); box-shadow: 0 18px 40px -18px rgba(33,31,25,0.65); }
+.bb-icon { flex: none; width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; background: rgba(232,200,119,0.16); color: #E8C877; }
+.bb-icon svg { width: 26px; height: 26px; }
+.bb-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.bb-text b { font-family: var(--serif); font-weight: 450; font-size: 1.35rem; color: #FBFAF3; }
+.bb-text span { font-size: 0.9rem; color: #C9C4B2; }
+.bb-btn { margin-left: auto; flex: none; white-space: nowrap; }
+@media (max-width: 760px) {
+  .borrow-banner { flex-wrap: wrap; }
+  .bb-btn { margin-left: 0; width: 100%; justify-content: center; }
+}
