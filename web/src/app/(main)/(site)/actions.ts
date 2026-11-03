@@ -57,6 +57,16 @@ export async function sendValuationRequest(_prev: ValuationState, form: FormData
   const postcode = String(form.get('postcode') || '').trim().toUpperCase().replace(/\s+/g, ' ').slice(0, 10)
   const intentRaw = String(form.get('intent') || '')
   const intent = INTENTS.includes(intentRaw) ? intentRaw : 'unsure'
+  // Extra detail from the full valuation page; all optional so the short forms keep working.
+  const address = String(form.get('address') || '').trim().slice(0, 200)
+  const details = [
+    address ? `Address: ${address}, ${postcode}` : '',
+    String(form.get('propertyType') || '').trim().slice(0, 40) ? `Type: ${String(form.get('propertyType')).trim().slice(0, 40)}` : '',
+    String(form.get('bedrooms') || '').trim().slice(0, 10) ? `Bedrooms: ${String(form.get('bedrooms')).trim().slice(0, 10)}` : '',
+    String(form.get('timescale') || '').trim().slice(0, 60) ? `Timescale: ${String(form.get('timescale')).trim().slice(0, 60)}` : '',
+    String(form.get('contactTime') || '').trim().slice(0, 60) ? `Best time to call: ${String(form.get('contactTime')).trim().slice(0, 60)}` : '',
+    String(form.get('notes') || '').trim().slice(0, 1000),
+  ].filter(Boolean).join('\n') || null
 
   if (!name) return { error: 'Please tell us your name.', field: 'name' }
   if (!phone) return { error: 'Add a phone number so the branch can call you.', field: 'phone' }
@@ -71,11 +81,11 @@ export async function sendValuationRequest(_prev: ValuationState, form: FormData
 
   await ready()
   const contactId = await upsertContact({
-    name, phone, email, role: intent === 'letting' ? 'landlord' : 'seller', source: 'Our website', address: postcode,
+    name, phone, email, role: intent === 'letting' ? 'landlord' : 'seller', source: 'Our website', address: address ? `${address}, ${postcode}` : postcode,
   }).catch(() => null)
   await db.insert(enquiries).values({
     id: uid(), propertyId: null, kind: 'valuation', name, phone, email: email || null, contactId,
-    postcode, intent, message: null, createdAt: now(),
+    postcode, intent, message: details, createdAt: now(),
   })
   return { ok: true }
 }
