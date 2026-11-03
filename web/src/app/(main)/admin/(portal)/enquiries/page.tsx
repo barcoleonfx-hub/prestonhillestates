@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { enquiryLabel } from '@/lib/enquiry-labels'
 import { desc, eq } from 'drizzle-orm'
 import { db, ready } from '@/db/client'
 import { enquiries, properties } from '@/db/schema'
@@ -38,7 +39,7 @@ export default async function EnquiriesPage() {
                 <div style={{ minWidth: 0 }}>
                   <div className="who">
                     {e.name} {e.handled ? <span className="pill">Handled</span> : <span className="pill gold">New</span>}{' '}
-                    <span className="pill">{e.kind === 'valuation' ? 'Valuation request' : e.kind === 'buyer' ? 'Buyer registration' : 'Viewing request'}</span>
+                    <span className="pill">{enquiryLabel(e)}</span>
                   </div>
                   <div className="what">
                     {[e.phone, e.email].filter(Boolean).join(' · ')} ·{' '}

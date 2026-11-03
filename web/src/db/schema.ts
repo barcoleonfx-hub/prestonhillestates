@@ -136,6 +136,8 @@ export const enquiries = sqliteTable('enquiries', {
   intent: text('intent'),
   handled: integer('handled', { mode: 'boolean' }).notNull().default(false),
   contactId: text('contact_id'),
+  source: text('source').notNull().default('website'),
+  externalId: text('external_id'),
   createdAt: text('created_at').notNull(),
 })
 

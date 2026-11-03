@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { enquiryLabel } from '@/lib/enquiry-labels'
 import { and, asc, eq, gte, lt } from 'drizzle-orm'
 import { db } from '@/db/client'
 import { admins, contacts, enquiries, tasks } from '@/db/schema'
@@ -164,7 +165,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
                   <li key={e.id} className={e.handled ? 'done' : 'late'}>
                     <Link href={e.contactId ? `/admin/contacts/${e.contactId}` : '/admin/enquiries'}>
                       <span className="num"><b>{fmtTime(e.createdAt)}</b></span>
-                      <span><b>{e.name}</b> · {e.kind === 'valuation' ? `Valuation, ${e.postcode}` : e.kind === 'buyer' ? 'Buyer registration' : 'Viewing request'}{e.handled ? '' : ' · needs a reply'}</span>
+                      <span><b>{e.name}</b> · {e.kind === 'valuation' ? `Valuation, ${e.postcode}` : enquiryLabel(e)}{e.handled ? '' : ' · needs a reply'}</span>
                       <span className="who">{e.phone ?? ''}</span>
                     </Link>
                   </li>
