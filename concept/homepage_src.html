@@ -388,7 +388,8 @@
 
   /* ---------- footer ---------- */
   footer.site { background: var(--charcoal); color: #C9C5B4; padding: clamp(60px, 9vh, 90px) 0 0; }
-  .foot-grid { display: grid; grid-template-columns: 1.5fr 1fr 1fr 1.2fr; gap: clamp(28px, 4vw, 60px); padding-bottom: clamp(46px, 7vh, 70px); }
+  .foot-grid { display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr 1.2fr; gap: clamp(24px, 3.4vw, 52px); padding-bottom: clamp(46px, 7vh, 70px); }
+  @media (max-width: 1080px) { .foot-grid { grid-template-columns: 1fr 1fr 1fr; } }
   @media (max-width: 880px) { .foot-grid { grid-template-columns: 1fr 1fr; } }
   @media (max-width: 560px) { .foot-grid { grid-template-columns: 1fr; } }
   footer.site h4 { font-size: 0.64rem; letter-spacing: 0.22em; text-transform: uppercase; color: #7B7663; margin-bottom: 18px; font-weight: 600; }
@@ -806,7 +807,19 @@
         <li><a href="#listings">Properties for sale</a></li>
         <li><a href="#listings">Properties to let</a></li>
         <li><a href="#valuation">Free valuation</a></li>
-        <li><a href="#areas">Area guides</a></li>
+        <li><a href="/valuation?intent=letting">Landlord valuation</a></li>
+        <li><a href="/guides">Guides for sellers and landlords</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4>Areas we cover</h4>
+      <ul>
+        <li><a href="/properties?q=Harrow">Harrow</a></li>
+        <li><a href="/properties?q=Kenton">Kenton</a></li>
+        <li><a href="/properties?q=Wembley">Wembley</a></li>
+        <li><a href="/properties?q=Pinner">Pinner</a></li>
+        <li><a href="/properties?q=Stanmore">Stanmore</a></li>
+        <li><a href="/properties?q=Kingsbury">Kingsbury</a></li>
       </ul>
     </div>
     <div>
