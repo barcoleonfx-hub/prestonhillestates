@@ -126,11 +126,9 @@
   @media (prefers-reduced-motion: reduce) { .h-stage { animation: none; opacity: 1; transform: none; } }
 
   /* hero side: arched local photo, heritage seal badge and a quick valuation */
-  .hero-side { position: relative; padding: 0 0 0 clamp(0px, 2vw, 24px); }
-  .hero-photo { position: relative; margin: 0 0 0 auto; width: min(100%, 440px); aspect-ratio: 4 / 5; border-radius: 999px 999px 28px 28px; overflow: hidden; box-shadow: var(--shadow-lg); background: var(--gold-tint); }
-  .hero-photo img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 40%; display: block; }
-  .hero-photo::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(35,33,26,0) 55%, rgba(35,33,26,0.45)); pointer-events: none; }
-  .hero-photo figcaption { position: absolute; right: 22px; bottom: 18px; z-index: 1; color: #FFFDF6; font-size: 0.7rem; letter-spacing: 0.2em; text-transform: uppercase; font-weight: 600; }
+  .hero-side { position: relative; padding: 0 0 118px; }
+  .hero-photo { position: relative; margin: 0 0 0 auto; width: min(100%, 380px); aspect-ratio: 4 / 5; border-radius: 999px 999px 28px 28px; overflow: hidden; background: var(--gold-wash); border: 1px solid var(--line); box-shadow: var(--shadow-lg); color: var(--gold-deep); }
+  .hero-photo svg.parade { position: absolute; inset: 0; width: 100%; height: 100%; }
 
   /* rotating heritage seal around the logo */
   .seal { position: relative; width: min(320px, 26vw); aspect-ratio: 1; margin-left: auto; }
@@ -143,14 +141,14 @@
     display: flex; align-items: center; justify-content: center;
   }
   .seal .core svg { width: 54%; height: 54%; }
-  .seal.seal-badge { position: absolute; top: 6%; right: -4%; width: clamp(130px, 12vw, 168px); margin: 0; background: var(--bg); border-radius: 50%; box-shadow: var(--shadow-lg); }
+  .seal.seal-badge { position: absolute; top: 0; right: -34px; width: clamp(118px, 10vw, 142px); margin: 0; background: var(--bg); border-radius: 50%; box-shadow: var(--shadow-lg); }
   .seal.seal-badge .ring text { font-size: 11px; fill: var(--ink-soft); }
   .seal.seal-badge .core { inset: 22%; box-shadow: none; }
 
   /* quick valuation card overlapping the photo */
-  .hero-val { position: absolute; left: clamp(-70px, -4vw, -20px); bottom: 9%; width: min(310px, 82%); background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 20px 20px 16px; box-shadow: var(--shadow-lg); }
+  .hero-val { position: absolute; right: clamp(40px, 6vw, 90px); bottom: 0; width: min(340px, 92%); background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 18px 20px 14px; box-shadow: var(--shadow-lg); }
   .hero-val .hv-label { font-size: 0.68rem; letter-spacing: 0.2em; text-transform: uppercase; font-weight: 700; color: var(--gold-deep); }
-  .hero-val .hv-title { font-family: 'Fraunces', Georgia, serif; font-size: 1.45rem; line-height: 1.15; margin-top: 6px; color: var(--ink); }
+  .hero-val .hv-title { font-family: 'Fraunces', Georgia, serif; font-size: 1.3rem; line-height: 1.15; margin-top: 6px; color: var(--ink); }
   .hero-val .hv-row { display: flex; gap: 8px; margin-top: 14px; }
   .hero-val input { flex: 1; min-width: 0; height: 46px; border: 1.5px solid var(--line); border-radius: 999px; padding: 0 16px; font: inherit; font-size: 0.95rem; background: var(--bg); color: var(--ink); text-transform: uppercase; }
   .hero-val input::placeholder { text-transform: none; color: var(--faint); }
@@ -579,8 +577,107 @@
       </div>
       <div class="hero-side h-stage s3">
         <figure class="hero-photo">
-          <img src="/video/wembley-first.jpg" alt="The Wembley arch at sunset, looking out over North West London" width="1920" height="1080" fetchpriority="high"/>
-          <figcaption>Harrow · Kenton · Wembley</figcaption>
+          <!-- Original drawing of a 1930s Metro-land parade, like those along Preston Road -->
+          <svg class="parade" viewBox="0 0 400 500" role="img" aria-label="Line drawing of a 1930s shopping parade with flats above, like those along Preston Road"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M150 84 q6 -6 12 0 q6 -6 12 0 M184 64 q5 -5 10 0 q5 -5 10 0" stroke-width="1.4"/>
+<g fill="currentColor" stroke="none" font-family="Helvetica Neue, Arial, sans-serif" font-weight="700" letter-spacing="2.4"><text x="48" y="106" font-size="10">PRESTON ROAD</text><text x="48" y="122" font-size="8" opacity="0.7">SINCE THE 1930S</text></g>
+<rect x="136" y="150" width="16" height="104" fill="#FDF9EE"/><rect x="133" y="146" width="22" height="6" fill="#FDF9EE"/>
+<path d="M140 146 v-8 h8 v8"/>
+<rect x="252" y="150" width="16" height="104" fill="#FDF9EE"/><rect x="249" y="146" width="22" height="6" fill="#FDF9EE"/>
+<path d="M256 146 v-8 h8 v8"/>
+<path d="M28 252 L86.0 168 L144 252 Z" fill="#FDF9EE"/>
+<path d="M22 256 L86.0 162 L150 256" stroke-width="2.2"/>
+<line x1="42" y1="232" x2="130" y2="232"/>
+<line x1="56.0" y1="211.4" x2="56.0" y2="232"/>
+<line x1="71.0" y1="189.7" x2="71.0" y2="232"/>
+<line x1="101.0" y1="189.7" x2="101.0" y2="232"/>
+<line x1="116.0" y1="211.4" x2="116.0" y2="232"/>
+<line x1="56.0" y1="232" x2="71.0" y2="189.7"/>
+<line x1="116.0" y1="232" x2="101.0" y2="189.7"/>
+<rect x="77.0" y="200" width="18" height="24" fill="#FDF9EE"/><line x1="86.0" y1="200" x2="86.0" y2="224"/>
+<rect x="28" y="252" width="116" height="98" fill="#FDF9EE"/>
+<path d="M49.0 336 L49.0 278 L61.0 270 L111.0 270 L123.0 278 L123.0 336 Z"/>
+<line x1="61.0" y1="270" x2="61.0" y2="336"/><line x1="111.0" y1="270" x2="111.0" y2="336"/>
+<line x1="49.0" y1="296" x2="123.0" y2="296"/>
+<line x1="45.0" y1="338" x2="127.0" y2="338" stroke-width="2.2"/>
+<rect x="28" y="350" width="116" height="18" fill="#FDF9EE"/>
+<text x="86.0" y="362.5" text-anchor="middle" font-size="7.4" letter-spacing="1.6" fill="currentColor" stroke="none" font-family="Helvetica Neue, Arial, sans-serif" font-weight="700">BAKER</text>
+<path d="M33 368 L139 368 L143 390 L29 390 Z" fill="#FDF9EE"/>
+<line x1="46.2" y1="368" x2="43.2" y2="390"/>
+<line x1="59.5" y1="368" x2="57.5" y2="390"/>
+<line x1="72.8" y1="368" x2="71.8" y2="390"/>
+<line x1="86.0" y1="368" x2="86.0" y2="390"/>
+<line x1="99.2" y1="368" x2="100.2" y2="390"/>
+<line x1="112.5" y1="368" x2="114.5" y2="390"/>
+<line x1="125.8" y1="368" x2="128.8" y2="390"/>
+<path d="M29 390 q 7.12 6 14.25 0 q 7.12 6 14.25 0 q 7.12 6 14.25 0 q 7.12 6 14.25 0 q 7.12 6 14.25 0 q 7.12 6 14.25 0 q 7.12 6 14.25 0 q 7.12 6 14.25 0"/>
+<rect x="28" y="368" width="116" height="74"/>
+<rect x="77.0" y="398" width="18" height="44" fill="#FDF9EE"/><circle cx="91.0" cy="421" r="1.2" fill="currentColor" stroke="none"/>
+<rect x="36" y="398" width="35.0" height="34"/><rect x="101.0" y="398" width="35.0" height="34"/>
+<line x1="36" y1="410" x2="71.0" y2="410"/><line x1="101.0" y1="410" x2="136" y2="410"/>
+<path d="M144 252 L202.0 168 L260 252 Z" fill="#FDF9EE"/>
+<path d="M138 256 L202.0 162 L266 256" stroke-width="2.2"/>
+<line x1="158" y1="232" x2="246" y2="232"/>
+<line x1="172.0" y1="211.4" x2="172.0" y2="232"/>
+<line x1="187.0" y1="189.7" x2="187.0" y2="232"/>
+<line x1="217.0" y1="189.7" x2="217.0" y2="232"/>
+<line x1="232.0" y1="211.4" x2="232.0" y2="232"/>
+<line x1="172.0" y1="232" x2="187.0" y2="189.7"/>
+<line x1="232.0" y1="232" x2="217.0" y2="189.7"/>
+<rect x="193.0" y="200" width="18" height="24" fill="#FDF9EE"/><line x1="202.0" y1="200" x2="202.0" y2="224"/>
+<rect x="144" y="252" width="116" height="98" fill="#FDF9EE"/>
+<path d="M165.0 336 L165.0 278 L177.0 270 L227.0 270 L239.0 278 L239.0 336 Z"/>
+<line x1="177.0" y1="270" x2="177.0" y2="336"/><line x1="227.0" y1="270" x2="227.0" y2="336"/>
+<line x1="165.0" y1="296" x2="239.0" y2="296"/>
+<line x1="161.0" y1="338" x2="243.0" y2="338" stroke-width="2.2"/>
+<rect x="144" y="350" width="116" height="18" fill="#FDF9EE"/>
+<text x="202.0" y="362.5" text-anchor="middle" font-size="7.4" letter-spacing="1.6" fill="currentColor" stroke="none" font-family="Helvetica Neue, Arial, sans-serif" font-weight="700">PRESTON HILL</text>
+<path d="M149 368 L255 368 L259 390 L145 390 Z" fill="#FDF9EE"/>
+<line x1="162.2" y1="368" x2="159.2" y2="390"/>
+<line x1="175.5" y1="368" x2="173.5" y2="390"/>
+<line x1="188.8" y1="368" x2="187.8" y2="390"/>
+<line x1="202.0" y1="368" x2="202.0" y2="390"/>
+<line x1="215.2" y1="368" x2="216.2" y2="390"/>
+<line x1="228.5" y1="368" x2="230.5" y2="390"/>
+<line x1="241.8" y1="368" x2="244.8" y2="390"/>
+<path d="M145 390 q 7.12 6 14.25 0 q 7.12 6 14.25 0 q 7.12 6 14.25 0 q 7.12 6 14.25 0 q 7.12 6 14.25 0 q 7.12 6 14.25 0 q 7.12 6 14.25 0 q 7.12 6 14.25 0"/>
+<rect x="144" y="368" width="116" height="74"/>
+<rect x="193.0" y="398" width="18" height="44" fill="#FDF9EE"/><circle cx="207.0" cy="421" r="1.2" fill="currentColor" stroke="none"/>
+<rect x="152" y="398" width="35.0" height="34"/><rect x="217.0" y="398" width="35.0" height="34"/>
+<line x1="152" y1="410" x2="187.0" y2="410"/><line x1="217.0" y1="410" x2="252" y2="410"/>
+<path d="M260 252 L318.0 168 L376 252 Z" fill="#FDF9EE"/>
+<path d="M254 256 L318.0 162 L382 256" stroke-width="2.2"/>
+<line x1="274" y1="232" x2="362" y2="232"/>
+<line x1="288.0" y1="211.4" x2="288.0" y2="232"/>
+<line x1="303.0" y1="189.7" x2="303.0" y2="232"/>
+<line x1="333.0" y1="189.7" x2="333.0" y2="232"/>
+<line x1="348.0" y1="211.4" x2="348.0" y2="232"/>
+<line x1="288.0" y1="232" x2="303.0" y2="189.7"/>
+<line x1="348.0" y1="232" x2="333.0" y2="189.7"/>
+<rect x="309.0" y="200" width="18" height="24" fill="#FDF9EE"/><line x1="318.0" y1="200" x2="318.0" y2="224"/>
+<rect x="260" y="252" width="116" height="98" fill="#FDF9EE"/>
+<path d="M281.0 336 L281.0 278 L293.0 270 L343.0 270 L355.0 278 L355.0 336 Z"/>
+<line x1="293.0" y1="270" x2="293.0" y2="336"/><line x1="343.0" y1="270" x2="343.0" y2="336"/>
+<line x1="281.0" y1="296" x2="355.0" y2="296"/>
+<line x1="277.0" y1="338" x2="359.0" y2="338" stroke-width="2.2"/>
+<rect x="260" y="350" width="116" height="18" fill="#FDF9EE"/>
+<text x="318.0" y="362.5" text-anchor="middle" font-size="7.4" letter-spacing="1.6" fill="currentColor" stroke="none" font-family="Helvetica Neue, Arial, sans-serif" font-weight="700">TEA ROOMS</text>
+<path d="M265 368 L371 368 L375 390 L261 390 Z" fill="#FDF9EE"/>
+<line x1="278.2" y1="368" x2="275.2" y2="390"/>
+<line x1="291.5" y1="368" x2="289.5" y2="390"/>
+<line x1="304.8" y1="368" x2="303.8" y2="390"/>
+<line x1="318.0" y1="368" x2="318.0" y2="390"/>
+<line x1="331.2" y1="368" x2="332.2" y2="390"/>
+<line x1="344.5" y1="368" x2="346.5" y2="390"/>
+<line x1="357.8" y1="368" x2="360.8" y2="390"/>
+<path d="M261 390 q 7.12 6 14.25 0 q 7.12 6 14.25 0 q 7.12 6 14.25 0 q 7.12 6 14.25 0 q 7.12 6 14.25 0 q 7.12 6 14.25 0 q 7.12 6 14.25 0 q 7.12 6 14.25 0"/>
+<rect x="260" y="368" width="116" height="74"/>
+<rect x="309.0" y="398" width="18" height="44" fill="#FDF9EE"/><circle cx="323.0" cy="421" r="1.2" fill="currentColor" stroke="none"/>
+<rect x="268" y="398" width="35.0" height="34"/><rect x="333.0" y="398" width="35.0" height="34"/>
+<line x1="268" y1="410" x2="303.0" y2="410"/><line x1="333.0" y1="410" x2="368" y2="410"/>
+<line x1="0" y1="442" x2="400" y2="442" stroke-width="2.2"/>
+<line x1="0" y1="466" x2="400" y2="466"/>
+<path d="M20 486 h40 M100 486 h40 M180 486 h40 M260 486 h40 M340 486 h40" stroke-width="1.4"/>
+<path d="M14 466 V332 M14 336 q0 -16 16 -16" stroke-width="2.2"/><path d="M24 320 h14 l-3 14 h-8 z" fill="#FDF9EE"/><line x1="9" y1="466" x2="19" y2="466" stroke-width="3"/></g></svg>
         </figure>
         <div class="seal seal-badge" aria-hidden="true">
           <svg class="ring" viewBox="0 0 200 200">
