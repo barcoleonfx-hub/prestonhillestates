@@ -1,5 +1,8 @@
 import 'server-only'
 import { ImapFlow } from 'imapflow'
+import { promises as dns } from 'node:dns'
+import net from 'node:net'
+import tls from 'node:tls'
 import { eq } from 'drizzle-orm'
 import { db, getClient, ready } from '@/db/client'
 import { notifications, settings } from '@/db/schema'
@@ -13,7 +16,7 @@ import { now, uid } from '@/lib/util'
 // Zoopla, OnTheMarket and website-form leads into enquiries under "Needs a reply", with an alert.
 // The mailbox is opened read-only: nothing is marked as read, moved or deleted.
 
-export const FASTHOSTS_IMAP = 'imap.livemail.co.uk'
+export const FASTHOSTS_IMAP = 'mail.livemail.co.uk'
 const KEY = 'mailbox'
 const EVERY_MS = 2 * 60 * 1000
 const FIRST_LOOK_DAYS = 3 // when first connected, pick up the last few days in case anything was missed
@@ -49,7 +52,7 @@ export async function mailboxStatus(): Promise<MailboxStatus | null> {
 
 function client(host: string, port: number, user: string, pass: string) {
   return new ImapFlow({
-    host, port, secure: port === 993, auth: { user, pass }, logger: false,
+    host, port, secure: port === 993, auth: { user, pass }, logger: false, ...(port === 143 ? { doSTARTTLS: true } : {}),
     connectionTimeout: 20_000, greetingTimeout: 15_000, socketTimeout: 60_000, disableAutoIdle: true,
   })
 }
@@ -59,7 +62,7 @@ function explain(e: unknown): string {
   const err = e as { authenticationFailed?: boolean; code?: string; responseText?: string; message?: string }
   if (err?.authenticationFailed || /auth|login|credentials|password/i.test(err?.responseText ?? err?.message ?? '')) return 'The email address or password was not accepted. Check them, and that IMAP is switched on for this mailbox.'
   if (err?.code === 'ENOTFOUND') return 'That mail server name could not be found. Check the server name.'
-  if (err?.code === 'ETIMEDOUT' || err?.code === 'ECONNREFUSED' || /timeout/i.test(err?.message ?? '')) return 'The mail server did not answer. Check the server name and port.'
+  if (err?.code === 'ETIMEDOUT' || err?.code === 'ECONNREFUSED' || /timeout|timed out|required time/i.test(err?.message ?? '')) return 'The mail server did not answer. Check the server name and port.'
   return (err?.responseText || err?.message || 'Could not connect to the mailbox.').slice(0, 200)
 }
 
@@ -75,6 +78,47 @@ export async function testMailbox(host: string, port: number, user: string, pass
   } finally {
     await c.logout().catch(() => c.close())
   }
+}
+
+/** Who handles email for a domain, from its MX records, in plain words, plus the servers worth trying. */
+export async function mailProvider(domain: string): Promise<{ name: string | null; mx: string[]; hosts: string[]; note?: string }> {
+  let mx: string[] = []
+  try { mx = (await dns.resolveMx(domain)).sort((a, b) => a.priority - b.priority).map((m) => m.exchange.toLowerCase()) } catch { /* no MX records, or DNS unavailable */ }
+  const all = mx.join(' ')
+  if (/livemail\.co\.uk|fasthosts/.test(all)) return { name: 'Fasthosts', mx, hosts: ['mail.livemail.co.uk', 'imap.livemail.co.uk', 'imap.fasthosts.co.uk'] }
+  if (/outlook\.com|office365|microsoft/.test(all)) return { name: 'Microsoft 365', mx, hosts: ['outlook.office365.com'], note: 'Your email is run by Microsoft 365, which no longer lets other apps sign in with just a password. It needs a one-off approval through Microsoft instead; tell us and we’ll set that up.' }
+  if (/google\.com|googlemail/.test(all)) return { name: 'Google Workspace', mx, hosts: ['imap.gmail.com'], note: 'Your email is run by Google. Use an “app password” from your Google account (Security → App passwords) rather than your normal password.' }
+  if (/ionos|1and1/.test(all)) return { name: 'IONOS', mx, hosts: ['imap.ionos.co.uk'] }
+  if (/123-reg/.test(all)) return { name: '123 Reg', mx, hosts: ['imap.123-reg.co.uk'] }
+  return { name: null, mx, hosts: [`mail.${domain}`, `imap.${domain}`] }
+}
+
+/** Quick check that something answers like a mail server at host:port (IMAP greeting), without logging in. */
+function probe(host: string, port: number, ms = 9000): Promise<boolean> {
+  return new Promise((resolve) => {
+    let done = false
+    const finish = (ok: boolean) => { if (!done) { done = true; sock.destroy(); resolve(ok) } }
+    const sock: net.Socket = port === 993
+      ? tls.connect({ host, port, servername: host, timeout: ms })
+      : net.connect({ host, port, timeout: ms })
+    sock.setTimeout(ms, () => finish(false))
+    sock.on('error', () => finish(false))
+    sock.on('data', (d) => finish(/^\* (OK|PREAUTH)/i.test(d.toString())))
+  })
+}
+
+/**
+ * Finds a mail server that answers for this mailbox: the one typed in first, then the usual ones for
+ * whoever runs the domain's email. Tries them side by side and keeps the first in that order that answers.
+ */
+export async function findMailServer(user: string, typedHost: string, typedPort: number) {
+  const domain = user.split('@')[1]?.toLowerCase() ?? ''
+  const provider = await mailProvider(domain)
+  const fasthosts = ['mail.livemail.co.uk', 'imap.livemail.co.uk', 'imap.fasthosts.co.uk']
+  const hosts = [...new Set([typedHost, ...provider.hosts, ...(provider.name ? [] : fasthosts)].filter(Boolean))]
+  const tries = hosts.flatMap((h) => (h === typedHost && typedPort !== 993 ? [{ host: h, port: typedPort }] : [{ host: h, port: 993 }, { host: h, port: 143 }]))
+  const results = await Promise.all(tries.map(async (t) => ({ ...t, ok: await probe(t.host, t.port) })))
+  return { found: results.find((r) => r.ok) ?? null, tried: tries, provider }
 }
 
 /** Saves the mailbox details. A blank password keeps the one already saved. */

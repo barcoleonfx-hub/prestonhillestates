@@ -4,7 +4,7 @@ import { connectMailbox, type MailboxFormState } from '../../mailbox-actions'
 
 export function ConnectForm({ user, host, port, includePeople, hasPassword }: { user: string; host: string; port: number; includePeople: boolean; hasPassword: boolean }) {
   const [state, dispatch, pending] = useActionState<MailboxFormState, FormData>(connectMailbox, {})
-  const [advanced, setAdvanced] = useState(host !== 'imap.livemail.co.uk' || port !== 993)
+  const [advanced, setAdvanced] = useState(!/livemail\.co\.uk$/.test(host) || port !== 993)
   return (
     <form className="mb-form" onSubmit={(e) => { e.preventDefault(); const fd = new FormData(e.currentTarget); startTransition(() => dispatch(fd)) }}>
       <div className="mb-grid">
@@ -32,17 +32,17 @@ export function ConnectForm({ user, host, port, includePeople, hasPassword }: { 
         <>
           <input type="hidden" name="host" value={host} />
           <input type="hidden" name="port" value={port} />
-          <p className="card-sub">Server: {host}, port {port} (Fasthosts). <button type="button" className="linkish" onClick={() => setAdvanced(true)}>Change</button></p>
+          <p className="card-sub">Server: found automatically (Fasthosts: {host}, port {port}). <button type="button" className="linkish" onClick={() => setAdvanced(true)}>Change</button></p>
         </>
       )}
       <label className="mb-check">
         <input type="checkbox" name="includePeople" defaultChecked={includePeople} />
         <span>Also pick up emails written directly by people (not just Zoopla, OnTheMarket and website forms) when they mention buying, renting, a viewing or a valuation</span>
       </label>
-      {state.error ? <div className="notice err" role="alert">{state.error}</div> : null}
+      {state.error ? <div className="notice err" role="alert">{state.error}{state.detail ? <p className="mb-detail">{state.detail}</p> : null}</div> : null}
       {state.ok ? (
         <div className="notice ok" role="status">
-          Connected{state.messages != null ? ` · ${state.messages.toLocaleString()} emails in the inbox` : ''}.
+          Connected to {state.host}{state.port && state.port !== 993 ? `:${state.port}` : ''}{state.messages != null ? ` · ${state.messages.toLocaleString()} emails in the inbox` : ''}.
           {state.found != null ? ` ${state.found ? `${state.found} new enquir${state.found === 1 ? 'y' : 'ies'} picked up from the last 3 days.` : 'No new enquiries in the last 3 days that weren’t already in the portal.'}` : ''}
         </div>
       ) : null}
