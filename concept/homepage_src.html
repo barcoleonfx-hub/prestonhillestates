@@ -125,6 +125,13 @@
   @keyframes rise { to { opacity: 1; transform: none; } }
   @media (prefers-reduced-motion: reduce) { .h-stage { animation: none; opacity: 1; transform: none; } }
 
+  /* hero side: arched local photo, heritage seal badge and a quick valuation */
+  .hero-side { position: relative; padding: 0 0 0 clamp(0px, 2vw, 24px); }
+  .hero-photo { position: relative; margin: 0 0 0 auto; width: min(100%, 440px); aspect-ratio: 4 / 5; border-radius: 999px 999px 28px 28px; overflow: hidden; box-shadow: var(--shadow-lg); background: var(--gold-tint); }
+  .hero-photo img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 40%; display: block; }
+  .hero-photo::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(35,33,26,0) 55%, rgba(35,33,26,0.45)); pointer-events: none; }
+  .hero-photo figcaption { position: absolute; right: 22px; bottom: 18px; z-index: 1; color: #FFFDF6; font-size: 0.7rem; letter-spacing: 0.2em; text-transform: uppercase; font-weight: 600; }
+
   /* rotating heritage seal around the logo */
   .seal { position: relative; width: min(320px, 26vw); aspect-ratio: 1; margin-left: auto; }
   .seal .ring { position: absolute; inset: 0; animation: spin 26s linear infinite; }
@@ -136,6 +143,23 @@
     display: flex; align-items: center; justify-content: center;
   }
   .seal .core svg { width: 54%; height: 54%; }
+  .seal.seal-badge { position: absolute; top: 6%; right: -4%; width: clamp(130px, 12vw, 168px); margin: 0; background: var(--bg); border-radius: 50%; box-shadow: var(--shadow-lg); }
+  .seal.seal-badge .ring text { font-size: 11px; fill: var(--ink-soft); }
+  .seal.seal-badge .core { inset: 22%; box-shadow: none; }
+
+  /* quick valuation card overlapping the photo */
+  .hero-val { position: absolute; left: clamp(-70px, -4vw, -20px); bottom: 9%; width: min(310px, 82%); background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 20px 20px 16px; box-shadow: var(--shadow-lg); }
+  .hero-val .hv-label { font-size: 0.68rem; letter-spacing: 0.2em; text-transform: uppercase; font-weight: 700; color: var(--gold-deep); }
+  .hero-val .hv-title { font-family: 'Fraunces', Georgia, serif; font-size: 1.45rem; line-height: 1.15; margin-top: 6px; color: var(--ink); }
+  .hero-val .hv-row { display: flex; gap: 8px; margin-top: 14px; }
+  .hero-val input { flex: 1; min-width: 0; height: 46px; border: 1.5px solid var(--line); border-radius: 999px; padding: 0 16px; font: inherit; font-size: 0.95rem; background: var(--bg); color: var(--ink); text-transform: uppercase; }
+  .hero-val input::placeholder { text-transform: none; color: var(--faint); }
+  .hero-val input:focus { outline: none; border-color: var(--gold); }
+  .hero-val button { height: 46px; border: 0; border-radius: 999px; padding: 0 18px; background: var(--gold); color: #FFFDF6; font: inherit; font-weight: 700; font-size: 0.85rem; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; white-space: nowrap; }
+  .hero-val button:hover { background: var(--gold-deep); }
+  .hero-val .hv-note { margin-top: 10px; font-size: 0.78rem; color: var(--faint); }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  @media (prefers-reduced-motion: reduce) { .seal .ring { animation: none; } }
 
   /* ---------- search bar ---------- */
   .searchbar-wrap { margin-top: clamp(44px, 7vh, 64px); }
@@ -554,7 +578,11 @@
         </div>
       </div>
       <div class="hero-side h-stage s3">
-        <div class="seal" aria-hidden="true">
+        <figure class="hero-photo">
+          <img src="/video/wembley-first.jpg" alt="The Wembley arch at sunset, looking out over North West London" width="1920" height="1080" fetchpriority="high"/>
+          <figcaption>Harrow · Kenton · Wembley</figcaption>
+        </figure>
+        <div class="seal seal-badge" aria-hidden="true">
           <svg class="ring" viewBox="0 0 200 200">
             <defs><path id="circlePath" d="M100,100 m-84,0 a84,84 0 1,1 168,0 a84,84 0 1,1 -168,0"/></defs>
             <text><textPath href="#circlePath" textLength="527" lengthAdjust="spacing">PRESTON HILL ESTATES · EST. 2004 · SALES · LETTINGS · MANAGEMENT ·&#160;</textPath></text>
@@ -563,6 +591,16 @@
             <svg viewBox="0 0 100 100"><use href="#ph-logo"/></svg>
           </div>
         </div>
+        <form class="hero-val" action="/valuation" method="get" aria-label="Free valuation">
+          <div class="hv-label">Free valuation</div>
+          <div class="hv-title">What’s your home worth?</div>
+          <div class="hv-row">
+            <label class="sr-only" for="hv-postcode">Your postcode</label>
+            <input id="hv-postcode" name="postcode" type="text" placeholder="Your postcode" autocomplete="postal-code" maxlength="8"/>
+            <button type="submit">Value it</button>
+          </div>
+          <p class="hv-note">Free, no obligation, from a local agent.</p>
+        </form>
       </div>
     </div>
 
