@@ -396,3 +396,9 @@ export const knownAddresses = sqliteTable('known_addresses', {
   line: text('line').notNull(),
   lastYear: integer('last_year').notNull(),
 }, (t) => [primaryKey({ columns: [t.postcode, t.line] })])
+
+export const postcodeGeo = sqliteTable('postcode_geo', {
+  postcode: text('postcode').primaryKey(),
+  e: integer('e').notNull(), // OS grid easting, metres
+  n: integer('n').notNull(), // OS grid northing, metres
+})

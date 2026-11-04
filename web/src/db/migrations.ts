@@ -367,4 +367,13 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       `CREATE TABLE known_addresses (postcode TEXT NOT NULL, line TEXT NOT NULL, last_year INTEGER NOT NULL, PRIMARY KEY (postcode, line))`,
     ],
   },
+  {
+    id: '014_postcode_geo',
+    sql: [
+      // Where each postcode is (OS grid, metres), from OS Code-Point Open (Open Government Licence), so sold
+      // prices can be shown by real distance rather than by postcode sector.
+      `CREATE TABLE postcode_geo (postcode TEXT PRIMARY KEY, e INTEGER NOT NULL, n INTEGER NOT NULL)`,
+      `CREATE INDEX postcode_geo_en_idx ON postcode_geo (e, n)`,
+    ],
+  },
 ]

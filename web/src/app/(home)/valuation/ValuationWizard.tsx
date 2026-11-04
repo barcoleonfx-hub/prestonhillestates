@@ -235,7 +235,7 @@ export function ValuationWizard({ initialIntent, initialPostcode }: { initialInt
           <button type="submit" className="btn gold" disabled={sending}>{sending ? 'Sending…' : step < 2 ? 'Continue' : 'Book my free valuation'}</button>
         </div>
       </form>
-      {step >= 1 && intent === 'selling' ? <SoldPanel postcode={postcode} type={type} /> : null}
+      {step >= 1 && intent === 'selling' ? <SoldPanel postcode={postcode} type={type} address={address} /> : null}
     </div>
   )
 }

@@ -57,7 +57,7 @@ export default async function SoldPricesPage({ searchParams }: { searchParams: P
             <div className="spg-grid">
               <div>
                 <div className="spg-head">
-                  <h2>Recent sales {OUTWARD.test(raw) ? `in ${near.area}` : `near ${near.postcode}`}</h2>
+                  <h2>Recent sales {OUTWARD.test(raw) ? `in ${near.area}` : near.scope === 'radius' ? `${near.where} of ${near.postcode}` : `near ${near.postcode}`}</h2>
                   <div className="spg-seg">
                     <Link className={!type ? 'on' : undefined} href={href('')}>All homes</Link>
                     <Link className={type === 'H' ? 'on' : undefined} href={href('H')}>Houses</Link>
@@ -68,7 +68,7 @@ export default async function SoldPricesPage({ searchParams }: { searchParams: P
                 <SoldCredit />
               </div>
               <aside>
-                <SoldStats stats={near.stats} note={`in ${near.area}`} />
+                <SoldStats stats={near.stats} note={near.where} />
                 <div className="spg-cta">
                   <h3>Where would yours sit?</h3>
                   <p>Sold prices give you the range; condition, extensions and the exact street decide where in it your home falls. We’ll tell you, free and in person.</p>

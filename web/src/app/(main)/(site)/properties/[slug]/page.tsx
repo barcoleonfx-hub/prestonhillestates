@@ -193,7 +193,7 @@ export default async function PropertyPage({ params }: { params: Params }) {
             <section className="dsec sp" id="sold-nearby">
               <h2>Sold nearby</h2>
               <p style={{ color: 'var(--ink-soft)' }}>What homes around here have actually sold for, {sold.near?.typed ? `${lrTypeFor(p.propertyType) === 'F' ? 'flats' : 'houses'} like this one first` : 'newest first'}, so you can judge the price for yourself.</p>
-              {sold.near ? <SoldStats stats={sold.near.stats} note={`in ${sold.near.area}`} /> : null}
+              {sold.near ? <SoldStats stats={sold.near.stats} note={sold.near.where} /> : null}
               <SoldList sales={[...sold.onStreet, ...(sold.near?.recent ?? []).filter((r) => !sold.onStreet.some((x) => x.postcode === r.postcode && x.soldOn === r.soldOn && x.price === r.price))].slice(0, 8)} highlight={sold.street} />
               <p style={{ marginTop: 10 }}><a href={`/sold-prices?postcode=${encodeURIComponent(p.postcode ?? '')}`} style={{ color: 'var(--gold-deep)', fontWeight: 600 }}>See more sold prices near {p.postcode} →</a></p>
               <SoldCredit />

@@ -4,6 +4,7 @@ import { runDueTasks } from '@/lib/contacts'
 import { runRetention } from '@/lib/retention'
 import { checkMailbox } from '@/lib/mailbox'
 import { backfillAddresses, refreshSoldPrices } from '@/lib/sold-prices'
+import { refreshPostcodeGeo } from '@/lib/postcode-geo'
 import { after } from 'next/server'
 
 export const dynamic = 'force-dynamic'
@@ -28,6 +29,7 @@ export async function GET(req: Request) {
   after(async () => {
     await refreshSoldPrices().catch((e) => console.error('sold prices refresh failed', e))
     await backfillAddresses().catch((e) => console.error('address backfill failed', e))
+    await refreshPostcodeGeo().catch((e) => console.error('postcode positions failed', e))
   })
   return Response.json({ ok: true, sent, callbacks, retention, mailbox })
 }

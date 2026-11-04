@@ -4,7 +4,8 @@ import { Readable } from 'node:stream'
 import type { ReadableStream as WebStream } from 'node:stream/web'
 import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm'
 import { db, getClient, ready } from '@/db/client'
-import { knownAddresses, settings, soldPrices, type SoldPrice } from '@/db/schema'
+import { knownAddresses, postcodeGeo, settings, soldPrices, type SoldPrice } from '@/db/schema'
+import { positionOf } from '@/lib/postcode-geo'
 import { now } from '@/lib/util'
 
 // Sold prices for our part of North West London, from HM Land Registry Price Paid Data.
@@ -137,11 +138,16 @@ export const sectorOf = (pc: string) => { const p = pc.toUpperCase().trim().repl
 const median = (xs: number[]) => { if (!xs.length) return null; const s = [...xs].sort((a, b) => a - b); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2) }
 const monthsAgo = (n: number) => { const d = new Date(); d.setMonth(d.getMonth() - n); return d.toISOString().slice(0, 10) }
 
-export type PublicSale = { street: string | null; postcode: string; type: string; typeLabel: string; tenure: string | null; newBuild: boolean; price: number; soldOn: string }
-const pub = (r: SoldPrice): PublicSale => ({ street: r.street, postcode: r.postcode, type: r.type, typeLabel: TYPE_LABEL[r.type] ?? 'Home', tenure: r.tenure, newBuild: r.newBuild, price: r.price, soldOn: r.soldOn })
+export type PublicSale = { street: string | null; postcode: string; type: string; typeLabel: string; tenure: string | null; newBuild: boolean; price: number; soldOn: string; metres?: number }
+const pub = (r: SoldPrice, metres?: number): PublicSale => ({ street: r.street, postcode: r.postcode, type: r.type, typeLabel: TYPE_LABEL[r.type] ?? 'Home', tenure: r.tenure, newBuild: r.newBuild, price: r.price, soldOn: r.soldOn, ...(metres != null ? { metres: Math.round(metres) } : {}) })
 // House numbers and flat numbers are left out on purpose: street and postcode are enough to compare.
 
 export type AreaStats = { label: string; count12: number; median12: number | null; byType: { type: string; label: string; count: number; median: number | null }[] }
+
+function statsFromRows(rows: { type: string; price: number }[], label: string): AreaStats {
+  const byType = ['D', 'S', 'T', 'F'].map((t) => { const xs = rows.filter((r) => r.type === t).map((r) => r.price); return { type: t, label: TYPE_LABEL[t], count: xs.length, median: median(xs) } }).filter((x) => x.count)
+  return { label, count12: rows.length, median12: median(rows.map((r) => r.price)), byType }
+}
 
 async function statsFor(where: ReturnType<typeof eq>, label: string): Promise<AreaStats> {
   const rows = await db.select({ type: soldPrices.type, price: soldPrices.price }).from(soldPrices).where(and(where, gte(soldPrices.soldOn, monthsAgo(12))))
@@ -149,11 +155,56 @@ async function statsFor(where: ReturnType<typeof eq>, label: string): Promise<Ar
   return { label, count12: rows.length, median12: median(rows.map((r) => r.price)), byType }
 }
 
-export type Near = { postcode: string; scope: 'sector' | 'district'; area: string; recent: PublicSale[]; stats: AreaStats; covered: boolean; typed: boolean }
+/** `where` reads after a noun: "homes sold within half a mile", "typical price in HA3 0". */
+export type Near = { postcode: string; scope: 'radius' | 'sector' | 'district'; area: string; where: string; recent: PublicSale[]; stats: AreaStats; covered: boolean; typed: boolean }
 
 /** Recent sales near a postcode: the same sector first (e.g. HA3 0), widening to the district (HA3). */
-export async function salesNear(postcode: string, opts: { type?: 'F' | 'H' | 'D' | 'S' | 'T' | null; limit?: number; district?: boolean } = {}): Promise<Near | null> {
+const RADII: [number, string][] = [[400, 'a quarter of a mile'], [800, 'half a mile'], [1600, 'a mile'], [3200, '2 miles']]
+const sameStreet = (a: string | null, b: string | null) => !!a && !!b && a.toLowerCase().replace(/[^a-z]/g, '') === b.toLowerCase().replace(/[^a-z]/g, '')
+
+/**
+ * Sales closest to a postcode, by real distance: a quarter of a mile first, widening until there are enough.
+ * Their own street comes first when we know it. Falls back to the postcode sector if we can't place the postcode.
+ */
+async function salesByDistance(pc: string, opts: { type?: 'F' | 'H' | 'D' | 'S' | 'T' | null; limit: number; street?: string | null }): Promise<Near | null> {
+  const here = await positionOf(pc)
+  if (!here) return null
+  const since = monthsAgo(24), since12 = monthsAgo(12)
+  const typeCond = opts.type === 'H' ? inArray(soldPrices.type, ['D', 'S', 'T']) : opts.type ? eq(soldPrices.type, opts.type) : undefined
+  let found: { r: SoldPrice; d: number }[] = []
+  let label = RADII[RADII.length - 1][1], radius = RADII[RADII.length - 1][0]
+  for (const [R, name] of RADII) {
+    const rows = await db.select({ s: soldPrices, e: postcodeGeo.e, n: postcodeGeo.n }).from(soldPrices)
+      .innerJoin(postcodeGeo, eq(postcodeGeo.postcode, soldPrices.postcode))
+      .where(and(sql`${postcodeGeo.e} BETWEEN ${here.e - R} AND ${here.e + R}`, sql`${postcodeGeo.n} BETWEEN ${here.n - R} AND ${here.n + R}`, gte(soldPrices.soldOn, since), typeCond))
+    found = rows.map((x) => ({ r: x.s, d: Math.hypot(x.e - here.e, x.n - here.n) })).filter((x) => x.d <= R)
+    label = name; radius = R
+    if (found.filter((x) => x.r.soldOn >= since12).length >= 8 || found.length >= 12) break
+  }
+  if (!found.length) return null
+  found.sort((a, b) => Number(sameStreet(b.r.street, opts.street ?? null)) - Number(sameStreet(a.r.street, opts.street ?? null)) || a.d - b.d || (a.r.soldOn < b.r.soldOn ? 1 : -1))
+  // Typical prices: all homes sold in the last 12 months, over the smallest distance with at least 10 sales.
+  const maxR = RADII[RADII.length - 1][0]
+  const all = (await db.select({ type: soldPrices.type, price: soldPrices.price, e: postcodeGeo.e, n: postcodeGeo.n }).from(soldPrices)
+    .innerJoin(postcodeGeo, eq(postcodeGeo.postcode, soldPrices.postcode))
+    .where(and(sql`${postcodeGeo.e} BETWEEN ${here.e - maxR} AND ${here.e + maxR}`, sql`${postcodeGeo.n} BETWEEN ${here.n - maxR} AND ${here.n + maxR}`, gte(soldPrices.soldOn, since12))))
+    .map((x) => ({ ...x, d: Math.hypot(x.e - here.e, x.n - here.n) }))
+  let statsR = RADII.find(([R]) => all.filter((x) => x.d <= R).length >= 10) ?? RADII[RADII.length - 1]
+  if (statsR[0] < radius) statsR = RADII.find(([R]) => R === radius)!
+  const within = all.filter((x) => x.d <= statsR[0])
+  const where = `within ${label}`
+  return {
+    postcode: pc, scope: 'radius', area: `${where} of ${pc}`, where,
+    recent: found.slice(0, opts.limit).map((x) => pub(x.r, x.d)), stats: statsFromRows(within, `within ${statsR[1]}`), covered: true, typed: !!opts.type,
+  }
+}
+
+export async function salesNear(postcode: string, opts: { type?: 'F' | 'H' | 'D' | 'S' | 'T' | null; limit?: number; district?: boolean; street?: string | null } = {}): Promise<Near | null> {
   await ready()
+  if (!opts.district) {
+    const byDistance = await salesByDistance(postcode.toUpperCase().trim().replace(/\s+/g, ' '), { type: opts.type, limit: opts.limit ?? 8, street: opts.street }).catch(() => null)
+    if (byDistance) return byDistance
+  }
   const pc = postcode.toUpperCase().trim().replace(/\s+/g, ' ')
   const out = outwardOf(pc), sec = sectorOf(pc)
   if (!out) return null
@@ -169,8 +220,9 @@ export async function salesNear(postcode: string, opts: { type?: 'F' | 'H' | 'D'
   if (!recent.length && opts.type) return salesNear(postcode, { ...opts, type: null })
   // The same postcode first, then the rest by date.
   recent.sort((a, b) => (a.postcode === pc ? -1 : 0) - (b.postcode === pc ? -1 : 0) || (a.soldOn < b.soldOn ? 1 : -1))
-  const stats = scope === 'sector' && sec ? await statsFor(eq(soldPrices.sector, sec), sec) : await statsFor(eq(soldPrices.outward, out), out)
-  return { postcode: pc, scope, area: scope === 'sector' ? sec! : out, recent: recent.map(pub), stats, covered: recent.length > 0, typed: !!opts.type }
+  const stats = scope === 'sector' && sec ? await statsFor(eq(soldPrices.sector, sec), `in ${sec}`) : await statsFor(eq(soldPrices.outward, out), `in ${out}`)
+  const area = scope === 'sector' ? sec! : out
+  return { postcode: pc, scope, area, where: `in ${area}`, recent: recent.map((r) => pub(r)), stats, covered: recent.length > 0, typed: !!opts.type }
 }
 
 /** Sales on the same street (and postcode district), for a property page. */
@@ -180,8 +232,8 @@ export async function salesOnStreet(street: string | null, postcode: string | nu
   const out = outwardOf(postcode)
   const st = street ? tidy(street.replace(/^\d+[a-z]?\s+/i, '')) : null
   const street5 = st ? await db.select().from(soldPrices).where(and(eq(soldPrices.street, st), eq(soldPrices.outward, out), gte(soldPrices.soldOn, monthsAgo(36)))).orderBy(desc(soldPrices.soldOn)).limit(6) : []
-  const near = await salesNear(postcode, { type, limit: 6 })
-  return { street: st, onStreet: street5.map(pub), near }
+  const near = await salesNear(postcode, { type, limit: 8, street: st })
+  return { street: st, onStreet: street5.map((r) => pub(r)), near }
 }
 
 /** Last 12 months across the districts we cover, for the homepage. */

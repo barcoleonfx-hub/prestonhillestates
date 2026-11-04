@@ -4,13 +4,14 @@ import type { AreaStats, PublicSale } from '@/lib/sold-prices'
 
 export const LR_CREDIT_TEXT = 'Contains HM Land Registry data © Crown copyright and database right. Licensed under the Open Government Licence v3.0.'
 export const money = (n: number | null | undefined) => (n == null ? '–' : `£${n.toLocaleString('en-GB')}`)
+const miles = (m: number) => (m < 160 ? 'under 0.1 mi' : `${(m / 1609).toFixed(1)} mi`)
 const month = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })
 
-export function SoldStats({ stats, note }: { stats: AreaStats; note?: string }) {
+export function SoldStats({ stats }: { stats: AreaStats; note?: string }) {
   return (
     <div className="sp-stats">
-      <div className="sp-big"><b>{stats.count12.toLocaleString()}</b><span>homes sold in {stats.label} in the last 12 months</span></div>
-      <div className="sp-big"><b>{money(stats.median12)}</b><span>typical price{note ? ` ${note}` : ''}</span></div>
+      <div className="sp-big"><b>{stats.count12.toLocaleString()}</b><span>homes sold {stats.label} in the last 12 months</span></div>
+      <div className="sp-big"><b>{money(stats.median12)}</b><span>typical price {stats.label}</span></div>
       {stats.byType.length ? (
         <ul className="sp-types">{stats.byType.map((t) => <li key={t.type}><span>{t.label}</span><b>{money(t.median)}</b><small>{t.count} sold</small></li>)}</ul>
       ) : null}
@@ -24,7 +25,7 @@ export function SoldList({ sales, highlight }: { sales: PublicSale[]; highlight?
     <ul className="sp-list">
       {sales.map((s, i) => (
         <li key={`${s.postcode}-${s.soldOn}-${s.price}-${i}`} className={highlight && s.street === highlight ? 'same' : undefined}>
-          <div className="sp-where"><b>{s.street ?? s.postcode}</b><span>{s.postcode} · {s.typeLabel}{s.tenure === 'L' ? ', leasehold' : s.tenure === 'F' ? ', freehold' : ''}{s.newBuild ? ', new build' : ''}</span></div>
+          <div className="sp-where"><b>{s.street ?? s.postcode}</b><span>{s.metres != null ? `${miles(s.metres)} · ` : ''}{s.postcode} · {s.typeLabel}{s.tenure === 'L' ? ', leasehold' : s.tenure === 'F' ? ', freehold' : ''}{s.newBuild ? ', new build' : ''}</span></div>
           <div className="sp-price"><b>{money(s.price)}</b><span>{month(s.soldOn)}</span></div>
         </li>
       ))}
@@ -33,5 +34,5 @@ export function SoldList({ sales, highlight }: { sales: PublicSale[]; highlight?
 }
 
 export function SoldCredit() {
-  return <p className="sp-credit">Sold prices from HM Land Registry, which publishes sales about 1 to 2 months after they complete. House numbers are left out. {LR_CREDIT_TEXT}</p>
+  return <p className="sp-credit">Sold prices from HM Land Registry, which publishes sales about 1 to 2 months after they complete. House numbers are left out. Distances are between postcodes. {LR_CREDIT_TEXT} Contains OS data © Crown copyright and database right; Royal Mail data © Royal Mail copyright and database right; ONS data licensed under the Open Government Licence v3.0.</p>
 }
