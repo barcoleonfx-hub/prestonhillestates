@@ -9,7 +9,7 @@ import { now } from '@/lib/util'
 // address on the postcode from Royal Mail's list; without one it falls back to the homes on that postcode
 // that have sold in the last few years (HM Land Registry). Results are kept so each postcode is paid for once.
 
-const KEEP_DAYS = { paf: 180, 'land-registry': 1 } as const
+const KEEP_DAYS = { paf: 180 } as const
 export type AddressResult = { source: 'paf' | 'land-registry' | 'none'; addresses: string[] }
 
 /** By house number (the last number, e.g. 273 in "Flat 2, 273 Preston Road"), then flat number, then name. */
@@ -46,20 +46,20 @@ async function fromLandRegistry(pc: string): Promise<string[]> {
 export async function lookupAddresses(postcode: string): Promise<AddressResult> {
   await ready()
   const pc = postcode.toUpperCase().trim().replace(/\s+/g, ' ')
-  const cached = await db.query.addressCache.findFirst({ where: eq(addressCache.postcode, pc) })
-  const wantPaf = !!process.env.IDEAL_POSTCODES_KEY
-  if (cached) {
-    const fresh = Date.now() - new Date(cached.fetchedAt).getTime() < KEEP_DAYS[cached.source as keyof typeof KEEP_DAYS] * 86400000
-    // A Land Registry answer is replaced as soon as the full Royal Mail list is available.
-    if (fresh && (cached.source === 'paf' || !wantPaf)) return { source: cached.source as AddressResult['source'], addresses: JSON.parse(cached.addresses) as string[] }
+  // Only the paid Royal Mail answers are remembered (to avoid paying twice). The Land Registry list is a quick
+  // look-up in our own database, so it's always read fresh and grows as the archive loads.
+  if (process.env.IDEAL_POSTCODES_KEY) {
+    const cached = await db.query.addressCache.findFirst({ where: eq(addressCache.postcode, pc) })
+    if (cached?.source === 'paf' && Date.now() - new Date(cached.fetchedAt).getTime() < KEEP_DAYS.paf * 86400000) return { source: 'paf', addresses: JSON.parse(cached.addresses) as string[] }
+    const paf = await fromIdealPostcodes(pc).catch(() => null)
+    if (paf?.length) {
+      const sorted = paf.sort(byNumber)
+      await db.insert(addressCache).values({ postcode: pc, source: 'paf', addresses: JSON.stringify(sorted), fetchedAt: now() })
+        .onConflictDoUpdate({ target: addressCache.postcode, set: { source: 'paf', addresses: JSON.stringify(sorted), fetchedAt: now() } })
+      return { source: 'paf', addresses: sorted }
+    }
   }
-  let source: AddressResult['source'] = 'paf'
-  let addresses = await fromIdealPostcodes(pc).catch(() => null)
-  if (!addresses?.length) { source = 'land-registry'; addresses = await fromLandRegistry(pc) }
-  else addresses = addresses.sort(byNumber)
-  if (addresses.length) {
-    await db.insert(addressCache).values({ postcode: pc, source, addresses: JSON.stringify(addresses), fetchedAt: now() })
-      .onConflictDoUpdate({ target: addressCache.postcode, set: { source, addresses: JSON.stringify(addresses), fetchedAt: now() } })
-  }
+  const addresses = await fromLandRegistry(pc)
+  const source: AddressResult['source'] = 'land-registry'
   return { source: addresses.length ? source : 'none', addresses }
 }

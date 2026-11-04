@@ -20,5 +20,5 @@ export async function GET(req: Request) {
   const ip = (req.headers.get('x-forwarded-for') ?? '').split(',')[0].trim() || 'local'
   if (!allowed(ip)) return Response.json({ source: 'none', addresses: [], limited: true }, { status: 429 })
   const r = await lookupAddresses(pc).catch(() => ({ source: 'none' as const, addresses: [] }))
-  return Response.json(r, { headers: { 'Cache-Control': 'private, max-age=600' } })
+  return Response.json(r, { headers: { 'Cache-Control': 'no-store' } })
 }

@@ -232,29 +232,41 @@ export async function backfillAddresses(): Promise<{ ran: boolean; year?: number
     return { ran: false, done: true }
   }
   const save = (v: object) => db.insert(settings).values({ key: ADDR_KEY, value: JSON.stringify(v), updatedAt: now() }).onConflictDoUpdate({ target: settings.key, set: { value: JSON.stringify(v), updatedAt: now() } })
+  // Several years per run (each takes a few seconds), stopping after about a minute.
+  const started = Date.now()
+  let y = year, added = 0
   try {
-    const res = await fetch(`${BASE}/pp-${year}.csv`, { signal: AbortSignal.timeout(20 * 60_000) })
-    if (!res.ok || !res.body) throw new Error(`Land Registry file for ${year} answered ${res.status}`)
-    const rl = createInterface({ input: Readable.fromWeb(res.body as unknown as WebStream), crlfDelay: Infinity })
-    const found = new Map<string, { postcode: string; line: string }>()
-    for await (const line of rl) {
-      if (!/"(HA\d|NW(?:2|4|7|9|10)) \d/.test(line)) continue
-      const f = parseLine(line)
-      const pc = (f[3] ?? '').toUpperCase().trim().replace(/\s+/g, ' ')
-      const [outward, inward] = pc.split(' ')
-      if (!inward || !AREA.test(`${outward} `)) continue
-      const addr = addressLine(f[8] || null, f[7] || null, f[9] || null)
-      if (addr) found.set(`${pc}|${addr}`, { postcode: pc, line: addr })
+    while (y <= lastYear && Date.now() - started < 60_000) {
+      added += await loadAddressYear(y)
+      y++
+      await save({ next: y, done: y > lastYear, lastError: null })
     }
-    const rows = [...found.values()].map((r) => ({ ...r, lastYear: year }))
-    for (let i = 0; i < rows.length; i += 400) {
-      await db.insert(knownAddresses).values(rows.slice(i, i + 400))
-        .onConflictDoUpdate({ target: [knownAddresses.postcode, knownAddresses.line], set: { lastYear: sql`max(${knownAddresses.lastYear}, excluded.last_year)` } })
-    }
-    await save({ next: year + 1, done: year + 1 > lastYear, lastError: null })
-    return { ran: true, year, added: rows.length, done: year + 1 > lastYear }
+    return { ran: true, year: y - 1, added, done: y > lastYear }
   } catch (e) {
-    await save({ ...state, next: year, lastError: e instanceof Error ? e.message : String(e) })
-    return { ran: true, year }
+    await save({ ...state, next: y, lastError: e instanceof Error ? e.message : String(e) })
+    return { ran: true, year: y }
   }
+}
+
+/** Reads one yearly file and keeps the addresses in our area. */
+async function loadAddressYear(year: number): Promise<number> {
+  const res = await fetch(`${BASE}/pp-${year}.csv`, { signal: AbortSignal.timeout(20 * 60_000) })
+  if (!res.ok || !res.body) throw new Error(`Land Registry file for ${year} answered ${res.status}`)
+  const rl = createInterface({ input: Readable.fromWeb(res.body as unknown as WebStream), crlfDelay: Infinity })
+  const found = new Map<string, { postcode: string; line: string }>()
+  for await (const line of rl) {
+    if (!/"(HA\d|NW(?:2|4|7|9|10)) \d/.test(line)) continue
+    const f = parseLine(line)
+    const pc = (f[3] ?? '').toUpperCase().trim().replace(/\s+/g, ' ')
+    const [outward, inward] = pc.split(' ')
+    if (!inward || !AREA.test(`${outward} `)) continue
+    const addr = addressLine(f[8] || null, f[7] || null, f[9] || null)
+    if (addr) found.set(`${pc}|${addr}`, { postcode: pc, line: addr })
+  }
+  const rows = [...found.values()].map((r) => ({ ...r, lastYear: year }))
+  for (let i = 0; i < rows.length; i += 400) {
+    await db.insert(knownAddresses).values(rows.slice(i, i + 400))
+      .onConflictDoUpdate({ target: [knownAddresses.postcode, knownAddresses.line], set: { lastYear: sql`max(${knownAddresses.lastYear}, excluded.last_year)` } })
+  }
+  return rows.length
 }
