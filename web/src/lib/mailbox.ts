@@ -233,3 +233,14 @@ export async function checkMailbox(opts: { force?: boolean } = {}): Promise<Chec
     return { ran: true, error }
   }
 }
+
+/** A connected client for the saved mailbox (caller logs out). Used by the inbox audit. */
+export async function openSavedMailbox(): Promise<ImapFlow> {
+  const s = await load()
+  if (!s?.pass) throw new Error('Connect the mailbox first.')
+  const pass = open(s.pass)
+  if (!pass) throw new Error('The saved password could not be read. Enter it again on the Email inbox page.')
+  const c = client(s.host, s.port, s.user, pass)
+  await c.connect()
+  return c
+}

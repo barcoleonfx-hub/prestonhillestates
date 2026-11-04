@@ -1,6 +1,8 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { after } from 'next/server'
+import { auditState, markAuditStarting, runAudit } from '@/lib/mail-audit'
 import { requireRole } from '@/lib/auth'
 import { audit } from '@/lib/contacts'
 import { FASTHOSTS_IMAP, checkMailbox, findMailServer, forgetMailbox, mailboxStatus, saveMailbox, setMailboxEnabled, testMailbox } from '@/lib/mailbox'
@@ -67,4 +69,15 @@ export async function mailboxForget() {
   await forgetMailbox()
   await audit(me.id, 'mailbox_forget', 'settings', 'mailbox', '')
   revalidatePath('/admin', 'layout')
+}
+
+/** Starts the inbox audit in the background; the audit page shows progress. */
+export async function startMailAudit(form: FormData) {
+  const me = await requireRole('admin')
+  const months = [3, 6, 12].includes(Number(form.get('months'))) ? Number(form.get('months')) : 6
+  if ((await auditState()).status === 'running') return
+  await audit(me.id, 'mail_audit', 'settings', 'mail_audit', `${months} months`)
+  await markAuditStarting()
+  after(() => runAudit(months).catch((e) => console.error('mail audit failed', e)))
+  revalidatePath('/admin/email-inbox/audit')
 }
