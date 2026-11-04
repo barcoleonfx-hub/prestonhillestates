@@ -1,17 +1,17 @@
 import 'server-only'
 import { eq } from 'drizzle-orm'
 import { db, ready } from '@/db/client'
-import { addressCache, soldPrices } from '@/db/schema'
+import { addressCache, knownAddresses, soldPrices } from '@/db/schema'
+import { addressLine } from '@/lib/sold-prices'
 import { now } from '@/lib/util'
 
 // Address finder for the valuation form. With an Ideal Postcodes key (IDEAL_POSTCODES_KEY) it returns every
 // address on the postcode from Royal Mail's list; without one it falls back to the homes on that postcode
 // that have sold in the last few years (HM Land Registry). Results are kept so each postcode is paid for once.
 
-const KEEP_DAYS = { paf: 180, 'land-registry': 7 } as const
+const KEEP_DAYS = { paf: 180, 'land-registry': 1 } as const
 export type AddressResult = { source: 'paf' | 'land-registry' | 'none'; addresses: string[] }
 
-const title = (s: string) => s.toLowerCase().replace(/\b([a-z])/g, (c) => c.toUpperCase()).replace(/\b(Of|And|The)\b/g, (w) => w.toLowerCase())
 /** By house number (the last number, e.g. 273 in "Flat 2, 273 Preston Road"), then flat number, then name. */
 const byNumber = (a: string, b: string) => {
   const nums = (x: string) => (x.match(/\d+/g) ?? []).map(Number)
@@ -30,14 +30,17 @@ async function fromIdealPostcodes(pc: string): Promise<string[] | null> {
   return (body.result ?? []).map((a) => [a.line_1, a.line_2, a.line_3].filter(Boolean).join(', ')).filter(Boolean)
 }
 
+/** Every home on the postcode that has sold since 1995, from Land Registry (recent years plus the archive). */
 async function fromLandRegistry(pc: string): Promise<string[]> {
-  const rows = await db.selectDistinct({ saon: soldPrices.saon, paon: soldPrices.paon, street: soldPrices.street }).from(soldPrices).where(eq(soldPrices.postcode, pc))
-  const lines = rows.map((r) => {
-    const paon = r.paon ? title(r.paon) : ''
-    const first = /^\d/.test(paon) && r.street ? `${paon} ${r.street}` : [paon, r.street].filter(Boolean).join(', ')
-    return [r.saon ? title(r.saon) : '', first].filter(Boolean).join(', ')
-  })
-  return [...new Set(lines.filter(Boolean))].sort(byNumber)
+  const [recent, archive] = await Promise.all([
+    db.selectDistinct({ saon: soldPrices.saon, paon: soldPrices.paon, street: soldPrices.street }).from(soldPrices).where(eq(soldPrices.postcode, pc)),
+    db.select({ line: knownAddresses.line }).from(knownAddresses).where(eq(knownAddresses.postcode, pc)),
+  ])
+  const lines = [...recent.map((r) => addressLine(r.saon, r.paon, r.street)), ...archive.map((r) => r.line)]
+  // The same home can be written slightly differently over the years; compare without punctuation and case.
+  const seen = new Map<string, string>()
+  for (const l of lines.filter(Boolean)) { const k = l.toLowerCase().replace(/[^a-z0-9]/g, ''); if (!seen.has(k)) seen.set(k, l) }
+  return [...seen.values()].sort(byNumber)
 }
 
 export async function lookupAddresses(postcode: string): Promise<AddressResult> {

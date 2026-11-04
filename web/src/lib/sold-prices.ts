@@ -4,7 +4,7 @@ import { Readable } from 'node:stream'
 import type { ReadableStream as WebStream } from 'node:stream/web'
 import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm'
 import { db, getClient, ready } from '@/db/client'
-import { settings, soldPrices, type SoldPrice } from '@/db/schema'
+import { knownAddresses, settings, soldPrices, type SoldPrice } from '@/db/schema'
 import { now } from '@/lib/util'
 
 // Sold prices for our part of North West London, from HM Land Registry Price Paid Data.
@@ -41,6 +41,16 @@ function parseLine(line: string): string[] {
 }
 
 const tidy = (s: string) => s.trim().toLowerCase().replace(/\b([a-z])/g, (c) => c.toUpperCase()).replace(/\b(Of|And|The)\b/g, (w) => w.toLowerCase()) || null
+
+/** "Flat 2", "273", "Preston Road" → "Flat 2, 273 Preston Road" (as people write it). */
+export function addressLine(saon: string | null, paon: string | null, street: string | null): string {
+  const p = paon ? tidy(paon) ?? '' : ''
+  const st = street ? (/[a-z]/.test(street) ? street : tidy(street) ?? '') : ''
+  const first = /^\d/.test(p) && st ? `${p} ${st}` : [p, st].filter(Boolean).join(', ')
+  const sa = saon ? tidy(saon) ?? '' : ''
+  // A bare flat number ("1", "12a") reads as "1 Woodcock Court"; "Flat 2" keeps its comma.
+  return /^\d+[a-z]?$/i.test(sa) ? `${sa} ${first}` : [sa, first].filter(Boolean).join(', ')
+}
 
 export function rowFrom(f: string[]): typeof soldPrices.$inferInsert | null {
   const [id, price, date, postcode, type, isNew, tenure, paon, saon, street, locality, town, , , category, status] = f
@@ -192,4 +202,59 @@ export function lrTypeFor(propertyType: string | null | undefined): 'F' | 'H' | 
   if (/flat|maisonette|studio|apartment|penthouse/i.test(propertyType)) return 'F'
   if (/house|bungalow|terrace|semi|detached|cottage/i.test(propertyType)) return 'H'
   return null
+}
+
+// ---------- addresses back to 1995, for the address finder ----------
+
+const ADDR_KEY = 'address_backfill'
+const FIRST_YEAR = 1995
+
+/**
+ * One-off: works through Land Registry's yearly files from 1995 up to the years already held in sold_prices,
+ * one year per call, keeping only the addresses (not prices) in our area. About 30 calls in all; after that it
+ * does nothing. Recent years come from sold_prices directly.
+ */
+export async function backfillAddresses(): Promise<{ ran: boolean; year?: number; added?: number; done?: boolean }> {
+  await ready()
+  const client = getClient()
+  const t = new Date().toISOString()
+  const claim = await client.execute({
+    sql: `INSERT INTO jobs (name, last_run_at) VALUES ('${ADDR_KEY}', ?) ON CONFLICT(name) DO UPDATE SET last_run_at = excluded.last_run_at WHERE jobs.last_run_at < ?`,
+    args: [t, new Date(Date.now() - 90_000).toISOString()],
+  })
+  if (claim.rowsAffected !== 1) return { ran: false }
+  const row = await db.query.settings.findFirst({ where: eq(settings.key, ADDR_KEY) })
+  const state = (row ? JSON.parse(row.value) : {}) as { next?: number; done?: boolean; lastError?: string | null }
+  const lastYear = new Date().getFullYear() - YEARS_BACK - 1
+  const year = state.next ?? FIRST_YEAR
+  if (state.done || year > lastYear) {
+    if (!state.done) await db.insert(settings).values({ key: ADDR_KEY, value: JSON.stringify({ ...state, done: true }), updatedAt: now() }).onConflictDoUpdate({ target: settings.key, set: { value: JSON.stringify({ ...state, done: true }), updatedAt: now() } })
+    return { ran: false, done: true }
+  }
+  const save = (v: object) => db.insert(settings).values({ key: ADDR_KEY, value: JSON.stringify(v), updatedAt: now() }).onConflictDoUpdate({ target: settings.key, set: { value: JSON.stringify(v), updatedAt: now() } })
+  try {
+    const res = await fetch(`${BASE}/pp-${year}.csv`, { signal: AbortSignal.timeout(20 * 60_000) })
+    if (!res.ok || !res.body) throw new Error(`Land Registry file for ${year} answered ${res.status}`)
+    const rl = createInterface({ input: Readable.fromWeb(res.body as unknown as WebStream), crlfDelay: Infinity })
+    const found = new Map<string, { postcode: string; line: string }>()
+    for await (const line of rl) {
+      if (!/"(HA\d|NW(?:2|4|7|9|10)) \d/.test(line)) continue
+      const f = parseLine(line)
+      const pc = (f[3] ?? '').toUpperCase().trim().replace(/\s+/g, ' ')
+      const [outward, inward] = pc.split(' ')
+      if (!inward || !AREA.test(`${outward} `)) continue
+      const addr = addressLine(f[8] || null, f[7] || null, f[9] || null)
+      if (addr) found.set(`${pc}|${addr}`, { postcode: pc, line: addr })
+    }
+    const rows = [...found.values()].map((r) => ({ ...r, lastYear: year }))
+    for (let i = 0; i < rows.length; i += 400) {
+      await db.insert(knownAddresses).values(rows.slice(i, i + 400))
+        .onConflictDoUpdate({ target: [knownAddresses.postcode, knownAddresses.line], set: { lastYear: sql`max(${knownAddresses.lastYear}, excluded.last_year)` } })
+    }
+    await save({ next: year + 1, done: year + 1 > lastYear, lastError: null })
+    return { ran: true, year, added: rows.length, done: year + 1 > lastYear }
+  } catch (e) {
+    await save({ ...state, next: year, lastError: e instanceof Error ? e.message : String(e) })
+    return { ran: true, year }
+  }
 }

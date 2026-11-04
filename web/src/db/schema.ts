@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real, index } from 'drizzle-orm/sqlite-core'
+import { sqliteTable, text, integer, real, index, primaryKey } from 'drizzle-orm/sqlite-core'
 
 export const admins = sqliteTable('admins', {
   id: text('id').primaryKey(),
@@ -390,3 +390,9 @@ export const addressCache = sqliteTable('address_cache', {
   addresses: text('addresses').notNull(), // JSON array of address lines (without the postcode)
   fetchedAt: text('fetched_at').notNull(),
 })
+
+export const knownAddresses = sqliteTable('known_addresses', {
+  postcode: text('postcode').notNull(),
+  line: text('line').notNull(),
+  lastYear: integer('last_year').notNull(),
+}, (t) => [primaryKey({ columns: [t.postcode, t.line] })])

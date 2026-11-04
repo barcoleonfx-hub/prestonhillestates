@@ -360,4 +360,11 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       `CREATE TABLE address_cache (postcode TEXT PRIMARY KEY, source TEXT NOT NULL, addresses TEXT NOT NULL, fetched_at TEXT NOT NULL)`,
     ],
   },
+  {
+    id: '013_known_addresses',
+    sql: [
+      // Every address in our area that has sold since 1995 (HM Land Registry), for the valuation address finder.
+      `CREATE TABLE known_addresses (postcode TEXT NOT NULL, line TEXT NOT NULL, last_year INTEGER NOT NULL, PRIMARY KEY (postcode, line))`,
+    ],
+  },
 ]
