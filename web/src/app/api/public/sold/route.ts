@@ -9,6 +9,7 @@ export async function GET(req: Request) {
   const pc = (u.searchParams.get('postcode') ?? '').toUpperCase().trim().replace(/\s+/g, ' ')
   if (!POSTCODE.test(pc)) return Response.json({ error: 'postcode' }, { status: 400 })
   const t = u.searchParams.get('type')
-  const data = await salesNear(pc, { type: t === 'F' || t === 'H' ? t : null, limit: 6 }).catch(() => null)
+  const street = (u.searchParams.get('street') ?? '').slice(0, 80) || null
+  const data = await salesNear(pc, { type: t === 'F' || t === 'H' ? t : null, limit: 6, street }).catch(() => null)
   return Response.json(data ?? { covered: false }, { headers: { 'Cache-Control': 'public, max-age=3600' } })
 }
