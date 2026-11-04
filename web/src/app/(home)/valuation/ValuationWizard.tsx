@@ -34,6 +34,11 @@ export function ValuationWizard({ initialIntent, initialPostcode }: { initialInt
   const [intent, setIntent] = useState<Intent>(initialIntent)
   const [postcode, setPostcode] = useState(initialPostcode)
   const [address, setAddress] = useState('')
+  // Address finder: the list for the postcode they typed, or typing it themselves.
+  const [addrList, setAddrList] = useState<string[] | null>(null)
+  const [addrFor, setAddrFor] = useState('')
+  const [finding, setFinding] = useState(false)
+  const [manual, setManual] = useState(false)
   const [type, setType] = useState('')
   const [beds, setBeds] = useState('')
   const [when, setWhen] = useState('')
@@ -60,11 +65,36 @@ export function ValuationWizard({ initialIntent, initialPostcode }: { initialInt
   }
   const pc = postcode.trim().toUpperCase().replace(/\s+/g, ' ')
 
+  const findAddresses = async (code = pc) => {
+    if (!POSTCODE.test(code)) return fail('postcode', 'Enter the full postcode, e.g. HA3 0PS.')
+    setError(null)
+    setFinding(true)
+    try {
+      const r = (await (await fetch(`/api/public/addresses?postcode=${encodeURIComponent(code)}`)).json()) as { addresses?: string[] }
+      const list = r.addresses ?? []
+      setAddrList(list)
+      setAddrFor(code)
+      setManual(list.length === 0)
+      setAddress('')
+      requestAnimationFrame(() => document.getElementById(list.length ? 'vx-address-pick' : 'vx-address')?.focus())
+    } catch {
+      setAddrList([]); setAddrFor(code); setManual(true)
+    }
+    setFinding(false)
+    return true
+  }
+  // A postcode passed in from the homepage: look it up straight away.
+  useEffect(() => { if (POSTCODE.test(initialPostcode.trim().toUpperCase())) findAddresses(initialPostcode.trim().toUpperCase().replace(/\s+/g, ' ')) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // A different postcode means a different list.
+  useEffect(() => { if (addrFor && pc !== addrFor) { setAddrList(null); setAddress(''); setManual(false) } }, [pc, addrFor])
+
   const checkStep = (s: number) => {
     setError(null)
     if (s === 0) {
       if (!POSTCODE.test(pc)) return fail('postcode', 'Enter the full postcode, e.g. HA3 0PS.')
-      if (address.trim().length < 3) return fail('address', 'Add the house number and street so we know which home to value.')
+      if (address.trim().length < 3) return addrList?.length && !manual
+        ? fail('address', 'Choose your address from the list, or pick “My address isn’t listed”.')
+        : fail('address', 'Add the house number and street so we know which home to value.')
     }
     if (s === 2) {
       if (!name.trim()) return fail('name', 'Please tell us your name.')
@@ -82,6 +112,8 @@ export function ValuationWizard({ initialIntent, initialPostcode }: { initialInt
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
+    // On the first step, pressing Continue with just a postcode finds the addresses first.
+    if (step === 0 && !address.trim() && POSTCODE.test(pc) && addrList === null && !manual) { await findAddresses(); return }
     if (step < 2) return go(step + 1)
     if (!checkStep(0) || !checkStep(2)) return
     setSending(true)
@@ -146,12 +178,30 @@ export function ValuationWizard({ initialIntent, initialPostcode }: { initialInt
             </div>
             <div className="vx-field">
               <label htmlFor="vx-postcode">Postcode</label>
-              <input id="vx-postcode" value={postcode} onChange={(e) => setPostcode(e.target.value)} autoComplete="postal-code" placeholder="e.g. HA3 0PS" aria-invalid={error?.field === 'postcode' || undefined} style={{ textTransform: 'uppercase' }} />
+              <div className="vx-find">
+                <input id="vx-postcode" value={postcode} onChange={(e) => setPostcode(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && addrList === null) { e.preventDefault(); findAddresses() } }} autoComplete="postal-code" placeholder="e.g. HA3 0PS" aria-invalid={error?.field === 'postcode' || undefined} style={{ textTransform: 'uppercase' }} />
+                <button type="button" className="vx-find-btn" onClick={() => findAddresses()} disabled={finding}>{finding ? 'Finding…' : addrList !== null && addrFor === pc ? 'Search again' : 'Find address'}</button>
+              </div>
             </div>
-            <div className="vx-field">
-              <label htmlFor="vx-address">House number and street</label>
-              <input id="vx-address" value={address} onChange={(e) => setAddress(e.target.value)} autoComplete="address-line1" placeholder="e.g. 14 Woodcock Hill" aria-invalid={error?.field === 'address' || undefined} />
-            </div>
+            {addrList !== null && addrList.length > 0 && !manual ? (
+              <div className="vx-field">
+                <label htmlFor="vx-address-pick">Select your address</label>
+                <select id="vx-address-pick" className="vx-select" value={address} aria-invalid={error?.field === 'address' || undefined}
+                  onChange={(e) => { if (e.target.value === '__manual') { setManual(true); setAddress(''); requestAnimationFrame(() => document.getElementById('vx-address')?.focus()) } else setAddress(e.target.value) }}>
+                  <option value="" disabled>Choose your address ({addrList.length} found)</option>
+                  {addrList.map((a) => <option key={a} value={a}>{a}</option>)}
+                  <option value="__manual">My address isn’t listed</option>
+                </select>
+              </div>
+            ) : null}
+            {manual || addrList === null ? (
+              <div className="vx-field">
+                <label htmlFor="vx-address">House number and street</label>
+                <input id="vx-address" value={address} onChange={(e) => setAddress(e.target.value)} autoComplete="address-line1" placeholder="e.g. 14 Woodcock Hill" aria-invalid={error?.field === 'address' || undefined} />
+                {manual && addrList?.length ? <button type="button" className="vx-linkish" onClick={() => { setManual(false); setAddress('') }}>Choose from the list instead</button> : null}
+                {manual && addrList && !addrList.length ? <span className="vx-hint">We couldn’t list the addresses on {addrFor}; just type yours.</span> : null}
+              </div>
+            ) : null}
           </div>
         ) : null}
 

@@ -49,5 +49,8 @@ services:
         sync: false
       - key: SMTP_PASS
         sync: false
+      # Address finder on the valuation form (Ideal Postcodes, pay as you go). Leave blank to use Land Registry addresses only.
+      - key: IDEAL_POSTCODES_KEY
+        sync: false
       - key: MAIL_FROM
         value: Preston Hill Estates <info@prestonhillestates.com>
