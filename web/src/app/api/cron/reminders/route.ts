@@ -3,6 +3,8 @@ import { runDueReminders } from '@/lib/appointments'
 import { runDueTasks } from '@/lib/contacts'
 import { runRetention } from '@/lib/retention'
 import { checkMailbox } from '@/lib/mailbox'
+import { refreshSoldPrices } from '@/lib/sold-prices'
+import { after } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,5 +23,7 @@ export async function GET(req: Request) {
     runDueReminders(), runDueTasks(), runRetention(),
     checkMailbox().catch((e) => ({ ran: true, error: String(e) })),
   ])
+  // Land Registry sold prices: checked daily, reloaded when they publish (monthly). Runs after the reply.
+  after(() => refreshSoldPrices().catch((e) => console.error('sold prices refresh failed', e)))
   return Response.json({ ok: true, sent, callbacks, retention, mailbox })
 }

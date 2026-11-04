@@ -365,3 +365,21 @@ export const mailMessages = sqliteTable('mail_messages', {
 
 export type MailThread = typeof mailThreads.$inferSelect
 export type MailMessage = typeof mailMessages.$inferSelect
+
+export const soldPrices = sqliteTable('sold_prices', {
+  id: text('id').primaryKey(),
+  price: integer('price').notNull(),
+  soldOn: text('sold_on').notNull(), // YYYY-MM-DD
+  postcode: text('postcode').notNull(),
+  outward: text('outward').notNull(), // HA3
+  sector: text('sector').notNull(), // HA3 0
+  type: text('type').notNull(), // D detached, S semi, T terraced, F flat
+  newBuild: integer('new_build', { mode: 'boolean' }).notNull().default(false),
+  tenure: text('tenure'), // F freehold, L leasehold
+  paon: text('paon'),
+  saon: text('saon'),
+  street: text('street'),
+  locality: text('locality'),
+  town: text('town'),
+})
+export type SoldPrice = typeof soldPrices.$inferSelect
