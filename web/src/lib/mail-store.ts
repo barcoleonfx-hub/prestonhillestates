@@ -14,9 +14,10 @@ import { now, uid } from '@/lib/util'
 
 const KEY = 'mail_store'
 const BACKFILL_DAYS = 60 // when first switched on, bring in the last couple of months
-const PER_RUN = 250 // per folder, per check
-const MAX_WHOLE = 3_000_000 // emails up to this size are downloaded whole
-const MAX_SOURCE = 400_000 // bigger ones: just the start, which holds the text (attachments are cut off)
+const PER_RUN = 120 // per folder, per check
+const MAX_WHOLE = 1_000_000 // emails up to this size are downloaded whole
+const MAX_SOURCE = 300_000 // bigger ones: just the start, which holds the text (attachments are cut off)
+const CHUNK = 10 // emails held in memory at once (the server has little memory)
 const OWN = /@prestonhillestates\.(com|co\.uk)$/i
 
 // upTo: newest email brought in. lowest: oldest one so far while working back through the last 60 days.
@@ -144,13 +145,17 @@ async function fetchAndStore(c: ImapFlow, path: string, uids: number[], directio
   if (!uids.length) return 0
   const sizes = new Map<number, number>()
   for await (const m of c.fetch(uids.join(','), { uid: true, size: true }, { uid: true })) sizes.set(m.uid, m.size ?? 0)
-  const small = uids.filter((u) => (sizes.get(u) ?? 0) <= MAX_WHOLE), big = uids.filter((u) => (sizes.get(u) ?? 0) > MAX_WHOLE)
-  const raws: { uid: number; source: Buffer }[] = []
-  if (small.length) for await (const m of c.fetch(small.join(','), { uid: true, source: true }, { uid: true })) if (m.source) raws.push({ uid: m.uid, source: m.source })
-  if (big.length) for await (const m of c.fetch(big.join(','), { uid: true, source: { maxLength: MAX_SOURCE } }, { uid: true })) if (m.source) raws.push({ uid: m.uid, source: m.source })
   let stored = 0
-  for (const r of raws) {
-    try { if (await storeMail({ raw: r.source, direction })) stored++ } catch (e) { console.error('mail store: could not read one email', path, r.uid, e) }
+  // A few at a time, filed before the next few are downloaded, so memory stays small whatever the attachments.
+  for (let i = 0; i < uids.length; i += CHUNK) {
+    const part = uids.slice(i, i + CHUNK)
+    const small = part.filter((u) => (sizes.get(u) ?? 0) <= MAX_WHOLE), big = part.filter((u) => (sizes.get(u) ?? 0) > MAX_WHOLE)
+    const raws: { uid: number; source: Buffer }[] = []
+    if (small.length) for await (const m of c.fetch(small.join(','), { uid: true, source: true }, { uid: true })) if (m.source) raws.push({ uid: m.uid, source: m.source })
+    if (big.length) for await (const m of c.fetch(big.join(','), { uid: true, source: { maxLength: MAX_SOURCE } }, { uid: true })) if (m.source) raws.push({ uid: m.uid, source: m.source })
+    for (const r of raws) {
+      try { if (await storeMail({ raw: r.source, direction })) stored++ } catch (e) { console.error('mail store: could not read one email', path, r.uid, e) }
+    }
   }
   return stored
 }

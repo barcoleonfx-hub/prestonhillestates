@@ -55,10 +55,13 @@ export async function mailboxStatus(): Promise<MailboxStatus | null> {
 }
 
 function client(host: string, port: number, user: string, pass: string) {
-  return new ImapFlow({
+  const c = new ImapFlow({
     host, port, secure: port === 993, auth: { user, pass }, logger: false, ...(port === 143 ? { doSTARTTLS: true } : {}),
     connectionTimeout: 20_000, greetingTimeout: 15_000, socketTimeout: 60_000, disableAutoIdle: true,
   })
+  // A dropped connection is reported as an 'error' event; without a listener Node would stop the whole server.
+  c.on('error', (e: unknown) => console.error('mailbox connection error', e instanceof Error ? e.message : e))
+  return c
 }
 
 /** Plain-English reason a connection failed. */
@@ -197,39 +200,42 @@ export async function checkMailbox(opts: { force?: boolean } = {}): Promise<Chec
     }
     uids.sort((a, b) => a - b)
     const batch = uids.slice(0, MAX_PER_RUN)
-    const raws: { uid: number; source: string }[] = []
-    if (batch.length) {
-      for await (const m of c.fetch(batch.join(','), { uid: true, source: true }, { uid: true })) {
+    // Lead emails are small: skip anything over 1 MB (big attachments), and read a few at a time.
+    const sizes = new Map<number, number>()
+    if (batch.length) for await (const m of c.fetch(batch.join(','), { uid: true, size: true }, { uid: true })) sizes.set(m.uid, m.size ?? 0)
+    const wantUids = batch.filter((u) => (sizes.get(u) ?? 0) <= 1_000_000)
+    for (let i = 0; i < wantUids.length; i += 10) {
+      const raws: { uid: number; source: string }[] = []
+      for await (const m of c.fetch(wantUids.slice(i, i + 10).join(','), { uid: true, source: true }, { uid: true })) {
         if (m.source) raws.push({ uid: m.uid, source: m.source.toString('utf8') })
       }
+      for (const { uid: u, source } of raws.sort((a, b) => a.uid - b.uid)) {
+        try {
+          const row = await analyse(source)
+          const wanted = row && row.category !== 'skipped' && (row.category !== 'person' || (s.includePeople && row.intent))
+          if (row && wanted) {
+            const saved = await saveEmailRow(row, { by: null, handled: false, startedAt })
+            if (saved) {
+              found++
+              await db.insert(notifications).values({
+                id: uid(), kind: 'enquiry', appointmentId: null,
+                title: `${enquiryLabel({ kind: 'email', source: row.source })}: ${row.name}`,
+                body: [row.name, [row.phone, row.about ?? row.subject].filter(Boolean).join(' · ')].join('\n'),
+                createdBy: null, createdAt: now(),
+              })
+            }
+          }
+        } catch (e) {
+          console.error('mailbox: could not read one email', u, e)
+        }
+      }
     }
+    if (batch.length) lastUid = Math.max(lastUid, ...batch)
+
     // Keep the portal's copy of the inbox and sent mail up to date (for the Inbox page).
     let stored = s.lastStored ?? 0
     try { stored = (await syncMailStore(c)).stored } catch (e) { console.error('mail store sync failed', e) }
     await c.logout().catch(() => c.close())
-
-    for (const { uid: u, source } of raws.sort((a, b) => a.uid - b.uid)) {
-      try {
-        const row = await analyse(source)
-        const wanted = row && row.category !== 'skipped' && (row.category !== 'person' || (s.includePeople && row.intent))
-        if (row && wanted) {
-          const saved = await saveEmailRow(row, { by: null, handled: false, startedAt })
-          if (saved) {
-            found++
-            await db.insert(notifications).values({
-              id: uid(), kind: 'enquiry', appointmentId: null,
-              title: `${enquiryLabel({ kind: 'email', source: row.source })}: ${row.name}`,
-              body: [row.name, [row.phone, row.about ?? row.subject].filter(Boolean).join(' · ')].join('\n'),
-              createdBy: null, createdAt: now(),
-            })
-          }
-        }
-      } catch (e) {
-        console.error('mailbox: could not read one email', u, e)
-      }
-      lastUid = Math.max(lastUid, u)
-    }
-    if (!raws.length && uids.length) lastUid = Math.max(lastUid, ...batch)
     if (!uids.length && box.uidNext) lastUid = Math.max(lastUid, box.uidNext - 1)
     await store({ ...s, uidValidity, lastUid, lastCheckAt: now(), lastOkAt: now(), lastError: null, lastFound: found, totalFound: (s.totalFound ?? 0) + found, lastStored: stored })
     return { ran: true, found }

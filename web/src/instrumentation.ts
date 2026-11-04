@@ -3,6 +3,8 @@
 // portal open. Each job checks for itself whether it's due, so extra calls are harmless.
 export async function register() {
   if (process.env.NEXT_RUNTIME !== 'nodejs' || process.env.NEXT_PHASE === 'phase-production-build') return
+  // A background job that fails without being caught should be logged, not take the whole website down.
+  process.on('unhandledRejection', (e) => console.error('unhandled rejection in a background job', e))
   const secret = process.env.CRON_SECRET
   if (!secret) return
   const url = `http://127.0.0.1:${process.env.PORT || 3000}/api/cron/reminders`
