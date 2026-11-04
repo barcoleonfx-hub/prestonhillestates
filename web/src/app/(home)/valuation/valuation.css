@@ -219,3 +219,13 @@
 .vx-final h2 em { color: var(--gold-deep); }
 .vx-final p { margin-top: 8px; color: var(--ink-soft); }
 .vx-final a:not(.btn) { color: var(--ink); font-weight: 700; }
+/* address finder */
+.vx-find { display: flex; gap: 8px; }
+.vx-find input { flex: 1; min-width: 0; }
+.vx-find-btn { flex: none; border: 1.5px solid var(--line); background: var(--surface, #fff); color: var(--ink); border-radius: 14px; padding: 0 16px; font: inherit; font-weight: 600; font-size: 0.88rem; cursor: pointer; }
+.vx-find-btn:hover { border-color: var(--gold); color: var(--gold-deep); }
+.vx-find-btn:disabled { opacity: 0.6; cursor: wait; }
+.vx-select { width: 100%; height: 50px; border: 1.5px solid var(--line); border-radius: 14px; padding: 0 14px; font: inherit; font-size: 1rem; background: #FDFCF8; color: var(--ink); }
+.vx-select:focus { outline: none; border-color: var(--gold); }
+.vx-select[aria-invalid="true"] { border-color: #A8442E; }
+.vx-linkish { border: 0; background: none; padding: 0; margin-top: 6px; font: inherit; font-size: 0.82rem; color: var(--gold-deep); font-weight: 600; cursor: pointer; text-decoration: underline; justify-self: start; }

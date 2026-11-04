@@ -353,4 +353,11 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       `CREATE INDEX sold_prices_date_idx ON sold_prices (sold_on)`,
     ],
   },
+  {
+    id: '012_address_cache',
+    sql: [
+      // Addresses found for a postcode (valuation address finder), kept so each postcode is only paid for once.
+      `CREATE TABLE address_cache (postcode TEXT PRIMARY KEY, source TEXT NOT NULL, addresses TEXT NOT NULL, fetched_at TEXT NOT NULL)`,
+    ],
+  },
 ]

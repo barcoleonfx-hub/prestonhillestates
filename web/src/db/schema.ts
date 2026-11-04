@@ -383,3 +383,10 @@ export const soldPrices = sqliteTable('sold_prices', {
   town: text('town'),
 })
 export type SoldPrice = typeof soldPrices.$inferSelect
+
+export const addressCache = sqliteTable('address_cache', {
+  postcode: text('postcode').primaryKey(),
+  source: text('source').notNull(), // paf (Royal Mail, via Ideal Postcodes) | land-registry
+  addresses: text('addresses').notNull(), // JSON array of address lines (without the postcode)
+  fetchedAt: text('fetched_at').notNull(),
+})
