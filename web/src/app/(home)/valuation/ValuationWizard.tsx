@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
+import { SoldPanel } from './SoldPanel'
 
 type Intent = 'selling' | 'letting'
 type Field = 'postcode' | 'address' | 'name' | 'phone' | 'email'
@@ -184,6 +185,7 @@ export function ValuationWizard({ initialIntent, initialPostcode }: { initialInt
           <button type="submit" className="btn gold" disabled={sending}>{sending ? 'Sending…' : step < 2 ? 'Continue' : 'Book my free valuation'}</button>
         </div>
       </form>
+      {step >= 1 && intent === 'selling' ? <SoldPanel postcode={postcode} type={type} /> : null}
     </div>
   )
 }

@@ -327,4 +327,30 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       `CREATE INDEX mail_messages_from_idx ON mail_messages (from_addr)`,
     ],
   },
+  {
+    id: '011_sold_prices',
+    sql: [
+      // Homes sold in our area, from HM Land Registry Price Paid Data (Open Government Licence), refreshed monthly.
+      `CREATE TABLE sold_prices (
+        id TEXT PRIMARY KEY,
+        price INTEGER NOT NULL,
+        sold_on TEXT NOT NULL,
+        postcode TEXT NOT NULL,
+        outward TEXT NOT NULL,
+        sector TEXT NOT NULL,
+        type TEXT NOT NULL,
+        new_build INTEGER NOT NULL DEFAULT 0,
+        tenure TEXT,
+        paon TEXT,
+        saon TEXT,
+        street TEXT,
+        locality TEXT,
+        town TEXT
+      )`,
+      `CREATE INDEX sold_prices_sector_idx ON sold_prices (sector, sold_on)`,
+      `CREATE INDEX sold_prices_outward_idx ON sold_prices (outward, sold_on)`,
+      `CREATE INDEX sold_prices_street_idx ON sold_prices (street, outward)`,
+      `CREATE INDEX sold_prices_date_idx ON sold_prices (sold_on)`,
+    ],
+  },
 ]

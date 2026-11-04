@@ -10,6 +10,9 @@ import { formatGBP } from '@/lib/util'
 import { embedUrl } from '@/lib/video'
 import { Gallery } from './Gallery'
 import { EnquiryForm } from './EnquiryForm'
+import { lrTypeFor, salesOnStreet } from '@/lib/sold-prices'
+import { SoldCredit, SoldList, SoldStats } from '@/components/SoldList'
+import '@/components/sold-prices.css'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,6 +39,8 @@ export default async function PropertyPage({ params }: { params: Params }) {
 
   const address = displayAddressFor(p)
   const photos = p.media.filter((m) => m.kind === 'photo')
+  // Land Registry sold prices for sales listings: the same street first, then the postcode sector.
+  const sold = p.channel !== 'let' && p.postcode ? await salesOnStreet(p.street ?? p.addressLine1 ?? null, p.postcode, lrTypeFor(p.propertyType)).catch(() => null) : null
   const plans = p.media.filter((m) => m.kind === 'floorplan')
   const videos = p.media.filter((m) => m.kind === 'video')
   const epc = p.media.find((m) => m.kind === 'epc')
@@ -181,6 +186,17 @@ export default async function PropertyPage({ params }: { params: Params }) {
                 {brochure ? <a className="btn btn-ghost" href={brochure.url} target="_blank" rel="noreferrer">Download brochure</a> : null}
                 {epc ? <a className="btn btn-ghost" href={epc.url} target="_blank" rel="noreferrer">View EPC</a> : null}
               </div>
+            </section>
+          ) : null}
+
+          {sold && (sold.onStreet.length || sold.near?.covered) ? (
+            <section className="dsec sp" id="sold-nearby">
+              <h2>Sold nearby</h2>
+              <p style={{ color: 'var(--ink-soft)' }}>What homes around here have actually sold for, {sold.near?.typed ? `${lrTypeFor(p.propertyType) === 'F' ? 'flats' : 'houses'} like this one first` : 'newest first'}, so you can judge the price for yourself.</p>
+              {sold.near ? <SoldStats stats={sold.near.stats} note={`in ${sold.near.area}`} /> : null}
+              <SoldList sales={[...sold.onStreet, ...(sold.near?.recent ?? []).filter((r) => !sold.onStreet.some((x) => x.postcode === r.postcode && x.soldOn === r.soldOn && x.price === r.price))].slice(0, 8)} highlight={sold.street} />
+              <p style={{ marginTop: 10 }}><a href={`/sold-prices?postcode=${encodeURIComponent(p.postcode ?? '')}`} style={{ color: 'var(--gold-deep)', fontWeight: 600 }}>See more sold prices near {p.postcode} →</a></p>
+              <SoldCredit />
             </section>
           ) : null}
 

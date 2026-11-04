@@ -2,6 +2,7 @@ import Script from 'next/script'
 import { listPublished, priceLabel, slugFor, displayAddressFor, statusLabel } from '@/lib/properties'
 import { labelFor, PROPERTY_TYPES } from '@/lib/options'
 import { MARKUP, SCRIPT } from './home-content'
+import { LR_CREDIT, patchSummary } from '@/lib/sold-prices'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,8 +34,33 @@ async function listingCards(): Promise<string> {
   }).join('\n')
 }
 
+const AREA_NAMES: Record<string, string> = { HA0: 'Wembley & Alperton', HA1: 'Harrow', HA2: 'South & North Harrow', HA3: 'Kenton & Harrow Weald', HA7: 'Stanmore', HA8: 'Edgware', HA9: 'Wembley', NW9: 'Kingsbury & Colindale' }
+const gbp = (n: number | null) => (n == null ? '' : n >= 1_000_000 ? `£${(n / 1_000_000).toFixed(2).replace(/0$/, '')}m` : `£${Math.round(n / 1000)}k`)
+
+/** "Local market": real sold prices across our patch from HM Land Registry, with a postcode search. */
+async function marketBand(): Promise<string> {
+  const s = await patchSummary().catch(() => null)
+  if (!s?.count) return ''
+  const areas = s.byArea.map((a) => `<a href="/sold-prices?postcode=${a.outward}"><b>${a.outward}</b><span>${gbp(a.median)}</span><small>${esc(AREA_NAMES[a.outward] ?? '')} · ${a.count} sold</small></a>`).join('')
+  return `<section class="market" aria-label="Local property market">
+    <div class="wide mk-grid">
+      <div>
+        <div class="label rv"><b>Local market</b> · HM Land Registry</div>
+        <h2 class="sect rv d1" style="margin-top:16px;"><span class="mk-num">${s.count.toLocaleString('en-GB')}</span> homes sold nearby <em>in the last 12 months.</em></h2>
+        <p class="mk-sub rv d2">Real sale prices across Harrow, Kenton, Wembley, Stanmore, Edgware and Kingsbury. Typical price ${gbp(s.median)}. See what sold on your street.</p>
+        <form class="mk-search rv d2" action="/sold-prices">
+          <input name="postcode" placeholder="Your postcode" aria-label="Your postcode" autocomplete="postal-code"/>
+          <button type="submit" class="btn gold">See sold prices</button>
+        </form>
+      </div>
+      <div class="mk-areas rv d1">${areas}</div>
+    </div>
+    <div class="wide"><p class="mk-credit">Typical (median) prices for the last 12 months. ${esc(LR_CREDIT)}</p></div>
+  </section>`
+}
+
 export default async function HomePage() {
-  const html = MARKUP.replace('<!--LISTINGS-->', await listingCards())
+  const html = MARKUP.replace('<!--LISTINGS-->', await listingCards()).replace('<!--MARKET-->', await marketBand())
   return (
     <>
       <div style={{ display: 'contents' }} dangerouslySetInnerHTML={{ __html: html }} />

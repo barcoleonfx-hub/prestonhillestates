@@ -1,0 +1,23 @@
+.spg-hero { padding: clamp(120px, 16vh, 170px) 0 30px; background: linear-gradient(180deg, #FDF9EE, #FBFAF6); }
+.spg-hero .sub { margin-top: 16px; max-width: 56ch; color: var(--ink-soft); }
+.spg-search { display: flex; gap: 10px; margin-top: 24px; max-width: 560px; flex-wrap: wrap; }
+.spg-search input { flex: 1; min-width: 200px; height: 54px; border-radius: 999px; border: 1.5px solid var(--line); padding: 0 22px; font: inherit; font-size: 1rem; background: #fff; text-transform: uppercase; }
+.spg-search input::placeholder { text-transform: none; }
+.spg-search input:focus { outline: none; border-color: var(--gold); }
+.spg-patch { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 22px; }
+.spg-patch a { display: grid; gap: 1px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 14px; background: #fff; text-decoration: none; color: var(--ink); min-width: 104px; }
+.spg-patch a:hover, .spg-patch a.on { border-color: var(--gold); background: var(--gold-wash); }
+.spg-patch b { font-size: 0.9rem; } .spg-patch span { font-weight: 600; font-size: 0.86rem; } .spg-patch small { font-size: 0.72rem; color: var(--faint); }
+.spg-body { padding: 30px 0 80px; }
+.spg-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr); gap: clamp(24px, 4vw, 56px); align-items: start; }
+.spg-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.spg-head h2, .spg-start h2 { font-family: 'Fraunces', Georgia, serif; font-weight: 420; font-size: 1.6rem; color: var(--ink); }
+.spg-seg { display: flex; gap: 4px; background: #fff; border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
+.spg-seg a { padding: 6px 12px; border-radius: 999px; font-size: 0.82rem; font-weight: 600; color: var(--ink-soft); text-decoration: none; }
+.spg-seg a.on { background: var(--charcoal); color: #F6F4EC; }
+.spg-cta { margin-top: 16px; background: var(--charcoal); color: #F6F4EC; border-radius: 20px; padding: 22px; }
+.spg-cta h3 { font-family: 'Fraunces', Georgia, serif; font-weight: 420; font-size: 1.35rem; }
+.spg-cta p { font-size: 0.9rem; opacity: 0.85; margin: 8px 0 14px; line-height: 1.55; }
+.spg-note { color: var(--ink-soft); }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+@media (max-width: 860px) { .spg-grid { grid-template-columns: 1fr; } }

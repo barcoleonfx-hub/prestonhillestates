@@ -1,0 +1,28 @@
+/* Sold prices (HM Land Registry) */
+.sp { --sp-ink: #23211A; --sp-soft: #59554A; --sp-faint: #98937F; --sp-gold: #A47B1D; --sp-line: #EAE6DA; }
+.sp-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 10px 0 14px; }
+.sp-big { background: #FDF9EE; border: 1px solid var(--sp-line); border-radius: 14px; padding: 12px 14px; display: grid; gap: 2px; }
+.sp-big b { font-family: 'Fraunces', Georgia, serif; font-weight: 450; font-size: 1.5rem; color: var(--sp-ink); line-height: 1.15; }
+.sp-big span { font-size: 0.8rem; color: var(--sp-faint); }
+.sp-types { grid-column: 1 / -1; list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.sp-types li { border: 1px solid var(--sp-line); border-radius: 12px; padding: 8px 12px; display: grid; }
+.sp-types span { font-size: 0.76rem; color: var(--sp-faint); }
+.sp-types b { color: var(--sp-ink); }
+.sp-types small { font-size: 0.72rem; color: var(--sp-faint); }
+.sp-list { list-style: none; padding: 0; margin: 0; display: grid; }
+.sp-list li { display: flex; justify-content: space-between; gap: 12px; padding: 10px 2px; border-bottom: 1px solid var(--sp-line); }
+.sp-list li:last-child { border-bottom: 0; }
+.sp-list li.same .sp-where b::after { content: ' · same street'; color: var(--sp-gold); font-weight: 600; font-size: 0.78rem; }
+.sp-where, .sp-price { display: grid; gap: 1px; min-width: 0; }
+.sp-where b { color: var(--sp-ink); font-size: 0.92rem; }
+.sp-where span, .sp-price span { font-size: 0.78rem; color: var(--sp-faint); }
+.sp-price { text-align: right; flex: none; }
+.sp-price b { color: var(--sp-ink); font-variant-numeric: tabular-nums; }
+.sp-credit { font-size: 0.7rem; color: var(--sp-faint); margin-top: 10px; line-height: 1.45; }
+.sp-panel { margin-top: 18px; border-top: 1px solid var(--sp-line); padding-top: 16px; }
+.sp-panel h3 { font-family: 'Fraunces', Georgia, serif; font-weight: 450; font-size: 1.2rem; color: var(--sp-ink); }
+.sp-panel .sp-sub { font-size: 0.84rem; color: var(--sp-soft); margin-top: 2px; }
+.sp-panel .sp-cta { font-size: 0.86rem; color: var(--sp-soft); margin-top: 8px; }
+.sp-panel .sp-cta b { color: var(--sp-ink); }
+.sp-loading { font-size: 0.84rem; color: var(--sp-faint); padding: 10px 0; }
+@media (max-width: 520px) { .sp-stats { grid-template-columns: 1fr; } }

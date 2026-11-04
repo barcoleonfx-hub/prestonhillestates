@@ -215,6 +215,26 @@
   }
   .searchbar .go:hover { background: var(--gold-deep); transform: translateY(-1px); }
 
+  /* local market band (sold prices) */
+  .market { padding: clamp(56px, 8vh, 90px) 0 10px; }
+  .market .mk-grid { display: grid; grid-template-columns: 1fr 1.15fr; gap: clamp(26px, 5vw, 70px); align-items: end; }
+  .market h2.sect em { font-style: italic; color: var(--gold-deep); }
+  .market .mk-sub { margin-top: 14px; color: var(--ink-soft); max-width: 46ch; }
+  .market .mk-num { font-family: 'Fraunces', Georgia, serif; font-weight: 400; color: var(--ink); }
+  .market .mk-areas { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  .market .mk-areas a { display: grid; gap: 2px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); text-decoration: none; color: var(--ink); transition: border-color .2s, transform .2s; }
+  .market .mk-areas a:hover { border-color: var(--gold); transform: translateY(-2px); }
+  .market .mk-areas b { font-size: 0.78rem; letter-spacing: 0.12em; color: var(--gold-deep); }
+  .market .mk-areas span { font-family: 'Fraunces', Georgia, serif; font-size: 1.3rem; }
+  .market .mk-areas small { font-size: 0.74rem; color: var(--faint); }
+  .market .mk-search { display: flex; gap: 10px; margin-top: 22px; flex-wrap: wrap; max-width: 520px; }
+  .market .mk-search input { flex: 1; min-width: 180px; height: 52px; border-radius: 999px; border: 1.5px solid var(--line); padding: 0 20px; font: inherit; background: var(--surface); text-transform: uppercase; }
+  .market .mk-search input::placeholder { text-transform: none; color: var(--faint); }
+  .market .mk-search input:focus { outline: none; border-color: var(--gold); }
+  .market .mk-search button { border: 0; cursor: pointer; font: inherit; }
+  .market .mk-credit { font-size: 0.7rem; color: var(--faint); margin-top: 18px; }
+  @media (max-width: 900px) { .market .mk-grid { grid-template-columns: 1fr; } .market .mk-areas { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
   /* accreditation band */
   .accredband { margin-top: clamp(56px, 9vh, 84px); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--surface); }
   .accredband .row { display: flex; align-items: center; justify-content: center; gap: 14px 30px; flex-wrap: wrap; padding-top: 20px; padding-bottom: 20px; }
