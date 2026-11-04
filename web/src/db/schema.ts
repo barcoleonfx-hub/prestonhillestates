@@ -264,6 +264,39 @@ export const propertyEmails = sqliteTable(
   (t) => [index('property_emails_property_idx').on(t.propertyId, t.contactId)],
 )
 
+export const campaigns = sqliteTable('campaigns', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  template: text('template'),
+  audience: text('audience').notNull(),
+  content: text('content').notNull(),
+  status: text('status').notNull().default('draft'), // draft, sending, paused, sent, cancelled
+  total: integer('total').notNull().default(0),
+  sent: integer('sent').notNull().default(0),
+  failed: integer('failed').notNull().default(0),
+  lastError: text('last_error'),
+  createdBy: text('created_by'),
+  startedBy: text('started_by'),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+  startedAt: text('started_at'),
+  finishedAt: text('finished_at'),
+})
+export type Campaign = typeof campaigns.$inferSelect
+
+export const campaignRecipients = sqliteTable(
+  'campaign_recipients',
+  {
+    campaignId: text('campaign_id').notNull().references(() => campaigns.id, { onDelete: 'cascade' }),
+    contactId: text('contact_id').notNull(),
+    email: text('email').notNull(),
+    status: text('status').notNull().default('queued'), // queued, sent, failed, skipped
+    error: text('error'),
+    sentAt: text('sent_at'),
+  },
+  (t) => [primaryKey({ columns: [t.campaignId, t.contactId] }), index('campaign_recipients_status_idx').on(t.status, t.campaignId)],
+)
+
 export const calls = sqliteTable(
   'calls',
   {

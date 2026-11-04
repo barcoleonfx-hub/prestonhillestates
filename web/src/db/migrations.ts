@@ -396,4 +396,39 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       `CREATE INDEX property_emails_property_idx ON property_emails (property_id, contact_id)`,
     ],
   },
+  {
+    id: '016_campaigns',
+    sql: [
+      // Email campaigns to the contact list. Content is JSON (see lib/campaign.ts); each person's copy is drawn at send time.
+      `CREATE TABLE campaigns (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        template TEXT,
+        audience TEXT NOT NULL,
+        content TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'draft',
+        total INTEGER NOT NULL DEFAULT 0,
+        sent INTEGER NOT NULL DEFAULT 0,
+        failed INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT,
+        created_by TEXT,
+        started_by TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        started_at TEXT,
+        finished_at TEXT
+      )`,
+      `CREATE TABLE campaign_recipients (
+        campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+        contact_id TEXT NOT NULL,
+        email TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'queued',
+        error TEXT,
+        sent_at TEXT,
+        PRIMARY KEY (campaign_id, contact_id)
+      )`,
+      `CREATE INDEX campaign_recipients_status_idx ON campaign_recipients (status, campaign_id)`,
+      `CREATE INDEX campaign_recipients_sent_idx ON campaign_recipients (sent_at)`,
+    ],
+  },
 ]
