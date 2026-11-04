@@ -607,3 +607,4 @@ kbd { font: 600 0.68rem/1 var(--sans, inherit); padding: 3px 6px; border-radius:
 .mb-how { margin-top: 18px; }
 .mb-how ul { margin: 10px 0 0 18px; display: grid; gap: 6px; color: var(--ink-soft); font-size: 0.9rem; line-height: 1.55; }
 .linkish { border: 0; background: none; padding: 0; font: inherit; color: var(--gold-deep); font-weight: 600; cursor: pointer; text-decoration: underline; }
+.mb-detail { margin: 6px 0 0; font-size: 0.82rem; opacity: 0.85; }
