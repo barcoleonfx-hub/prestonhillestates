@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { requireAdmin } from '@/lib/auth'
 import { AREAS } from '@/lib/mail-areas'
 import { inboxDashboard } from '@/lib/mail-dashboard'
-import { mailStoreState } from '@/lib/mail-store'
+import { mailStoreCount, mailStoreState } from '@/lib/mail-store'
 import { mailboxStatus } from '@/lib/mailbox'
 import { MailRow, ago } from './MailRow'
 import { Unsubscribe } from './Unsubscribe'
@@ -13,7 +13,7 @@ export const metadata = { title: 'Inbox' }
 export default async function InboxPage({ searchParams }: { searchParams: Promise<{ area?: string }> }) {
   await requireAdmin()
   const sp = await searchParams
-  const [box, store, d] = await Promise.all([mailboxStatus(), mailStoreState(), inboxDashboard(7)])
+  const [box, store, d, held] = await Promise.all([mailboxStatus(), mailStoreState(), inboxDashboard(7), mailStoreCount()])
   const area = AREAS.some((a) => a.id === sp.area) ? sp.area! : ''
   const waiting = area ? d.waiting.filter((t) => t.area === area) : d.waiting
   const oldest = d.waiting[0]
@@ -31,8 +31,13 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
 
       {!connected ? (
         <div className="notice err" style={{ marginBottom: 16 }}>The mailbox isn’t connected, so nothing new is coming in. <Link href="/admin/email-inbox">Connect it on the Email inbox page</Link>.</div>
+      ) : store.lastError ? (
+        <div className="notice err" style={{ marginBottom: 16 }}>The last attempt to read the mailbox failed: {store.lastError} It tries again every 2 minutes. If this stays, check the <Link href="/admin/email-inbox">Email settings</Link>.</div>
       ) : !store.backfilled ? (
-        <div className="notice ok" style={{ marginBottom: 16 }}>Bringing in the last 60 days of email. This takes a few minutes after connecting; the numbers fill in as it goes.</div>
+        <div className="notice ok" style={{ marginBottom: 16 }}>
+          {held ? <>Bringing in email, newest first: <b>{held.toLocaleString()}</b> so far{store.lastRunAt ? `, last batch at ${new Date(store.lastRunAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' })}` : ''}. It works back through the last 60 days in batches every couple of minutes; this week’s numbers are already counted.</>
+            : <>Getting started: the first batch of email arrives within about 2 minutes of the portal starting up. Refresh this page in a moment.</>}
+        </div>
       ) : null}
 
       <section className="au-tiles">

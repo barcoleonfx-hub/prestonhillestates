@@ -19,8 +19,9 @@ const MAX_WHOLE = 3_000_000 // emails up to this size are downloaded whole
 const MAX_SOURCE = 400_000 // bigger ones: just the start, which holds the text (attachments are cut off)
 const OWN = /@prestonhillestates\.(com|co\.uk)$/i
 
-type FolderCursor = { path: string; validity: string; upTo: number }
-type StoreState = { inbox?: FolderCursor; sent?: FolderCursor; startedAt?: string; backfilled?: boolean }
+// upTo: newest email brought in. lowest: oldest one so far while working back through the last 60 days.
+type FolderCursor = { path: string; validity: string; upTo: number; lowest?: number; backfillDone?: boolean }
+type StoreState = { inbox?: FolderCursor; sent?: FolderCursor; startedAt?: string; backfilled?: boolean; lastError?: string | null; lastRunAt?: string }
 
 async function loadState(): Promise<StoreState> {
   const row = await db.query.settings.findFirst({ where: eq(settings.key, KEY) })
@@ -138,35 +139,52 @@ export async function setThreadDone(id: string, done: boolean, by: string) {
   await refreshThread(id)
 }
 
+/** Downloads the given emails (whole, or just the start of very large ones) and files them. */
+async function fetchAndStore(c: ImapFlow, path: string, uids: number[], direction: 'in' | 'out'): Promise<number> {
+  if (!uids.length) return 0
+  const sizes = new Map<number, number>()
+  for await (const m of c.fetch(uids.join(','), { uid: true, size: true }, { uid: true })) sizes.set(m.uid, m.size ?? 0)
+  const small = uids.filter((u) => (sizes.get(u) ?? 0) <= MAX_WHOLE), big = uids.filter((u) => (sizes.get(u) ?? 0) > MAX_WHOLE)
+  const raws: { uid: number; source: Buffer }[] = []
+  if (small.length) for await (const m of c.fetch(small.join(','), { uid: true, source: true }, { uid: true })) if (m.source) raws.push({ uid: m.uid, source: m.source })
+  if (big.length) for await (const m of c.fetch(big.join(','), { uid: true, source: { maxLength: MAX_SOURCE } }, { uid: true })) if (m.source) raws.push({ uid: m.uid, source: m.source })
+  let stored = 0
+  for (const r of raws) {
+    try { if (await storeMail({ raw: r.source, direction })) stored++ } catch (e) { console.error('mail store: could not read one email', path, r.uid, e) }
+  }
+  return stored
+}
+
+/**
+ * New emails first, then works backwards through the last 60 days a batch at a time,
+ * so this week's numbers are right from the first check.
+ */
 async function syncFolder(c: ImapFlow, path: string, cur: FolderCursor | undefined, direction: 'in' | 'out'): Promise<{ cursor: FolderCursor; stored: number; more: boolean }> {
   const box = await c.mailboxOpen(path, { readOnly: true })
   const validity = String(box.uidValidity)
-  let uids: number[]
-  if (!cur || cur.validity !== validity || cur.path !== path) {
-    uids = ((await c.search({ since: new Date(Date.now() - BACKFILL_DAYS * 86400000) }, { uid: true })) || []) as number[]
-    cur = { path, validity, upTo: 0 }
-  } else {
+  const top = Math.max(0, (box.uidNext ?? 1) - 1)
+  if (!cur || cur.validity !== validity || cur.path !== path || cur.lowest == null) cur = { path, validity, upTo: top, lowest: top + 1, backfillDone: false }
+  let budget = PER_RUN, stored = 0
+  // 1. Anything that has arrived since the last check.
+  if (top > cur.upTo) {
     const upTo = cur.upTo
-    uids = box.uidNext > upTo + 1 ? ((((await c.search({ uid: `${upTo + 1}:*` }, { uid: true })) || []) as number[]).filter((u) => u > upTo)) : []
+    const fresh = ((((await c.search({ uid: `${upTo + 1}:*` }, { uid: true })) || []) as number[]).filter((u) => u > upTo)).sort((x, y) => x - y).slice(0, budget)
+    stored += await fetchAndStore(c, path, fresh, direction)
+    budget -= fresh.length
+    cur = { ...cur, upTo: fresh.length ? Math.max(upTo, ...fresh) : top }
   }
-  uids.sort((a, b) => a - b)
-  const batch = uids.slice(0, PER_RUN)
-  let stored = 0
-  if (batch.length) {
-    // Normal-sized emails are downloaded whole; only very large ones (big attachments) are cut short.
-    const sizes = new Map<number, number>()
-    for await (const m of c.fetch(batch.join(','), { uid: true, size: true }, { uid: true })) sizes.set(m.uid, m.size ?? 0)
-    const small = batch.filter((u) => (sizes.get(u) ?? 0) <= MAX_WHOLE), big = batch.filter((u) => (sizes.get(u) ?? 0) > MAX_WHOLE)
-    const raws: { uid: number; source: Buffer }[] = []
-    if (small.length) for await (const m of c.fetch(small.join(','), { uid: true, source: true }, { uid: true })) if (m.source) raws.push({ uid: m.uid, source: m.source })
-    if (big.length) for await (const m of c.fetch(big.join(','), { uid: true, source: { maxLength: MAX_SOURCE } }, { uid: true })) if (m.source) raws.push({ uid: m.uid, source: m.source })
-    for (const r of raws.sort((a, b) => a.uid - b.uid)) {
-      try { if (await storeMail({ raw: r.source, direction })) stored++ } catch (e) { console.error('mail store: could not read one email', path, r.uid, e) }
-      cur = { ...cur, upTo: Math.max(cur.upTo, r.uid) }
-    }
-    cur = { ...cur, upTo: Math.max(cur.upTo, batch[batch.length - 1]) }
-  } else if (box.uidNext) cur = { ...cur, upTo: Math.max(cur.upTo, box.uidNext - 1) }
-  return { cursor: cur, stored, more: uids.length > batch.length }
+  // 2. Then the next batch of older ones, newest first.
+  let more = false
+  if (!cur.backfillDone && budget > 0) {
+    const lowest = cur.lowest ?? top + 1
+    const older = lowest > 1 ? ((((await c.search({ since: new Date(Date.now() - BACKFILL_DAYS * 86400000), uid: `1:${lowest - 1}` }, { uid: true })) || []) as number[]).filter((u) => u < lowest)) : []
+    older.sort((x, y) => y - x)
+    const batch = older.slice(0, budget)
+    stored += await fetchAndStore(c, path, batch, direction)
+    more = older.length > batch.length
+    cur = { ...cur, lowest: batch.length ? Math.min(...batch) : lowest, backfillDone: !more }
+  }
+  return { cursor: cur, stored, more }
 }
 
 /** Finds the Sent folder, whatever the server calls it. */
@@ -178,11 +196,22 @@ export async function sentFolderPath(c: ImapFlow): Promise<string | null> {
 /** Brings new inbox and sent emails into the portal. Called on every mailbox check, on an open connection. */
 export async function syncMailStore(c: ImapFlow): Promise<{ stored: number; more: boolean }> {
   const s = await loadState()
-  const a = await syncFolder(c, 'INBOX', s.inbox, 'in')
-  const sentPath = await sentFolderPath(c)
-  const b = sentPath ? await syncFolder(c, sentPath, s.sent, 'out') : { cursor: s.sent, stored: 0, more: false }
-  await saveState({ ...s, inbox: a.cursor, sent: b.cursor ?? undefined, startedAt: s.startedAt ?? now(), backfilled: s.backfilled || (!a.more && !b.more) })
-  return { stored: a.stored + b.stored, more: a.more || b.more }
+  try {
+    const a = await syncFolder(c, 'INBOX', s.inbox, 'in')
+    const sentPath = await sentFolderPath(c)
+    const b = sentPath ? await syncFolder(c, sentPath, s.sent, 'out') : { cursor: s.sent, stored: 0, more: false }
+    await saveState({ ...s, inbox: a.cursor, sent: b.cursor ?? undefined, startedAt: s.startedAt ?? now(), backfilled: !a.more && !b.more, lastError: null, lastRunAt: now() })
+    return { stored: a.stored + b.stored, more: a.more || b.more }
+  } catch (e) {
+    await saveState({ ...s, lastError: e instanceof Error ? e.message.slice(0, 200) : 'The mailbox could not be read.', lastRunAt: now() })
+    throw e
+  }
+}
+
+/** How many emails the portal holds, for the progress note on the Inbox page. */
+export async function mailStoreCount(): Promise<number> {
+  await ready()
+  return Number((await db.select({ n: sql<number>`count(*)` }).from(mailMessages))[0]?.n ?? 0)
 }
 
 /** Removes stored emails older than the retention cutoff (2 years). */
