@@ -308,3 +308,9 @@ export type Property = typeof properties.$inferSelect
 export type Media = typeof media.$inferSelect
 export type Room = typeof rooms.$inferSelect
 export type Enquiry = typeof enquiries.$inferSelect
+
+export const settings = sqliteTable('settings', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+  updatedAt: text('updated_at').notNull(),
+})

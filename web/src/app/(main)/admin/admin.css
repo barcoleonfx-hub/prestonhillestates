@@ -594,3 +594,16 @@ kbd { font: 600 0.68rem/1 var(--sans, inherit); padding: 3px 6px; border-radius:
 .pe-link { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
 .pe .pm-h { margin-top: 18px; }
 .pe-count { display: grid; gap: 3px; justify-items: start; text-decoration: none; white-space: nowrap; }
+/* email inbox */
+.mb-status { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; margin-bottom: 18px; }
+.mb-dot { width: 12px; height: 12px; border-radius: 50%; margin-top: 7px; background: var(--faint); flex: none; }
+.mb-status.on .mb-dot { background: #2E8B57; box-shadow: 0 0 0 4px rgba(46,139,87,0.15); }
+.mb-status.warn .mb-dot { background: #C77700; box-shadow: 0 0 0 4px rgba(199,119,0,0.15); }
+.mb-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.mb-form { display: grid; gap: 14px; margin-top: 14px; max-width: 760px; }
+.mb-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.mb-check { display: flex; gap: 10px; align-items: flex-start; font-size: 0.88rem; color: var(--ink-soft); }
+.mb-check input { margin-top: 3px; width: 17px; height: 17px; accent-color: var(--gold-deep); }
+.mb-how { margin-top: 18px; }
+.mb-how ul { margin: 10px 0 0 18px; display: grid; gap: 6px; color: var(--ink-soft); font-size: 0.9rem; line-height: 1.55; }
+.linkish { border: 0; background: none; padding: 0; font: inherit; color: var(--gold-deep); font-weight: 600; cursor: pointer; text-decoration: underline; }
