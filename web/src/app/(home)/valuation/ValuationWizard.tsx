@@ -117,11 +117,11 @@ export function ValuationWizard({ initialIntent, initialPostcode }: { initialInt
     if (step < 2) return go(step + 1)
     if (!checkStep(0) || !checkStep(2)) return
     setSending(true)
-    const company = (e.currentTarget as HTMLFormElement).querySelector<HTMLInputElement>('input[name=company]')?.value ?? ''
+    const hp_check = (e.currentTarget as HTMLFormElement).querySelector<HTMLInputElement>('input[name=hp_check]')?.value ?? ''
     try {
       const res = await fetch('/api/public/valuation', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), phone: phone.trim(), email: email.trim(), postcode: pc, intent, address: address.trim(), propertyType: type, bedrooms: beds, timescale: when, contactTime: time, notes: notes.trim(), company }),
+        body: JSON.stringify({ name: name.trim(), phone: phone.trim(), email: email.trim(), postcode: pc, intent, address: address.trim(), propertyType: type, bedrooms: beds, timescale: when, contactTime: time, notes: notes.trim(), hp_check }),
       })
       const r = (await res.json()) as { ok: boolean; error?: string; field?: Field }
       if (!r.ok) {
@@ -164,7 +164,7 @@ export function ValuationWizard({ initialIntent, initialPostcode }: { initialInt
       </ol>
 
       <form onSubmit={submit} noValidate>
-        <input type="text" name="company" tabIndex={-1} autoComplete="off" aria-hidden="true" style={{ position: 'absolute', left: -9999 }} />
+        <input type="text" name="hp_check" tabIndex={-1} autoComplete="off" aria-hidden="true" style={{ position: 'absolute', left: -9999 }} />
         {step === 0 ? (
           <div className="vx-pane">
             <h2>Where’s the property?</h2>

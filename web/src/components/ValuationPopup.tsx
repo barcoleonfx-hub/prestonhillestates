@@ -149,8 +149,8 @@ export function ValuationPopup({ paths = DEFAULT_PATHS }: { paths?: string[] }) 
                   <h2 id="vp-title">What’s your home <em>worth?</em></h2>
                 </div>
                 <div style={{ position: 'absolute', left: '-9999px' }} aria-hidden="true">
-                  <label htmlFor="vp-company">Company</label>
-                  <input id="vp-company" name="company" tabIndex={-1} autoComplete="off" />
+                  <label htmlFor="vp-hp">Leave this box empty</label>
+                  <input id="vp-hp" name="hp_check" tabIndex={-1} autoComplete="off" />
                 </div>
                 <div className="vp-grid">
                   <div className="field">

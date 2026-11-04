@@ -131,9 +131,9 @@ function BuyerSignup({ budget, summary }: { budget: number; summary: string }) {
     if (!name.trim()) return setState({ error: 'Please tell us your name.', field: 'name' })
     if (!phone.trim() && !email.trim()) return setState({ error: 'Add a phone number or email so we can send you homes.', field: 'phone' })
     setState({ sending: true })
-    const company = e.currentTarget.querySelector<HTMLInputElement>('input[name=company]')?.value ?? ''
+    const hp_check = e.currentTarget.querySelector<HTMLInputElement>('input[name=hp_check]')?.value ?? ''
     try {
-      const res = await fetch('/api/public/buyer', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, phone, email, areas, budget, summary, company }) })
+      const res = await fetch('/api/public/buyer', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, phone, email, areas, budget, summary, hp_check }) })
       const r = (await res.json()) as { ok: boolean; error?: string; field?: string }
       setState(r.ok ? { done: true } : { error: r.error ?? 'Something went wrong. Please call us on 020 8127 7001.', field: r.field })
     } catch {
@@ -155,7 +155,7 @@ function BuyerSignup({ budget, summary }: { budget: number; summary: string }) {
         <h3>Hear about homes in your budget first</h3>
         <p>Register as a buyer and we’ll get in touch about homes around {gbp(budget)} as they come on the market.</p>
       </div>
-      <input type="text" name="company" tabIndex={-1} autoComplete="off" aria-hidden="true" style={{ position: 'absolute', left: -9999 }} />
+      <input type="text" name="hp_check" tabIndex={-1} autoComplete="off" aria-hidden="true" style={{ position: 'absolute', left: -9999 }} />
       <div className="mc-signup-grid">
         <div className="mc-field"><label htmlFor="bs-name">Name</label><input id="bs-name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" aria-invalid={state.field === 'name' || undefined} /></div>
         <div className="mc-field"><label htmlFor="bs-phone">Phone</label><input id="bs-phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" aria-invalid={state.field === 'phone' || undefined} /></div>

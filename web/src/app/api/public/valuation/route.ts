@@ -7,7 +7,7 @@ export async function POST(req: Request) {
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null
   if (!body) return Response.json({ ok: false, error: 'Please try again.' }, { status: 400 })
   const form = new FormData()
-  for (const k of ['name', 'phone', 'email', 'postcode', 'intent', 'company', 'address', 'propertyType', 'bedrooms', 'timescale', 'contactTime', 'notes']) form.set(k, typeof body[k] === 'string' ? (body[k] as string).slice(0, 1000) : '')
+  for (const k of ['name', 'phone', 'email', 'postcode', 'intent', 'address', 'propertyType', 'bedrooms', 'timescale', 'contactTime', 'notes', 'hp_check']) form.set(k, typeof body[k] === 'string' ? (body[k] as string).slice(0, 1000) : '')
   const res = await sendValuationRequest({}, form)
   return Response.json({ ok: !!res.ok, error: res.error, field: res.field }, { status: res.ok ? 200 : 422 })
 }

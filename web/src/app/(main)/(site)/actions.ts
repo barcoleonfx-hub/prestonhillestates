@@ -12,7 +12,7 @@ const recent = new Map<string, number[]>()
 
 export async function sendEnquiry(_prev: EnquiryState, form: FormData): Promise<EnquiryState> {
   // Bots fill every field; people never see this one.
-  if (String(form.get('company') || '')) return { ok: true }
+  if (String(form.get('hp_check') || '')) { console.warn('website form dropped: anti-spam box was filled in'); return { ok: true } }
 
   const name = String(form.get('name') || '').trim().slice(0, 120)
   const phone = String(form.get('phone') || '').trim().slice(0, 40)
@@ -49,7 +49,7 @@ export type ValuationState = { ok?: boolean; error?: string; field?: string }
 const INTENTS = ['selling', 'letting', 'unsure']
 
 export async function sendValuationRequest(_prev: ValuationState, form: FormData): Promise<ValuationState> {
-  if (String(form.get('company') || '')) return { ok: true }
+  if (String(form.get('hp_check') || '')) { console.warn('website form dropped: anti-spam box was filled in'); return { ok: true } }
 
   const name = String(form.get('name') || '').trim().slice(0, 120)
   const phone = String(form.get('phone') || '').trim().slice(0, 40)
@@ -76,7 +76,7 @@ export async function sendValuationRequest(_prev: ValuationState, form: FormData
 
   const key = phone.replace(/\D/g, '')
   const times = (recent.get(key) || []).filter((t) => t > Date.now() - 3600_000)
-  if (times.length >= 5) return { ok: true }
+  if (times.length >= 5) return { error: 'We’ve already received your request. The branch will be in touch shortly.' }
   recent.set(key, [...times, Date.now()])
 
   await ready()
@@ -94,7 +94,7 @@ export type BuyerState = { ok?: boolean; error?: string; field?: string }
 
 /** "Register as a buyer" from the borrowing calculator: becomes a buyer contact with a budget, and a lead to call. */
 export async function registerBuyer(_prev: BuyerState, form: FormData): Promise<BuyerState> {
-  if (String(form.get('company') || '')) return { ok: true }
+  if (String(form.get('hp_check') || '')) { console.warn('website form dropped: anti-spam box was filled in'); return { ok: true } }
   const name = String(form.get('name') || '').trim().slice(0, 120)
   const phone = String(form.get('phone') || '').trim().slice(0, 40)
   const email = String(form.get('email') || '').trim().slice(0, 200)
@@ -109,7 +109,7 @@ export async function registerBuyer(_prev: BuyerState, form: FormData): Promise<
 
   const key = (phone.replace(/\D/g, '') || email.toLowerCase())
   const times = (recent.get(key) || []).filter((t) => t > Date.now() - 3600_000)
-  if (times.length >= 5) return { ok: true }
+  if (times.length >= 5) return { error: 'We’ve already received your details. The branch will be in touch shortly.' }
   recent.set(key, [...times, Date.now()])
 
   await ready()

@@ -87,7 +87,7 @@ html = swap(html, /<form class="val-card rv d2" onsubmit="return false;">[\s\S]*
             <input id="v-phone" name="phone" type="tel" placeholder="Mobile number" autocomplete="tel"/>
           </div>
         </div>
-        <input type="text" name="company" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px"/>
+        <input type="text" name="hp_check" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px"/>
         <p class="val-msg err" role="alert" hidden></p>
         <button class="btn gold" type="submit" style="width:100%;">Request my valuation</button>
         <p class="fine">Free and without obligation · a reply within one working day</p>
@@ -98,7 +98,7 @@ html = swap(html, /<form class="val-card rv d2" onsubmit="return false;">[\s\S]*
         </div>
       </form>`)
 // Honeypot for the pop-up form too.
-html = swap(html, '<p class="vp-error" role="alert" hidden></p>', '<input type="text" name="company" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px"/>\n          <p class="vp-error" role="alert" hidden></p>')
+html = swap(html, '<p class="vp-error" role="alert" hidden></p>', '<input type="text" name="hp_check" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px"/>\n          <p class="vp-error" role="alert" hidden></p>')
 
 // Accreditation and portal logos where we have them; otherwise the name stays as text.
 const LOGO_DIRS = ['public/accreditations', 'public/portals']
@@ -139,7 +139,7 @@ js = swap(js, "function close() {\n      try { sessionStorage.setItem(KEY, '1');
 js = swap(js, "root.querySelector('.vp-done-close').addEventListener('click', close);", "root.querySelector('.vp-done-close').addEventListener('click', function () { close(365); });")
 js = swap(js, "      err.hidden = true; form.hidden = true; done.hidden = false;\n      done.querySelector('button').focus();",
   `      var btn = form.querySelector('button[type=submit]'); btn.disabled = true; btn.textContent = 'Sending…';
-      window.pheSendValuation({ name: name, phone: tel, email: mail, postcode: pc, intent: (form.querySelector('input[name=intent]:checked') || {}).value, company: form.company.value })
+      window.pheSendValuation({ name: name, phone: tel, email: mail, postcode: pc, intent: (form.querySelector('input[name=intent]:checked') || {}).value, hp_check: form.hp_check.value })
         .then(function (r) {
           btn.disabled = false; btn.textContent = 'Request my free valuation';
           if (!r.ok) { var map = { name: 'vp-name', phone: 'vp-phone', email: 'vp-email', postcode: 'vp-postcode' }; return fail(map[r.field] || 'vp-name', r.error || 'Something went wrong. Please call us on 020 8127 7001.'); }
@@ -176,7 +176,7 @@ window.pheSendValuation = function (data) {
     if (!name) return fail('v-name', 'Please tell us your name.');
     if (!/^[0-9+()\\s-]{7,20}$/.test(tel)) return fail('v-phone', tel ? 'That phone number doesn’t look right.' : 'Add a phone number so the branch can call you.');
     var btn = form.querySelector('button[type=submit]'); btn.disabled = true; btn.textContent = 'Sending…';
-    window.pheSendValuation({ name: name, phone: tel, postcode: pc, intent: 'unsure', company: form.company.value }).then(function (r) {
+    window.pheSendValuation({ name: name, phone: tel, postcode: pc, intent: 'unsure', hp_check: form.hp_check.value }).then(function (r) {
       btn.disabled = false; btn.textContent = 'Request my valuation';
       if (!r.ok) { var map = { name: 'v-name', phone: 'v-phone', postcode: 'v-postcode' }; return fail(map[r.field] || 'v-name', r.error || 'Something went wrong. Please call us on 020 8127 7001.'); }
       try { localStorage.setItem('phe_valuation_popup', String(Date.now() + 365 * 864e5)); } catch (e) {}
