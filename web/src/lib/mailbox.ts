@@ -300,3 +300,40 @@ export async function sendFromMailbox(m: OutgoingMail): Promise<{ ok: true } | {
   await storeMail({ raw, direction: 'out', via: 'portal', sentBy: m.by ?? null }).catch((e) => console.error('could not file sent email', e))
   return { ok: true }
 }
+
+export type BulkMail = { to: string; subject: string; text: string; html: string; headers?: Record<string, string> }
+
+/**
+ * One SMTP connection for sending a batch of campaign emails from the office mailbox. Unlike sendFromMailbox,
+ * these aren't copied into Sent or the portal's inbox: thousands of newsletters would bury the real mail.
+ */
+export async function bulkSender(): Promise<{ from: string; user: string; send: (m: BulkMail) => Promise<{ ok: true } | { ok: false; error: string; fatal: boolean }>; close: () => void } | { error: string }> {
+  const s = await load()
+  if (!s?.pass) return { error: 'Connect the mailbox in Email settings first.' }
+  const pass = open(s.pass)
+  if (!pass) return { error: 'The saved mailbox password could not be read. Enter it again in Email settings.' }
+  const { host, port } = smtpFor(s)
+  const t = nodemailer.createTransport({ host, port, secure: port === 465, requireTLS: port !== 465 && port !== 25, auth: { user: s.user, pass }, connectionTimeout: 20_000, pool: true, maxConnections: 1 })
+  const from = `Preston Hill Estates <${s.user}>`
+  return {
+    from, user: s.user,
+    async send(m) {
+      try {
+        await t.sendMail({ from, to: m.to, subject: m.subject, text: m.text, html: m.html, headers: m.headers })
+        return { ok: true }
+      } catch (e) {
+        const err = e as { code?: string; responseCode?: number; message?: string }
+        const auth = err.code === 'EAUTH' || err.responseCode === 535
+        const conn = err.code === 'ETIMEDOUT' || err.code === 'ECONNECTION' || err.code === 'ESOCKET'
+        // 4xx after the connection is up usually means "slow down" (a sending limit); stop this batch and try later.
+        const limit = !!err.responseCode && err.responseCode >= 400 && err.responseCode < 500
+        return {
+          ok: false, fatal: auth || conn || limit,
+          error: auth ? 'The mail server didn’t accept the mailbox password for sending.' : conn ? `Couldn’t reach the outgoing mail server (${host}:${port}).`
+            : limit ? `The mail server asked us to slow down: ${(err.message ?? '').slice(0, 160)}` : (err.message ?? 'Sending failed.').slice(0, 200),
+        }
+      }
+    },
+    close: () => t.close(),
+  }
+}

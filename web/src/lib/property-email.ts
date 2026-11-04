@@ -203,19 +203,19 @@ export function draftFor(p: EmailProperty, r: EmailRecipient, s: Sender): Draft 
 
 // ---------- the email itself ----------
 
-const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-const SANS = 'Helvetica, Arial, sans-serif'
-const SERIF = "Georgia, 'Times New Roman', serif"
-const C = { page: '#F1EFE8', card: '#FFFFFF', cream: '#FBF8EE', ink: '#23211A', body: '#59554A', faint: '#98937F', gold: '#A47B1D', goldBtn: '#C4972F', line: '#E7E3D6', dark: '#23211A' }
+export const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+export const SANS = 'Helvetica, Arial, sans-serif'
+export const SERIF = "Georgia, 'Times New Roman', serif"
+export const C = { page: '#F1EFE8', card: '#FFFFFF', cream: '#FBF8EE', ink: '#23211A', body: '#59554A', faint: '#98937F', gold: '#A47B1D', goldBtn: '#C4972F', line: '#E7E3D6', dark: '#23211A' }
 
-const withUtm = (url: string, campaign: string) => `${url}${url.includes('?') ? '&' : '?'}utm_source=email&utm_medium=property_alert&utm_campaign=${encodeURIComponent(campaign)}`
+export const withUtm = (url: string, campaign: string, medium = 'property_alert') => `${url}${url.includes('?') ? '&' : '?'}utm_source=email&utm_medium=${medium}&utm_campaign=${encodeURIComponent(campaign)}`
 
 function paragraphs(text: string) {
   return text.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean)
     .map((p, i) => `<p style="margin:0 0 16px; font-family:${SANS}; font-size:15px; line-height:24px; color:${i === 0 ? C.ink : C.body};">${esc(p).replace(/\n/g, '<br/>')}</p>`).join('\n')
 }
 
-function button(href: string, label: string) {
+export function button(href: string, label: string) {
   return `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td align="center" bgcolor="${C.goldBtn}" style="border-radius:999px;">
 <a href="${esc(href)}" target="_blank" style="display:inline-block; padding:15px 30px; font-family:${SANS}; font-size:13px; font-weight:bold; letter-spacing:2px; text-transform:uppercase; color:#FFFFFF; text-decoration:none; border-radius:999px;">${esc(label)}</a>
 </td></tr></table>`
