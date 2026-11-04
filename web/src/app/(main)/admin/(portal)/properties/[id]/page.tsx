@@ -6,12 +6,15 @@ import { deleteProperty } from '../../../actions'
 import { PropertyEditor } from './PropertyEditor'
 import { DeleteButton } from './DeleteButton'
 import { PropertyMatches } from './PropertyMatches'
+import { PropertyEnquiries } from './PropertyEnquiries'
+import { ready } from '@/db/client'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Edit property' }
 
 export default async function EditPropertyPage({ params }: { params: Promise<{ id: string }> }) {
   await requireAdmin()
+  await ready()
   const { id } = await params
   const p = await getProperty(id)
   if (!p) notFound()
@@ -39,9 +42,16 @@ export default async function EditPropertyPage({ params }: { params: Promise<{ i
           </form>
         </div>
       </div>
+      <nav className="pe-jump" aria-label="On this page">
+        <a href="#enquiries">Enquiries</a><a href="#matches">Other applicants to call</a><a href="#details">Property details</a>
+      </nav>
+      <div style={{ marginBottom: 22 }}>
+        <PropertyEnquiries property={p} />
+      </div>
       <div style={{ marginBottom: 22 }}>
         <PropertyMatches property={p} />
       </div>
+      <div id="details" />
       <PropertyEditor property={p} />
     </>
   )

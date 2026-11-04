@@ -1,10 +1,11 @@
-import { eq, like, or, sql } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { db, ready } from '@/db/client'
-import { contacts, enquiries, properties } from '@/db/schema'
+import { contacts, enquiries } from '@/db/schema'
 import { currentAdmin } from '@/lib/auth'
 import { audit, upsertContact } from '@/lib/contacts'
 import { dropBatch, importable, readBatch, validBatch } from '@/lib/import-batches'
 import { uid } from '@/lib/util'
+import { matchProperty } from '@/lib/enquiry-links'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -21,20 +22,6 @@ function position(situation: string | null): string | null {
   if (/mortgage/.test(t)) return 'Mortgage agreed in principle'
   if (/invest/.test(t)) return 'Investor'
   return situation.replace(/^i am an?\s+/i, '').replace(/^./, (c) => c.toUpperCase()).slice(0, 80)
-}
-
-/** Links the enquiry to one of our listings when the street and postcode area match. */
-async function matchProperty(about: string | null, postcode: string | null): Promise<string | null> {
-  if (!about) return null
-  const street = about.split(',').map((p) => p.trim().replace(/^\d+[a-z]?\s+/i, '')).find((p) => /[a-z]{3,}/i.test(p) && !/^\d/.test(p))
-  if (!street) return null
-  const outward = (postcode ?? /\b([A-Z]{1,2}\d[A-Z\d]?)\b/i.exec(about.split(',').pop() ?? '')?.[1] ?? '').split(' ')[0].toUpperCase()
-  const st = `%${street.toLowerCase()}%`
-  const rows = await db.select({ id: properties.id, postcode: properties.postcode }).from(properties)
-    .where(or(like(sql`lower(${properties.street})`, st), like(sql`lower(${properties.displayAddress})`, st)))
-    .limit(5)
-  const hit = rows.find((r) => !outward || (r.postcode ?? '').toUpperCase().startsWith(outward)) ?? null
-  return hit?.id ?? null
 }
 
 const SOURCE_FOR_CONTACT: Record<string, string | null> = { zoopla: 'Zoopla', onthemarket: 'OnTheMarket', website: 'Our website', email: null }

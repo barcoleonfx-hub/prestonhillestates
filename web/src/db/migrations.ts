@@ -246,4 +246,19 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       `ALTER TABLE contacts ADD COLUMN wanted_type TEXT`,
     ],
   },
+  {
+    id: '008_enquiry_notes',
+    sql: [
+      // Staff comments on an enquiry ("left a voicemail", "wants a 3-bed instead"), and a faster per-property lookup.
+      `CREATE TABLE enquiry_notes (
+        id TEXT PRIMARY KEY,
+        enquiry_id TEXT NOT NULL REFERENCES enquiries(id) ON DELETE CASCADE,
+        body TEXT NOT NULL,
+        created_by TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      )`,
+      `CREATE INDEX enquiry_notes_enquiry_idx ON enquiry_notes (enquiry_id, created_at)`,
+      `CREATE INDEX enquiries_property_idx ON enquiries (property_id, created_at)`,
+    ],
+  },
 ]
