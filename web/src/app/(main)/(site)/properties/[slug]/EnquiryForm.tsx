@@ -14,8 +14,8 @@ export function EnquiryForm({ propertyId, isLet }: { propertyId: string; isLet: 
         <form action={action}>
           <input type="hidden" name="propertyId" value={propertyId} />
           <div style={{ position: 'absolute', left: '-9999px' }} aria-hidden="true">
-            <label htmlFor="enq-company">Company</label>
-            <input id="enq-company" name="company" tabIndex={-1} autoComplete="off" />
+            <label htmlFor="enq-hp">Leave this box empty</label>
+            <input id="enq-hp" name="hp_check" tabIndex={-1} autoComplete="off" />
           </div>
           <div><label htmlFor="enq-name">Your name</label><input id="enq-name" name="name" autoComplete="name" required /></div>
           <div><label htmlFor="enq-phone">Phone</label><input id="enq-phone" name="phone" type="tel" autoComplete="tel" /></div>
