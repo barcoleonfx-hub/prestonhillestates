@@ -50,6 +50,16 @@ export default async function EmailInboxPage() {
         <ConnectForm user={s?.user ?? 'info@prestonhillestates.com'} host={s?.host ?? FASTHOSTS_IMAP} port={s?.port ?? 993} includePeople={s?.includePeople ?? false} hasPassword={!!s?.hasPassword} />
       </section>
 
+      {s?.hasPassword ? (
+        <section className="card card-pad mb-audit">
+          <div>
+            <h2>Inbox audit</h2>
+            <p className="card-sub">See what really arrives in this inbox (repairs, solicitors, rent, invoices, leads and more), month by month and who from, to plan what the team dashboard should show.</p>
+          </div>
+          <Link className="btn btn-dark" href="/admin/email-inbox/audit">Open the audit</Link>
+        </section>
+      ) : null}
+
       <section className="card card-pad mb-how">
         <h2>How it works</h2>
         <ul>
