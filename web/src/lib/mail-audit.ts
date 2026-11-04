@@ -48,9 +48,9 @@ const KEYWORDS: [string, RegExp][] = [
   ['landlords', /\b(landlord|management fee|landlord statement|your property at|let only|fully managed|rent collection)\b/],
   ['accounts', /\b(invoice|receipt|bill|vat|payment received|remittance|direct debit|bank transfer|statement of account|quote\b|quotation)\b/],
 ]
-const PERSONAL = /@(gmail|googlemail|hotmail|outlook|live|yahoo|icloud|me|aol|btinternet|sky|virginmedia|ntlworld|talktalk|msn)\./
+export const PERSONAL = /@(gmail|googlemail|hotmail|outlook|live|yahoo|icloud|me|aol|btinternet|sky|virginmedia|ntlworld|talktalk|msn)\./
 const OWN = /@prestonhillestates\.(com|co\.uk)$/
-const NO_REPLY = /no-?reply|do-?not-?reply|notifications?@|mailer|bounce|newsletter|marketing|info@.*(news|mail)/
+export const NO_REPLY = /no-?reply|do-?not-?reply|notifications?@|mailer|bounce|newsletter|marketing|info@.*(news|mail)/
 
 export function classify(from: string, subject: string, body: string, bulk: boolean): string {
   const f = from.toLowerCase()

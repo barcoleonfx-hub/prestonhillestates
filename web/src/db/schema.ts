@@ -314,3 +314,54 @@ export const settings = sqliteTable('settings', {
   value: text('value').notNull(),
   updatedAt: text('updated_at').notNull(),
 })
+
+export const mailThreads = sqliteTable('mail_threads', {
+  id: text('id').primaryKey(),
+  subject: text('subject').notNull(),
+  normSubject: text('norm_subject').notNull(),
+  counterpart: text('counterpart'),
+  counterpartName: text('counterpart_name'),
+  area: text('area').notNull(),
+  kind: text('kind'),
+  /** pending (waiting for our reply) · replied · done (marked dealt with) · info (no reply expected) · promo */
+  status: text('status').notNull(),
+  firstAt: text('first_at').notNull(),
+  lastAt: text('last_at').notNull(),
+  lastInAt: text('last_in_at'),
+  lastOutAt: text('last_out_at'),
+  messageCount: integer('message_count').notNull().default(0),
+  doneAt: text('done_at'),
+  doneBy: text('done_by'),
+  contactId: text('contact_id'),
+})
+
+export const mailMessages = sqliteTable('mail_messages', {
+  id: text('id').primaryKey(),
+  messageId: text('message_id').notNull().unique(),
+  threadId: text('thread_id').notNull().references(() => mailThreads.id, { onDelete: 'cascade' }),
+  direction: text('direction').notNull(), // in | out
+  fromAddr: text('from_addr'),
+  fromName: text('from_name'),
+  replyTo: text('reply_to'),
+  toAddrs: text('to_addrs'),
+  ccAddrs: text('cc_addrs'),
+  subject: text('subject'),
+  sentAt: text('sent_at').notNull(),
+  snippet: text('snippet'),
+  body: text('body'),
+  inReplyTo: text('in_reply_to'),
+  refs: text('refs'),
+  area: text('area').notNull(),
+  kind: text('kind'),
+  promo: integer('promo', { mode: 'boolean' }).notNull().default(false),
+  needsReply: integer('needs_reply', { mode: 'boolean' }).notNull().default(false),
+  unsubscribe: text('unsubscribe'),
+  unsubscribePost: integer('unsubscribe_post', { mode: 'boolean' }).notNull().default(false),
+  attachments: integer('attachments').notNull().default(0),
+  via: text('via'), // portal | mailbox
+  sentBy: text('sent_by'),
+  createdAt: text('created_at').notNull(),
+})
+
+export type MailThread = typeof mailThreads.$inferSelect
+export type MailMessage = typeof mailMessages.$inferSelect

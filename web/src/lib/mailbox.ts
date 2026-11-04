@@ -11,6 +11,8 @@ import { saveEmailRow } from '@/lib/email-intake'
 import { enquiryLabel } from '@/lib/enquiry-labels'
 import { open, seal } from '@/lib/secret-box'
 import { now, uid } from '@/lib/util'
+import nodemailer from 'nodemailer'
+import { sentFolderPath, storeMail, syncMailStore } from '@/lib/mail-store'
 
 // Reads new emails from the office mailbox (IMAP, e.g. Fasthosts) every few minutes and turns
 // Zoopla, OnTheMarket and website-form leads into enquiries under "Needs a reply", with an alert.
@@ -28,6 +30,8 @@ export type MailboxSettings = {
   uidValidity?: string; lastUid?: number
   lastCheckAt?: string; lastOkAt?: string; lastError?: string | null; lastFound?: number; totalFound?: number
   connectedAt?: string
+  smtpHost?: string; smtpPort?: number
+  lastStored?: number
 }
 export type MailboxStatus = Omit<MailboxSettings, 'pass'> & { hasPassword: boolean }
 
@@ -199,6 +203,9 @@ export async function checkMailbox(opts: { force?: boolean } = {}): Promise<Chec
         if (m.source) raws.push({ uid: m.uid, source: m.source.toString('utf8') })
       }
     }
+    // Keep the portal's copy of the inbox and sent mail up to date (for the Inbox page).
+    let stored = s.lastStored ?? 0
+    try { stored = (await syncMailStore(c)).stored } catch (e) { console.error('mail store sync failed', e) }
     await c.logout().catch(() => c.close())
 
     for (const { uid: u, source } of raws.sort((a, b) => a.uid - b.uid)) {
@@ -224,7 +231,7 @@ export async function checkMailbox(opts: { force?: boolean } = {}): Promise<Chec
     }
     if (!raws.length && uids.length) lastUid = Math.max(lastUid, ...batch)
     if (!uids.length && box.uidNext) lastUid = Math.max(lastUid, box.uidNext - 1)
-    await store({ ...s, uidValidity, lastUid, lastCheckAt: now(), lastOkAt: now(), lastError: null, lastFound: found, totalFound: (s.totalFound ?? 0) + found })
+    await store({ ...s, uidValidity, lastUid, lastCheckAt: now(), lastOkAt: now(), lastError: null, lastFound: found, totalFound: (s.totalFound ?? 0) + found, lastStored: stored })
     return { ran: true, found }
   } catch (e) {
     await c.logout().catch(() => c.close())
@@ -243,4 +250,47 @@ export async function openSavedMailbox(): Promise<ImapFlow> {
   const c = client(s.host, s.port, s.user, pass)
   await c.connect()
   return c
+}
+
+/** The outgoing (SMTP) server for the saved mailbox: Fasthosts' by default. */
+function smtpFor(s: MailboxSettings) {
+  const host = s.smtpHost || (/livemail\.co\.uk$/.test(s.host) ? 'smtp.livemail.co.uk' : s.host.replace(/^(imap|mail)\./, 'smtp.'))
+  const port = s.smtpPort || 465
+  return { host, port }
+}
+
+export type OutgoingMail = { to: string[]; cc?: string[]; subject: string; text: string; inReplyTo?: string | null; references?: string[]; by?: string | null }
+
+/**
+ * Sends an email from the office mailbox, puts a copy in its Sent folder (so Apple Mail shows it too)
+ * and files it in the portal's conversation history.
+ */
+export async function sendFromMailbox(m: OutgoingMail): Promise<{ ok: true } | { ok: false; error: string }> {
+  const s = await load()
+  if (!s?.pass) return { ok: false, error: 'Connect the mailbox on the Email inbox page first.' }
+  const pass = open(s.pass)
+  if (!pass) return { ok: false, error: 'The saved mailbox password could not be read. Enter it again on the Email inbox page.' }
+  const from = `Preston Hill Estates <${s.user}>`
+  // Build the message once, so exactly the same email is sent, saved in Sent and kept in the portal.
+  const built = await nodemailer.createTransport({ streamTransport: true, buffer: true, newline: 'windows' }).sendMail({
+    from, to: m.to, cc: m.cc?.length ? m.cc : undefined, subject: m.subject, text: m.text,
+    inReplyTo: m.inReplyTo ?? undefined, references: m.references?.length ? m.references : undefined,
+  })
+  const raw = built.message as Buffer
+  const { host, port } = smtpFor(s)
+  try {
+    await nodemailer.createTransport({ host, port, secure: port === 465, requireTLS: port !== 465 && port !== 25, auth: { user: s.user, pass }, connectionTimeout: 20_000 })
+      .sendMail({ envelope: { from: s.user, to: [...m.to, ...(m.cc ?? [])] }, raw })
+  } catch (e) {
+    const err = e as { code?: string; responseCode?: number; message?: string }
+    const why = err.code === 'EAUTH' || err.responseCode === 535 ? 'The mail server didn’t accept the mailbox password for sending.'
+      : err.code === 'ETIMEDOUT' || err.code === 'ECONNECTION' || err.code === 'ESOCKET' ? `Couldn’t reach the outgoing mail server (${host}:${port}).`
+      : (err.message ?? 'Sending failed.').slice(0, 200)
+    return { ok: false, error: why }
+  }
+  // Copy into Sent, then into the portal's history. Neither should undo a send that worked.
+  const c = client(s.host, s.port, s.user, pass)
+  try { await c.connect(); const path = await sentFolderPath(c); if (path) await c.append(path, raw, ['\\Seen']) } catch (e) { console.error('could not save a copy in Sent', e) } finally { await c.logout().catch(() => c.close()) }
+  await storeMail({ raw, direction: 'out', via: 'portal', sentBy: m.by ?? null }).catch((e) => console.error('could not file sent email', e))
+  return { ok: true }
 }

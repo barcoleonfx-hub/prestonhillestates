@@ -1,4 +1,5 @@
 import 'server-only'
+import { pruneMail } from '@/lib/mail-store'
 import { getClient, ready } from '@/db/client'
 
 /** How long personal details are kept after the last contact. Agreed with the office: 2 years. */
@@ -58,6 +59,7 @@ export async function runRetention(opts: { force?: boolean } = {}): Promise<Rete
     { sql: 'DELETE FROM notification_reads WHERE notification_id IN (SELECT id FROM notifications WHERE created_at < ?)', args: [new Date(Date.now() - 30 * 86400000).toISOString()] },
     { sql: 'DELETE FROM notifications WHERE created_at < ?', args: [new Date(Date.now() - 30 * 86400000).toISOString()] },
   ], 'write')
+  await pruneMail(cutoff).catch((e) => console.error('mail prune failed', e))
   const off = ids.length ? 6 : 0
   const res = { ran: true, contacts: ids.length, enquiries: results[off].rowsAffected, appointments: results[off + 1].rowsAffected }
   await client.execute({ sql: "UPDATE jobs SET detail = ? WHERE name = 'retention'", args: [JSON.stringify({ at: nowIso, ...res })] }).catch(() => {})
