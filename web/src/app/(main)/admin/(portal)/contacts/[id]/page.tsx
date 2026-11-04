@@ -41,7 +41,7 @@ export default async function ContactPage({ params }: { params: Promise<{ id: st
       <div className="page-head">
         <div>
           <p className="crumb"><Link href="/admin/contacts">Contacts</Link></p>
-          <h1>{c.name}{c.archived ? <span className="pill draft" style={{ marginLeft: 10, verticalAlign: 6 }}>Archived</span> : null}{c.doNotContact ? <span className="pill warn" style={{ marginLeft: 10, verticalAlign: 6 }}>Do not call back</span> : null}</h1>
+          <h1>{c.name}{c.archived ? <span className="pill draft" style={{ marginLeft: 10, verticalAlign: 6 }}>Archived</span> : null}{c.doNotContact ? <span className="pill warn" style={{ marginLeft: 10, verticalAlign: 6 }}>Do not call back</span> : null}{c.marketingOptOut ? <span className="pill" style={{ marginLeft: 10, verticalAlign: 6 }} title="Unsubscribed from emails about new listings">No property emails</span> : null}</h1>
           <p className="sub contact-sub">
             {c.phone ? <a href={`tel:${c.phone}`}>{c.phone}</a> : null}
             {c.phone2 ? <a href={`tel:${c.phone2}`}>{c.phone2}</a> : null}
