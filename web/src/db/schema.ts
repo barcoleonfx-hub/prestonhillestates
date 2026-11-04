@@ -238,6 +238,7 @@ export const contacts = sqliteTable(
     ownerId: text('owner_id').references(() => admins.id, { onDelete: 'set null' }),
     archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
     doNotContact: integer('do_not_contact', { mode: 'boolean' }).notNull().default(false),
+    marketingOptOut: integer('marketing_opt_out', { mode: 'boolean' }).notNull().default(false),
     wantedType: text('wanted_type'),
     lastContactAt: text('last_contact_at'),
     createdBy: text('created_by'),
@@ -245,6 +246,22 @@ export const contacts = sqliteTable(
     updatedAt: text('updated_at').notNull(),
   },
   (t) => [index('contacts_phone_idx').on(t.phoneNorm), index('contacts_email_idx').on(t.emailNorm), index('contacts_last_idx').on(t.lastContactAt)],
+)
+
+export const propertyEmails = sqliteTable(
+  'property_emails',
+  {
+    id: text('id').primaryKey(),
+    propertyId: text('property_id').notNull().references(() => properties.id, { onDelete: 'cascade' }),
+    contactId: text('contact_id').references(() => contacts.id, { onDelete: 'set null' }),
+    email: text('email').notNull(),
+    subject: text('subject').notNull(),
+    status: text('status').notNull(),
+    error: text('error'),
+    sentBy: text('sent_by'),
+    sentAt: text('sent_at').notNull(),
+  },
+  (t) => [index('property_emails_property_idx').on(t.propertyId, t.contactId)],
 )
 
 export const calls = sqliteTable(

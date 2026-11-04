@@ -681,3 +681,39 @@ kbd { font: 600 0.68rem/1 var(--sans, inherit); padding: 3px 6px; border-radius:
 .rf-body { min-height: 150px; padding: 12px; font: inherit; line-height: 1.5; resize: vertical; }
 .rf-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 @media (max-width: 700px) { .ib-two { grid-template-columns: 1fr; } .mr { grid-template-columns: 1fr; grid-template-areas: "who" "subj" "meta"; } .mr-meta { justify-content: flex-start; } }
+
+/* ---------- Email past applicants about a listing ---------- */
+.pmail { display: grid; grid-template-columns: minmax(300px, 400px) minmax(0, 1fr); gap: 18px; align-items: start; }
+.pmail-list { padding: 0; overflow: hidden; position: sticky; top: 16px; max-height: calc(100vh - 32px); display: flex; flex-direction: column; }
+.pmail-list-head { padding: 20px 20px 12px; display: flex; flex-direction: column; gap: 10px; border-bottom: 1px solid var(--line-soft); }
+.pmail-list-head h2 { font-size: 1.05rem; }
+.pmail-bulk { display: flex; gap: 6px; }
+.pmail-list ul { list-style: none; margin: 0; padding: 6px; overflow: auto; flex: 1; }
+.pmail-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 8px 10px; border-radius: 12px; }
+.pmail-row.on { background: var(--gold-wash); box-shadow: inset 0 0 0 1px var(--gold-tint); }
+.pmail-row input { width: 16px; height: 16px; accent-color: var(--gold-deep); }
+.pmail-pick { all: unset; cursor: pointer; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.pmail-pick:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 6px; }
+.pmail-name { font-weight: 700; font-size: 0.92rem; display: flex; gap: 6px; align-items: center; }
+.pmail-edited { font-size: 0.62rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gold-deep); background: var(--gold-tint); padding: 1px 6px; border-radius: 999px; }
+.pmail-mail, .pmail-why { font-size: 0.78rem; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pmail-why { color: var(--ink-soft); }
+.pm-score.sm { width: 32px; height: 32px; font-size: 0.78rem; }
+.pmail-send { padding: 14px 20px 18px; border-top: 1px solid var(--line-soft); display: flex; flex-direction: column; gap: 10px; background: var(--surface); }
+.pmail-send .btn { width: 100%; justify-content: center; }
+.pmail-edit { padding: 22px; min-width: 0; }
+.pmail-edit-head { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; margin-bottom: 16px; flex-wrap: wrap; }
+.pmail-tools { display: flex; gap: 6px; flex-wrap: wrap; }
+.pmail-preview-head { display: flex; justify-content: space-between; align-items: center; margin: 22px 0 10px; }
+.pmail-preview-head h3 { font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); }
+.seg button { all: unset; cursor: pointer; padding: 6px 14px; border-radius: 999px; font-size: 0.8rem; font-weight: 600; color: var(--ink-soft); }
+.seg button.on { background: var(--charcoal); color: #fff; }
+.pmail-frame-wrap { background: #F1EFE8; border-radius: 14px; padding: 0; overflow: hidden; display: flex; justify-content: center; }
+.pmail-frame { border: 0; height: 1400px; background: #F1EFE8; display: block; }
+.pmail-frame.desktop { width: 100%; max-width: 680px; }
+.pmail-frame.mobile { width: 375px; }
+@media (max-width: 1000px) {
+  .pmail { grid-template-columns: 1fr; }
+  .pmail-list { position: static; max-height: none; }
+  .pmail-list ul { max-height: 420px; }
+}

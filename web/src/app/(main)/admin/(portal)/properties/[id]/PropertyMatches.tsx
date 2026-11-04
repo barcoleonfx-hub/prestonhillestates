@@ -55,6 +55,7 @@ export async function PropertyMatches({ property }: { property: Property }) {
   const recent = all.recent.filter((m) => !asked.has(m.contactId))
   const older = all.older.filter((m) => !asked.has(m.contactId))
   const total = recent.length + older.length
+  const withEmail = [...recent, ...older].filter((m) => m.email).length
   return (
     <section className="card card-pad pm" id="matches" aria-labelledby="pm-h">
       <div className="today-head">
@@ -62,6 +63,7 @@ export async function PropertyMatches({ property }: { property: Property }) {
           <h2 id="pm-h">Other applicants to call · {total}</h2>
           <p className="card-sub">People who enquired about other homes, or told us their requirements, and fit this {property.channel === 'let' ? 'rental' : 'sale'} on price, area, bedrooms and type. Anyone marked “Do not call back” is left out.</p>
         </div>
+        {withEmail ? <Link className="btn btn-gold btn-sm" href={`/admin/properties/${property.id}/email`}>Email {withEmail} of them</Link> : null}
       </div>
       {total === 0 ? (
         <p className="card-sub" style={{ marginTop: 10 }}>No matches yet. Add the price, bedrooms and postcode so we can match, and log buyers’ requirements when they call.</p>

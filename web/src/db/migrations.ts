@@ -376,4 +376,24 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       `CREATE INDEX postcode_geo_en_idx ON postcode_geo (e, n)`,
     ],
   },
+  {
+    id: '015_property_emails',
+    sql: [
+      // People who've asked not to get property emails from us (one click in any email we send).
+      `ALTER TABLE contacts ADD COLUMN marketing_opt_out INTEGER NOT NULL DEFAULT 0`,
+      // Each tailored property email sent to a past applicant, so nobody gets the same listing twice.
+      `CREATE TABLE property_emails (
+        id TEXT PRIMARY KEY,
+        property_id TEXT NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
+        contact_id TEXT REFERENCES contacts(id) ON DELETE SET NULL,
+        email TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        status TEXT NOT NULL,
+        error TEXT,
+        sent_by TEXT,
+        sent_at TEXT NOT NULL
+      )`,
+      `CREATE INDEX property_emails_property_idx ON property_emails (property_id, contact_id)`,
+    ],
+  },
 ]
