@@ -3,7 +3,7 @@ import { enquiryLabel } from './enquiry-labels'
 import { after } from 'next/server'
 import { and, asc, desc, eq, inArray, isNull, like, lte, or, sql } from 'drizzle-orm'
 import { db, ready } from '@/db/client'
-import { admins, appointments, auditLog, calls, contacts, enquiries, notifications, properties, tasks, type Contact } from '@/db/schema'
+import { admins, appointments, auditLog, calls, contacts, enquiries, enquiryNotes, notifications, properties, tasks, type Contact } from '@/db/schema'
 import { addRole, normEmail, normPhone, prettyPhone, roleLabel, rolesOf } from './crm-options'
 import { portalUrl, sendMail, staffEmailHtml } from './mailer'
 import { fmtWhen } from './time'
@@ -107,7 +107,7 @@ export async function getContact(id: string): Promise<(Contact & { ownerName: st
 
 export type TimelineItem = {
   at: string
-  type: 'call' | 'task' | 'task_done' | 'enquiry' | 'appointment' | 'outcome' | 'created'
+  type: 'call' | 'task' | 'task_done' | 'enquiry' | 'appointment' | 'outcome' | 'created' | 'note'
   title: string
   body?: string | null
   by?: string | null
@@ -119,13 +119,15 @@ export type TimelineItem = {
 export async function timelineFor(contact: Contact): Promise<TimelineItem[]> {
   const people = new Map((await db.select({ id: admins.id, name: admins.name }).from(admins)).map((a) => [a.id, a.name]))
   const who = (id: string | null) => (id ? people.get(id) ?? 'Someone' : null)
-  const [callRows, taskRows, enqRows, apptRows] = await Promise.all([
+  const [callRows, taskRows, enqRows, apptRows, noteRows] = await Promise.all([
     db.select({ c: calls, ref: properties.ref }).from(calls).leftJoin(properties, eq(calls.propertyId, properties.id))
       .where(eq(calls.contactId, contact.id)).orderBy(desc(calls.createdAt)).limit(200),
     db.select().from(tasks).where(eq(tasks.contactId, contact.id)).limit(200),
     db.select({ e: enquiries, ref: properties.ref }).from(enquiries).leftJoin(properties, eq(enquiries.propertyId, properties.id))
       .where(eq(enquiries.contactId, contact.id)).limit(100),
     db.select().from(appointments).where(eq(appointments.contactId, contact.id)).limit(100),
+    db.select({ n: enquiryNotes, ref: properties.ref }).from(enquiryNotes).innerJoin(enquiries, eq(enquiryNotes.enquiryId, enquiries.id))
+      .leftJoin(properties, eq(enquiries.propertyId, properties.id)).where(eq(enquiries.contactId, contact.id)).limit(300),
   ])
   const items: TimelineItem[] = []
   for (const { c, ref } of callRows) {
@@ -153,6 +155,7 @@ export async function timelineFor(contact: Contact): Promise<TimelineItem[]> {
     })
     if (a.outcomeAt) items.push({ id: `${a.id}-o`, at: a.outcomeAt, type: 'outcome', by: who(a.outcomeBy), href: `/admin/diary/${a.id}`, title: `Outcome: ${a.outcomeNext}`, body: a.outcomeNotes })
   }
+  for (const { n, ref } of noteRows) items.push({ id: n.id, at: n.createdAt, type: 'note', by: who(n.createdBy), title: `Comment on their enquiry${ref ? ` about ${ref}` : ''}`, body: n.body })
   items.push({ id: `${contact.id}-c`, at: contact.createdAt, type: 'created', by: who(contact.createdBy), title: 'Added to contacts' })
   return items.sort((x, y) => (x.at < y.at ? 1 : -1))
 }

@@ -1,4 +1,7 @@
 import Link from 'next/link'
+import { eq } from 'drizzle-orm'
+import { db } from '@/db/client'
+import { enquiries } from '@/db/schema'
 import type { Property } from '@/db/schema'
 import { matchesForProperty, type Match } from '@/lib/matching'
 import { RECENT_DAYS, outcomeText } from '@/lib/enquiry-labels'
@@ -46,14 +49,18 @@ function Rows({ list, prop }: { list: Match[]; prop: Property }) {
 
 /** Past applicants who fit this listing, newest first, so the team knows who to ring when it comes on. */
 export async function PropertyMatches({ property }: { property: Property }) {
-  const { recent, older } = await matchesForProperty(property)
+  const all = await matchesForProperty(property)
+  // People who asked about this listing are already in "Enquiries about this property" above.
+  const asked = new Set((await db.select({ c: enquiries.contactId }).from(enquiries).where(eq(enquiries.propertyId, property.id))).map((r) => r.c))
+  const recent = all.recent.filter((m) => !asked.has(m.contactId))
+  const older = all.older.filter((m) => !asked.has(m.contactId))
   const total = recent.length + older.length
   return (
     <section className="card card-pad pm" id="matches" aria-labelledby="pm-h">
       <div className="today-head">
         <div>
-          <h2 id="pm-h">Applicants to call · {total}</h2>
-          <p className="card-sub">People whose past enquiries or requirements fit this {property.channel === 'let' ? 'rental' : 'sale'} on price, area, bedrooms and type. Anyone marked “Do not call back” is left out.</p>
+          <h2 id="pm-h">Other applicants to call · {total}</h2>
+          <p className="card-sub">People who enquired about other homes, or told us their requirements, and fit this {property.channel === 'let' ? 'rental' : 'sale'} on price, area, bedrooms and type. Anyone marked “Do not call back” is left out.</p>
         </div>
       </div>
       {total === 0 ? (

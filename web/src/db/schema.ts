@@ -144,6 +144,18 @@ export const enquiries = sqliteTable('enquiries', {
   createdAt: text('created_at').notNull(),
 })
 
+export const enquiryNotes = sqliteTable(
+  'enquiry_notes',
+  {
+    id: text('id').primaryKey(),
+    enquiryId: text('enquiry_id').notNull().references(() => enquiries.id, { onDelete: 'cascade' }),
+    body: text('body').notNull(),
+    createdBy: text('created_by').notNull(),
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [index('enquiry_notes_enquiry_idx').on(t.enquiryId, t.createdAt)],
+)
+
 export const appointments = sqliteTable(
   'appointments',
   {

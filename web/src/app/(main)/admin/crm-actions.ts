@@ -3,12 +3,13 @@
 import { revalidatePath } from 'next/cache'
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { db, ready } from '@/db/client'
-import { admins, calls, contacts, enquiries, properties, tasks } from '@/db/schema'
+import { admins, calls, contacts, enquiries, enquiryNotes, properties, tasks } from '@/db/schema'
 import { requireAdmin, requireRole } from '@/lib/auth'
 import { audit, notifyTask, upsertContact } from '@/lib/contacts'
 import { CALL_NEXT, CALLER_TYPES, DIRECTIONS, addRole, normEmail, normPhone, parseMoney, prettyPhone, SOURCES } from '@/lib/crm-options'
 import { londonToIso } from '@/lib/time'
 import { now, uid } from '@/lib/util'
+import { unlinkedFor } from '@/lib/enquiry-links'
 
 const str = (form: FormData, k: string, max = 500) => String(form.get(k) ?? '').trim().slice(0, max)
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -247,5 +248,46 @@ export async function setDoNotContact(form: FormData) {
   const on = form.get('on') === '1'
   await db.update(contacts).set({ doNotContact: on, updatedAt: now() }).where(eq(contacts.id, id))
   await audit(me.id, on ? 'do_not_contact' : 'allow_contact', 'contact', id)
+  revalidatePath('/admin', 'layout')
+}
+
+/** A staff comment on an enquiry, e.g. "Left a voicemail" or "Viewing Saturday, wants parking". */
+export async function addEnquiryNote(_prev: SimpleState, form: FormData): Promise<SimpleState> {
+  const me = await requireAdmin()
+  await ready()
+  const id = str(form, 'id', 64)
+  const body = str(form, 'body', 1000)
+  if (!body) return { error: 'Write a comment first.' }
+  const e = await db.query.enquiries.findFirst({ where: eq(enquiries.id, id) })
+  if (!e) return { error: 'That enquiry no longer exists.' }
+  await db.insert(enquiryNotes).values({ id: uid(), enquiryId: id, body, createdBy: me.id, createdAt: now() })
+  if (!e.handled) await db.update(enquiries).set({ handled: true }).where(eq(enquiries.id, id))
+  await audit(me.id, 'enquiry_note', 'enquiry', id, body.slice(0, 80))
+  revalidatePath('/admin', 'layout')
+  return { ok: true }
+}
+
+/** Points an enquiry at one of our listings (or none), when the email didn't say clearly enough. */
+export async function linkEnquiry(form: FormData) {
+  const me = await requireAdmin()
+  await ready()
+  const id = str(form, 'id', 64)
+  const propertyId = str(form, 'propertyId', 64) || null
+  if (propertyId && !(await db.query.properties.findFirst({ where: eq(properties.id, propertyId) }))) return
+  await db.update(enquiries).set({ propertyId }).where(eq(enquiries.id, id))
+  await audit(me.id, 'enquiry_link', 'enquiry', id, propertyId ?? 'unlinked')
+  revalidatePath('/admin', 'layout')
+}
+
+/** Links every unlinked enquiry that mentions this listing's street (and postcode area). */
+export async function linkMatchingEnquiries(form: FormData) {
+  const me = await requireAdmin()
+  await ready()
+  const propertyId = str(form, 'propertyId', 64)
+  const p = await db.query.properties.findFirst({ where: eq(properties.id, propertyId) })
+  if (!p) return
+  const ids = (await unlinkedFor(p)).map((r) => r.id)
+  for (let i = 0; i < ids.length; i += 200) await db.update(enquiries).set({ propertyId }).where(and(inArray(enquiries.id, ids.slice(i, i + 200)), isNull(enquiries.propertyId)))
+  if (ids.length) await audit(me.id, 'enquiry_link', 'property', propertyId, `${ids.length} linked`)
   revalidatePath('/admin', 'layout')
 }

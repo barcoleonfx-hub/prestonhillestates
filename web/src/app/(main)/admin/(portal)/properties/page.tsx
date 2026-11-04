@@ -3,6 +3,10 @@ import { requireAdmin } from '@/lib/auth'
 import { CHANNELS, STATUSES } from '@/lib/options'
 import { displayAddressFor, listForAdmin, priceLabel, statusLabel } from '@/lib/properties'
 import { matchCounts } from '@/lib/matching'
+import { isNotNull, sql } from 'drizzle-orm'
+import { db } from '@/db/client'
+import { enquiries } from '@/db/schema'
+import { RECENT_DAYS } from '@/lib/enquiry-labels'
 import { createProperty } from '../../actions'
 
 export const dynamic = 'force-dynamic'
@@ -17,6 +21,15 @@ export default async function PropertiesPage({ searchParams }: { searchParams: S
   const filters = { q: one(sp.q), channel: one(sp.channel), status: one(sp.status), published: one(sp.published) }
   const rows = await listForAdmin(filters)
   const counts = await matchCounts(rows)
+  const recentFrom = new Date(Date.now() - RECENT_DAYS * 86400000).toISOString()
+  // A person is their phone number, else email, else contact record, else name: the same rule as the property page.
+  const who = sql`coalesce(nullif(replace(replace(replace(coalesce(${enquiries.phone}, ''), ' ', ''), '+44', '0'), '-', ''), ''), lower(${enquiries.email}), ${enquiries.contactId}, lower(${enquiries.name}))`
+  const enq = Object.fromEntries((await db.select({
+    // Counted as people, the same as on the property page.
+    id: enquiries.propertyId, n: sql<number>`count(distinct ${who})`,
+    recent: sql<number>`count(distinct case when ${enquiries.createdAt} >= ${recentFrom} then ${who} end)`,
+    open: sql<number>`count(distinct case when ${enquiries.outcome} is null then ${who} end)`,
+  }).from(enquiries).where(isNotNull(enquiries.propertyId)).groupBy(enquiries.propertyId)).map((r) => [r.id!, r]))
   const filtered = Object.values(filters).some(Boolean)
 
   return (
@@ -71,7 +84,7 @@ export default async function PropertiesPage({ searchParams }: { searchParams: S
             <table className="list">
               <thead>
                 <tr>
-                  <th></th><th>Property</th><th>Price</th><th>Beds</th><th>Status</th><th>Website</th><th>To call</th><th>Updated</th>
+                  <th></th><th>Property</th><th>Price</th><th>Beds</th><th>Status</th><th>Website</th><th>Enquiries</th><th>To call</th><th>Updated</th>
                 </tr>
               </thead>
               <tbody>
@@ -90,6 +103,14 @@ export default async function PropertiesPage({ searchParams }: { searchParams: S
                     <td className="num">{p.bedrooms ?? '–'}</td>
                     <td><span className="pill">{statusLabel(p.status)}</span></td>
                     <td>{p.published ? <span className="pill live"><span className="dot" />Live</span> : <span className="pill draft">Draft</span>}</td>
+                    <td>
+                      {enq[p.id]?.n ? (
+                        <a href={`/admin/properties/${p.id}#enquiries`} className="pe-count" title={`${enq[p.id].recent} in the last ${Math.round(RECENT_DAYS / 30)} months`}>
+                          <span className="pill">{enq[p.id].n} {enq[p.id].n === 1 ? 'person' : 'people'}</span>
+                          {enq[p.id].open ? <span className="addr-sub">{enq[p.id].open} to follow up</span> : null}
+                        </a>
+                      ) : <span className="addr-sub">–</span>}
+                    </td>
                     <td>
                       {counts[p.id]?.total ? (
                         <a href={`/admin/properties/${p.id}#matches`} className="pill gold" title={`${counts[p.id].recent} recent, ${counts[p.id].total - counts[p.id].recent} older`}>
