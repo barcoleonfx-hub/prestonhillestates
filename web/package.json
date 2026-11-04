@@ -17,6 +17,7 @@
     "bcryptjs": "^3.0.3",
     "drizzle-orm": "^0.45.4",
     "html-to-text": "^10.0.1",
+    "imapflow": "2.4.3",
     "jose": "^6.2.15",
     "mailparser": "^3.14.1",
     "next": "^16.4.4",

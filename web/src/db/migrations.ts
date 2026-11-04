@@ -261,4 +261,11 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       `CREATE INDEX enquiries_property_idx ON enquiries (property_id, created_at)`,
     ],
   },
+  {
+    id: '009_settings',
+    sql: [
+      // Portal-wide settings, e.g. the mailbox the portal reads new enquiries from (password stored encrypted).
+      `CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL)`,
+    ],
+  },
 ]
