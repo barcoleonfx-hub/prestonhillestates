@@ -369,7 +369,9 @@ async function rowsFrom(rows: string[][], map: Mapping): Promise<ImportRow[]> {
     const council = !cv ? 'auto' : /^brent\b/.test(cv) ? 'brent' : /^harrow\b/.test(cv) ? 'harrow' : cv.replace(/[^a-z .'&-]/g, '').trim() || 'other'
     // "53 KENMORE AVENUE (Preston)": the bracketed note goes in the notes.
     const first = g('address') || joinNumber(g('number'), g('street'))
-    const raw = [first, g('address2'), g('town')].filter(Boolean).join(', ').replace(/,\s*,/g, ',')
+    // Rentman's town and street fields often repeat each other ("4 Derek Avenue, Wembley, Wembley"): say each part once.
+    const parts = [first, g('address2'), g('town')].join(',').split(',').map((x) => x.trim()).filter(Boolean)
+    const raw = parts.filter((x, i) => parts.findIndex((y) => y.toLowerCase() === x.toLowerCase()) === i).join(', ')
     const bracket = /\(([^)]*)\)/.exec(raw)?.[1]?.trim()
     const line = raw.replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').replace(/\s+,/g, ',').trim()
     let pc = fmtPostcode(g('postcode')) ?? fmtPostcode(/[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}/i.exec(line)?.[0])
@@ -382,12 +384,26 @@ async function rowsFrom(rows: string[][], map: Mapping): Promise<ImportRow[]> {
     const byRefHit = rentmanRef ? byRef.get(rentmanRef) : undefined
     if (byRefHit) match = { kind: 'matched', id: byRefHit.id, label: labelOf(byRefHit), archived: byRefHit.archived, how: 'Already in from Rentman', choice: byRefHit.id, candidates: [] }
     else if (address && have.length) {
-      const m = matchAddress(address, pc, pool, index, streetExists)
+      let m = matchAddress(address, pc, pool, index, streetExists)
+      let dupNote: string | null = null
+      if (m.kind === 'choose') {
+        // Rentman often holds one address several times (each letting, or old records). For the same address, take
+        // the one that's current there, or the latest if all are archived; for different flats, the only current one.
+        const top = m.candidates.filter((c) => c.score === m.candidates[0].score).map((c) => byId.get(c.id)).filter(Boolean) as Rental[]
+        const same = new Set(top.map((t) => `${normText(t.address).trim()}|${normPostcode(t.postcode)}`)).size === 1
+        const live = top.filter((t) => !t.archived)
+        const latest = [...top].sort((a, b) => Number(b.rentmanRef ?? 0) - Number(a.rentmanRef ?? 0))[0]
+        const one = same ? (live.length === 1 ? live[0] : !live.length ? latest : null) : !rentman && live.length === 1 ? live[0] : null
+        if (one) {
+          m = { kind: same ? 'matched' : 'likely', id: one.id, candidates: m.candidates }
+          dupNote = same ? `Rentman has this address ${top.length} times: matched to the ${live.length ? 'current' : 'latest'} one` : 'Several fit: matched to the one that’s current on Rentman'
+        }
+      }
       const hit = m.id ? byId.get(m.id) : undefined
       const candidates = m.candidates.map((c) => byId.get(c.id)).filter(Boolean).map((c) => ({ id: c!.id, label: labelOf(c!) }))
       const choice = hit ? hit.id : m.kind === 'choose' && !rentman ? 'skip' : 'new'
       const how = !hit ? (m.kind === 'choose' ? 'More than one property fits: choose which' : rentman ? null : have.some((x) => x.rentmanRef) ? 'Not found in the Rentman list' : null)
-        : rentman ? 'Joins the property from your licensing spreadsheet' : m.kind === 'likely' ? 'Spelt differently: check it’s the right one' : null
+        : dupNote ?? (rentman ? 'Joins the property from your licensing spreadsheet' : m.kind === 'likely' ? 'Spelt differently: check it’s the right one' : null)
       match = { kind: m.kind, id: hit?.id ?? null, label: hit ? labelOf(hit) : null, archived: !!hit?.archived, how, choice, candidates }
     }
     const target = match?.id ? byId.get(match.id) : undefined
