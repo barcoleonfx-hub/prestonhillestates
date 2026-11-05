@@ -11,8 +11,9 @@ export const metadata = { title: 'Reviews' }
 
 const CAT: Record<string, string> = { general: 'Sales and lettings', sales: 'Sales', lettings: 'Lettings' }
 
-export default async function ReviewsPage() {
+export default async function ReviewsPage({ searchParams }: { searchParams: Promise<{ saved?: string }> }) {
   await requireAdmin()
+  const { saved } = await searchParams
   await ready()
   const [rows, g] = await Promise.all([db.select().from(reviews).orderBy(desc(reviews.reviewedOn), desc(reviews.createdAt)), googleSummary()])
   const live = rows.filter((r) => r.shown && r.rating >= 4)
@@ -27,6 +28,7 @@ export default async function ReviewsPage() {
 
       <section className="card card-pad" style={{ marginBottom: 18 }}>
         <h2>Your Google rating</h2>
+        {saved === 'rating' ? <div className="notice ok" style={{ margin: '10px 0' }}>Saved. {g.rating && g.count ? `The website now shows ${g.rating.toFixed(1)} out of 5 from ${g.count} Google reviews${g.url ? ', with a link to them' : ''}.` : 'Add the average rating and the number of reviews too, so they show above the reviews.'}</div> : null}
         <p className="card-sub">From your Google Business Profile. Shown above the reviews, so visitors can see the full picture.</p>
         <form action={saveGoogleSummary} className="rv-grid" style={{ marginTop: 12 }}>
           <label className="field"><span>Average rating</span><input className="input" name="rating" inputMode="decimal" defaultValue={g.rating ?? ''} placeholder="e.g. 4.8" /></label>
@@ -43,7 +45,10 @@ export default async function ReviewsPage() {
       </section>
 
       <section className="card">
-        <div className="card-pad" style={{ paddingBottom: 0 }}><h2>{rows.length} reviews · {live.length} on the website</h2></div>
+        <div className="card-pad" style={{ paddingBottom: 0 }}>
+          <h2>{rows.length} reviews · {live.length} on the website</h2>
+          {saved === 'review' ? <div className="notice ok" style={{ marginTop: 10 }}>Saved.</div> : saved === 'deleted' ? <div className="notice ok" style={{ marginTop: 10 }}>Review deleted.</div> : null}
+        </div>
         <div className="table-wrap">
           <table className="list">
             <thead><tr><th>Review</th><th>Stars</th><th>Shown on</th><th>On the website</th><th /></tr></thead>
