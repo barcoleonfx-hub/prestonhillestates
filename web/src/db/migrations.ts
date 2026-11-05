@@ -600,4 +600,13 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       `ALTER TABLE rentals ADD COLUMN resolved_address TEXT`,
     ],
   },
+  {
+    id: '023_address_keys',
+    sql: [
+      // A compact look-up for matching typed addresses to postcodes, built from known_addresses, so the whole
+      // address list never has to be held in memory. kind: 'num' (house number), 'st' (street), 'bld' (building).
+      `CREATE TABLE address_keys (kind TEXT NOT NULL, k TEXT NOT NULL, street TEXT NOT NULL, flat TEXT, pc TEXT NOT NULL)`,
+      `CREATE INDEX address_keys_idx ON address_keys (kind, k)`,
+    ],
+  },
 ]

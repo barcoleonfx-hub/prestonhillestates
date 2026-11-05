@@ -28,7 +28,12 @@ export function ImportRentals() {
 
   async function load(name: string, b64: string, sheet: number) {
     setBusy(true); setMsg(null); setPreview(null)
-    const r = await readImportFile(name, b64, sheet).catch(() => ({ sheets: [], sheet: 0, head: [], rows: [], mapping: {}, error: 'Couldn’t read that file.' }))
+    // If the server doesn't answer (e.g. it's restarting after an update), wait a moment and try once more.
+    const ask = () => readImportFile(name, b64, sheet)
+    const r = await ask().catch(() => new Promise<Awaited<ReturnType<typeof ask>>>((ok) => setTimeout(() => ask().then(ok).catch((e: Error) => ok({
+      sheets: [], sheet: 0, head: [], rows: [], mapping: {},
+      error: `The portal didn’t answer (${(e?.message || 'no response').slice(0, 120)}). If the site has just been updated or was busy, wait a minute and try again. If it keeps happening, the file may be too large: save just the sheet you need as a new file.`,
+    })), 4000)))
     setBusy(false)
     if (r.error && !r.sheets.length) { setFile(null); return setMsg({ ok: false, text: r.error }) }
     if (r.error) setMsg({ ok: false, text: r.error })
@@ -37,7 +42,11 @@ export function ImportRentals() {
   const pick = async (f: File) => load(f.name, await toBase64(f), 0)
   useEffect(() => {
     if (!file) return
-    const t = setTimeout(async () => setPreview(await previewImport(file.rows, map).catch(() => null)), 300)
+    const t = setTimeout(async () => {
+      const r = await previewImport(file.rows, map).catch(() => null)
+      if (!r) setMsg({ ok: false, text: 'The portal didn’t answer while reading the rows. Wait a minute and choose the file again.' })
+      setPreview(r)
+    }, 300)
     return () => clearTimeout(t)
   }, [file, map])
 
@@ -123,7 +132,7 @@ export function ImportRentals() {
               </div>
               {preview.length > 300 ? <p className="card-sub">Showing the first 300 of {preview.length}.</p> : null}
             </>
-          ) : <p className="card-sub">Reading the rows…</p>}
+          ) : msg && !msg.ok ? null : <p className="card-sub">Reading the rows…</p>}
         </>
       ) : null}
     </div>

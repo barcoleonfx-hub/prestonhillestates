@@ -89,7 +89,7 @@ export async function fillPostcodes(opts: { seconds?: number; online?: boolean }
     tried++
     const council = r.council && r.council !== 'other' ? r.council : null
     let pc: string | null = null, source = '', note = '', resolved: string | null = null
-    const g = await guessPostcode(r.address, council).catch(() => null)
+    const g = await guessPostcode(r.address, council, { wait: true }).catch(() => null)
     if (g) { pc = g.postcode; source = 'land_registry'; note = `Found from the ${g.how}`; resolved = g.resolved }
     else if (opts.online !== false) {
       const o = await geocodePostcode(r.address, council)

@@ -441,6 +441,14 @@ export const registerHits = sqliteTable('register_hits', {
 }, (t) => [primaryKey({ columns: [t.rentalId, t.registerId] })])
 export type RegisterHit = typeof registerHits.$inferSelect
 
+export const addressKeys = sqliteTable('address_keys', {
+  kind: text('kind').notNull(),
+  k: text('k').notNull(),
+  street: text('street').notNull(),
+  flat: text('flat'),
+  pc: text('pc').notNull(),
+}, (t) => [index('address_keys_idx').on(t.kind, t.k)])
+
 export const licenceSuggestions = sqliteTable('licence_suggestions', {
   id: text('id').primaryKey(),
   rentalId: text('rental_id').notNull().references(() => rentals.id, { onDelete: 'cascade' }),
