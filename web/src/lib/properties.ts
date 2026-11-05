@@ -1,5 +1,5 @@
 import 'server-only'
-import { and, asc, desc, eq, gte, like, lte, or, sql, inArray } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, isNull, like, lte, or, sql, inArray } from 'drizzle-orm'
 import { db, ready } from '@/db/client'
 import { media, properties, rooms, type Media, type Property, type Room } from '@/db/schema'
 import { storage } from './storage'
@@ -83,7 +83,7 @@ export async function listForAdmin(f: AdminFilters) {
   return rows.map((r) => ({ ...r, cover: covers[r.id] ?? null }))
 }
 
-export type PublicFilters = { channel?: string; q?: string; minBeds?: number; maxPrice?: number; type?: string; sort?: string }
+export type PublicFilters = { channel?: string; q?: string; minBeds?: number; maxPrice?: number; type?: string; sort?: string; furnishing?: string; availableNow?: boolean }
 
 export async function listPublished(f: PublicFilters) {
   await ready()
@@ -96,6 +96,9 @@ export async function listPublished(f: PublicFilters) {
   if (f.minBeds) conds.push(gte(properties.bedrooms, f.minBeds))
   if (f.maxPrice) conds.push(lte(properties.price, f.maxPrice))
   if (f.type) conds.push(eq(properties.propertyType, f.type))
+  // Homes to rent: furnished or not ("either way" homes count for both), and ones you can move into now.
+  if (f.furnishing === 'furnished' || f.furnishing === 'unfurnished') conds.push(or(eq(properties.furnishing, f.furnishing), eq(properties.furnishing, 'flexible'), f.furnishing === 'furnished' ? eq(properties.furnishing, 'part_furnished') : undefined)!)
+  if (f.availableNow) conds.push(or(isNull(properties.availableFrom), lte(properties.availableFrom, new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10)))!)
   const order =
     f.sort === 'price_asc' ? [asc(properties.price)] : f.sort === 'price_desc' ? [desc(properties.price)] : [desc(properties.featured), desc(properties.publishedAt)]
   const rows = await db.select().from(properties).where(and(...conds)).orderBy(...order)

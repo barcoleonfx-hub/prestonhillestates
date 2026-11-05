@@ -59,7 +59,7 @@ html = swap(html, '<li><a href="/valuation?intent=letting">Landlord valuation</a
 html = swap(html, '<li><a href="#contact">Contact</a></li>', '<li><a href="/fees">Fees &amp; legal</a></li>\n        <li><a href="#contact">Contact</a></li>')
 html = swap(html, /<a class="area-chip" href="#"><span class="nm">([^<]+)<\/span>/, (_m, nm) => `<a class="area-chip" href="/properties?q=${encodeURIComponent(nm)}"><span class="nm">${nm}</span>`, 8)
 html = swap(html, '<li><a href="#listings">Properties for sale</a></li>', '<li><a href="/properties?channel=sale">Properties for sale</a></li>')
-html = swap(html, '<li><a href="#listings">Properties to let</a></li>', '<li><a href="/properties?channel=let">Properties to let</a></li>')
+html = swap(html, '<li><a href="#listings">Properties to let</a></li>', '<li><a href="/properties?channel=let">Properties to let</a></li>\n        <li><a href="/renting">Register as a tenant</a></li>')
 html = swap(html, '<span>Design concept · sample data, not the live site</span>', '<span>Independent estate agents in Harrow since 2004</span>')
 html = swap(html, '+44 20 8127 7001<br/>', '<a href="tel:+442081277001">020 8127 7001</a><br/>')
 html = swap(html, 'info@prestonhillestates.com\n', '<a href="mailto:info@prestonhillestates.com">info@prestonhillestates.com</a>\n')
