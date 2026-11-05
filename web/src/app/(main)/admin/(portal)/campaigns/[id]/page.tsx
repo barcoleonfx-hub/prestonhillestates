@@ -10,6 +10,7 @@ import { siteBase } from '@/lib/property-email-data'
 import { deleteCampaign, duplicateCampaign } from '../../../campaign-actions'
 import { CampaignEditor } from './CampaignEditor'
 import { CampaignStatus } from './CampaignStatus'
+import { PeopleList } from './PeopleList'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Email campaign' }
@@ -41,6 +42,13 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
       </div>
       {!box?.hasPassword ? <div className="notice err" style={{ marginBottom: 14 }}>Connect the office mailbox in <Link href="/admin/email-inbox">Email settings</Link> before sending.</div> : null}
       {!draft ? <CampaignStatus id={c.id} isAdmin={me.role === 'admin'} initial={{ status: c.status, total: c.total, sent: c.sent, failed: c.failed, queued: Math.max(0, c.total - c.sent - c.failed), lastError: c.lastError }} perDay={limits.perDay} /> : null}
+      {!draft ? (
+        <section className="card card-pad" style={{ marginBottom: 18 }}>
+          <h2>Who it’s going to</h2>
+          <p className="card-sub" style={{ marginTop: 4 }}>Everyone this campaign was sent to or is waiting to go to, with how each one went.</p>
+          <PeopleList campaignId={c.id} started />
+        </section>
+      ) : null}
       <CampaignEditor
         id={c.id} readOnly={!draft} isAdmin={me.role === 'admin'} canSend={!!box?.hasPassword}
         initialName={c.name} initialAudience={audience} initialContent={parseContent(c)}

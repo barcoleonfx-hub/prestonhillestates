@@ -7,7 +7,7 @@ import { db, ready } from '@/db/client'
 import { campaigns } from '@/db/schema'
 import { requireAdmin, requireRole } from '@/lib/auth'
 import { TEMPLATES, renderCampaign, type Audience, type Content, type Reader } from '@/lib/campaign'
-import { audienceSummary, campaignLimits, campaignProgress, campaignShared, monthLabel, parseContent, queueCampaign, readerFor, setCampaignLimits } from '@/lib/campaign-data'
+import { audienceList, recipientList, audienceSummary, campaignLimits, campaignProgress, campaignShared, monthLabel, parseContent, queueCampaign, readerFor, setCampaignLimits } from '@/lib/campaign-data'
 import { audit } from '@/lib/contacts'
 import { bulkSender, mailboxStatus } from '@/lib/mailbox'
 import { siteBase } from '@/lib/property-email-data'
@@ -16,6 +16,7 @@ import { now, uid } from '@/lib/util'
 const clean = (a: Audience): Audience => ({
   roles: a.roles.filter((r) => ['buyer', 'tenant', 'landlord', 'seller', 'other'].includes(r)),
   areas: String(a.areas ?? '').slice(0, 200), activeMonths: a.activeMonths ? Math.max(1, Math.min(120, Math.round(a.activeMonths))) : null,
+  exclude: [...new Set((a.exclude ?? []).map(String))].slice(0, 20_000),
 })
 
 export async function createCampaign(form: FormData) {
@@ -134,4 +135,17 @@ export async function previewReader(contactId: string): Promise<Reader | null> {
   await ready()
   const c = await db.query.contacts.findFirst({ where: (t, { eq: e }) => e(t.id, contactId) })
   return c ? readerFor(c, await siteBase()) : null
+}
+
+/** A page of the people a draft would go to, for checking and taking people off. */
+export async function listPeople(audience: Audience, q: string, page: number) {
+  await requireAdmin()
+  return audienceList(clean(audience), q.slice(0, 100), Math.max(0, Math.floor(page)))
+}
+
+/** A page of who a started campaign is going to, with each send's status. */
+export async function listRecipients(id: string, status: string, q: string, page: number) {
+  await requireAdmin()
+  await ready()
+  return recipientList(id, ['queued', 'sent', 'failed', 'skipped'].includes(status) ? status : '', q.slice(0, 100), Math.max(0, Math.floor(page)))
 }

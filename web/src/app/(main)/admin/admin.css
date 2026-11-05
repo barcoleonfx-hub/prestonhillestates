@@ -776,3 +776,24 @@ kbd { font: 600 0.68rem/1 var(--sans, inherit); padding: 3px 6px; border-radius:
   .cmp-right { position: static; }
 }
 @media (max-width: 560px) { .cmp-two { grid-template-columns: 1fr; } }
+
+/* Campaign preview follows the section being edited; the list of people. */
+.cmp-scroll { max-height: max(460px, calc(100vh - 330px)); overflow: auto; overscroll-behavior: contain; }
+.cmp-switch { margin: 0 12px 8px; padding: 8px 12px; border-radius: 10px; background: #E8EEF8; color: #2B4C7E; font-size: 0.8rem; }
+.cmp-jump { all: unset; cursor: pointer; display: none; margin: 0 12px 8px; font-size: 0.8rem; font-weight: 700; color: var(--gold-deep); }
+.cmp-jump:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+.ppl { margin-top: 14px; border-top: 1px solid var(--line-soft); padding-top: 14px; }
+.ppl-tools { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.ppl-tools .input { flex: 1; min-width: 180px; }
+.ppl-tools .select { width: auto; }
+.ppl-count { margin: 10px 0 8px; }
+.ppl-table { max-height: 460px; overflow: auto; border: 1px solid var(--line-soft); border-radius: 12px; }
+.ppl-table table.list td, .ppl-table table.list th { padding: 8px 10px; font-size: 0.82rem; }
+.ppl-table tr.off td { opacity: 0.45; text-decoration: line-through; }
+.ppl-table tr.off td:first-child { opacity: 1; text-decoration: none; }
+.ppl-table input[type=checkbox] { accent-color: var(--gold-deep); width: 15px; height: 15px; }
+.ppl-pages { display: flex; gap: 10px; align-items: center; justify-content: center; margin-top: 10px; font-size: 0.82rem; color: var(--faint); }
+@media (max-width: 1100px) {
+  .cmp-scroll { max-height: 80vh; }
+  .cmp-jump { display: inline-block; }
+}

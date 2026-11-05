@@ -1,7 +1,8 @@
 import 'server-only'
 import { and, asc, eq, gte, inArray, isNotNull, sql } from 'drizzle-orm'
 import { db, getClient, ready } from '@/db/client'
-import { campaignRecipients, campaigns, contacts, propertyEmails, settings, soldPrices, type Campaign, type Contact } from '@/db/schema'
+import { campaignRecipients, campaigns, contacts, enquiries, propertyEmails, settings, soldPrices, type Campaign, type Contact } from '@/db/schema'
+import { enquiryLabel } from './enquiry-labels'
 import { ALL_ROLES, renderCampaign, type Audience, type Content, type Listing, type Reader, type Role, type Shared, type Snapshot } from './campaign'
 import { GUIDES } from './guides'
 import { bulkSender } from './mailbox'
@@ -77,9 +78,13 @@ export function readerFor(c: Contact, base: string): Reader {
 }
 
 /** Everyone who can be emailed and fits the audience, one per email address. */
-export async function audienceContacts(a: Audience, opts: { ignoreRoles?: boolean } = {}): Promise<Contact[]> {
+export async function audienceContacts(a: Audience, opts: { ignoreRoles?: boolean; keepExcluded?: boolean } = {}): Promise<Contact[]> {
   await ready()
-  const conds = [isNotNull(contacts.email), eq(contacts.archived, false), eq(contacts.doNotContact, false), eq(contacts.marketingOptOut, false)]
+  const conds = [
+    isNotNull(contacts.email), eq(contacts.archived, false), eq(contacts.doNotContact, false), eq(contacts.marketingOptOut, false),
+    // Strictly people on the enquiries list: they've asked us about a home, a valuation or registered as a buyer.
+    sql`exists (select 1 from enquiries e where e.contact_id = ${contacts.id})`,
+  ]
   if (a.activeMonths) conds.push(gte(sql`coalesce(${contacts.lastContactAt}, ${contacts.createdAt})`, new Date(Date.now() - a.activeMonths * 30.4 * 86400000).toISOString()))
   const rows = await db.select().from(contacts).where(and(...conds)).orderBy(asc(contacts.createdAt))
   const areas = a.areas.split(/[,;]+/).map((x) => x.trim()).filter(Boolean)
@@ -88,6 +93,7 @@ export async function audienceContacts(a: Audience, opts: { ignoreRoles?: boolea
     const e = (c.email ?? '').trim().toLowerCase()
     if (!EMAIL.test(e) || seen.has(e)) return false
     if (!opts.ignoreRoles && !rolesFrom(c.roles).some((r) => a.roles.includes(r))) return false
+    if (!opts.keepExcluded && a.exclude?.includes(c.id)) return false
     if (areas.length) {
       const text = `${c.address ?? ''} ${c.areas ?? ''}`.toUpperCase()
       const o = outwardIn(c.address) ?? outwardIn(c.areas)
@@ -96,6 +102,56 @@ export async function audienceContacts(a: Audience, opts: { ignoreRoles?: boolea
     seen.add(e)
     return true
   })
+}
+
+export type Person = { id: string; name: string; email: string; roles: Role[]; area: string | null; enquiries: number; last: { what: string; date: string } | null; excluded: boolean; status?: string; error?: string | null }
+
+/** Last enquiry and how many, for a page of people. */
+async function enquiryInfo(ids: string[]) {
+  if (!ids.length) return new Map<string, { n: number; last: { what: string; date: string } }>()
+  const rows = await db.select({ c: enquiries.contactId, kind: enquiries.kind, source: enquiries.source, message: enquiries.message, at: enquiries.createdAt }).from(enquiries).where(inArray(enquiries.contactId, ids))
+  const out = new Map<string, { n: number; last: { what: string; date: string } }>()
+  for (const r of rows) {
+    const about = /^(?:About|Property):\s*(.+)$/im.exec(r.message ?? '')?.[1]?.replace(/\s*\([^)]*\)\s*$/, '')
+    const cur = out.get(r.c!)
+    const item = { what: [enquiryLabel(r), about].filter(Boolean).join(' · '), date: r.at }
+    out.set(r.c!, { n: (cur?.n ?? 0) + 1, last: !cur || cur.last.date < r.at ? item : cur.last })
+  }
+  return out
+}
+const match = (c: { name: string; email: string | null }, q: string) => !q || `${c.name} ${c.email ?? ''}`.toLowerCase().includes(q.toLowerCase())
+
+/** The people a draft would go to (and anyone taken off by hand), a page at a time, for checking before sending. */
+export async function audienceList(a: Audience, q = '', page = 0, size = 50) {
+  const all = (await audienceContacts(a, { keepExcluded: true })).filter((c) => match(c, q.trim()))
+  const slice = size ? all.slice(page * size, page * size + size) : all
+  const info = await enquiryInfo(slice.map((c) => c.id))
+  const people: Person[] = slice.map((c) => ({
+    id: c.id, name: c.name, email: (c.email ?? '').trim(), roles: rolesFrom(c.roles), area: outwardIn(c.address) ?? outwardIn(c.areas) ?? (c.areas || null),
+    enquiries: info.get(c.id)?.n ?? 0, last: info.get(c.id)?.last ?? null, excluded: !!a.exclude?.includes(c.id),
+  }))
+  return { total: all.length, excluded: all.filter((c) => a.exclude?.includes(c.id)).length, people }
+}
+
+/** Who a started campaign is going to, with how each send went. */
+export async function recipientList(id: string, status = '', q = '', page = 0, size = 50) {
+  const rows = await db.select({ r: campaignRecipients, c: contacts }).from(campaignRecipients).leftJoin(contacts, eq(contacts.id, campaignRecipients.contactId))
+    .where(status ? and(eq(campaignRecipients.campaignId, id), eq(campaignRecipients.status, status)) : eq(campaignRecipients.campaignId, id))
+    .orderBy(asc(campaignRecipients.email))
+  const all = rows.filter((x) => match({ name: x.c?.name ?? '', email: x.r.email }, q.trim()))
+  const slice = size ? all.slice(page * size, page * size + size) : all
+  const info = await enquiryInfo(slice.map((x) => x.r.contactId))
+  const people: Person[] = slice.map((x) => ({
+    id: x.r.contactId, name: x.c?.name ?? '(contact deleted)', email: x.r.email, roles: rolesFrom(x.c?.roles ?? ''), area: x.c ? outwardIn(x.c.address) ?? outwardIn(x.c.areas) ?? (x.c.areas || null) : null,
+    enquiries: info.get(x.r.contactId)?.n ?? 0, last: info.get(x.r.contactId)?.last ?? null, excluded: false, status: x.r.status, error: x.r.error,
+  }))
+  return { total: all.length, excluded: 0, people }
+}
+
+export function peopleCsv(people: Person[]) {
+  const cell = (v: string | number | null | undefined) => { const t = String(v ?? ''); return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t }
+  const head = ['Name', 'Email', 'Roles', 'Area', 'Enquiries', 'Last enquiry', 'Last enquiry date', 'Status', 'Note']
+  return [head, ...people.map((p) => [p.name, p.email, p.roles.join(' '), p.area, p.enquiries, p.last?.what, p.last?.date.slice(0, 10), p.status ?? (p.excluded ? 'taken off' : 'will get it'), p.error])].map((r) => r.map(cell).join(',')).join('\r\n')
 }
 
 /** Size of the audience, and how it splits, for the editor. */
