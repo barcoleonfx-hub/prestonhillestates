@@ -126,12 +126,12 @@ export function ValuationWizard({ initialIntent, initialPostcode }: { initialInt
       const r = (await res.json()) as { ok: boolean; error?: string; field?: Field }
       if (!r.ok) {
         setSending(false)
-        return r.field && r.field in STEP_OF ? fail(r.field, r.error ?? 'Please check this.') : setError({ text: r.error ?? 'Something went wrong. Please call us on 020 8127 7001.' })
+        return r.field && r.field in STEP_OF ? fail(r.field, r.error ?? 'Please check this.') : setError({ text: r.error ?? 'Something went wrong. Please call us on 020 8904 9005.' })
       }
       try { localStorage.setItem(STORE_KEY, String(Date.now() + 365 * 864e5)) } catch { /* private mode */ }
       setDone(true)
     } catch {
-      setError({ text: 'We couldn’t send that. Please check your connection or call us on 020 8127 7001.' })
+      setError({ text: 'We couldn’t send that. Please check your connection or call us on 020 8904 9005.' })
     }
     setSending(false)
   }
@@ -147,7 +147,7 @@ export function ValuationWizard({ initialIntent, initialPostcode }: { initialInt
           <li><b>We visit</b> and walk round the property with you.</li>
           <li><b>You get our figure</b> and an honest view of how we’d {intent === 'letting' ? 'let' : 'sell'} it. No obligation.</li>
         </ol>
-        <p className="vx-fine">Can’t wait? Call the branch on <a href="tel:+442081277001">020 8127 7001</a>.</p>
+        <p className="vx-fine">Can’t wait? Call the branch on <a href="tel:+442089049005">020 8904 9005</a>.</p>
       </div>
     )
   }

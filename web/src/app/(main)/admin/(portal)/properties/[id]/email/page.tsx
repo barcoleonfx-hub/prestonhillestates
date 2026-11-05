@@ -18,7 +18,7 @@ export default async function PropertyEmailPage({ params }: { params: Promise<{ 
   const p = await getProperty(id)
   if (!p) notFound()
   const [base, box] = await Promise.all([siteBase(), mailboxStatus()])
-  const sender: Sender = { name: me.name, phone: '020 8127 7001', email: box?.user ?? 'info@prestonhillestates.com' }
+  const sender: Sender = { name: me.name, phone: '020 8904 9005', email: box?.user ?? 'info@prestonhillestates.com' }
   const prop = emailProperty(p, base)
   const [{ ready: cands, skipped, alreadyAsked }, history] = await Promise.all([propertyEmailCandidates(p, base), sentHistory(p.id)])
   const failed = new Map(history.filter((h) => h.status === 'failed').map((h) => [h.contactId, h.error]))

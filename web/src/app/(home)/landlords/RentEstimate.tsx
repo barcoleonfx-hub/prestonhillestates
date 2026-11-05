@@ -35,7 +35,7 @@ export function RentEstimate({ feePct }: { feePct: number }) {
     const note = est?.range ? `Rent estimate on the website: ${gbp(est.range[0])} to ${gbp(est.range[1])} pcm for a ${bedWord(est.beds)}.` : `Asked for a rent figure for a ${bedWord(est?.beds ?? beds)}.`
     const r = await fetch('/api/public/valuation', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim(), phone: phone.trim(), email: email.trim(), postcode: est?.postcode ?? postcode, intent: 'letting', bedrooms: beds === 0 ? 'Studio' : beds >= 5 ? '5+' : String(beds), notes: note, hp_check: hp }) }).then((x) => x.json()).catch(() => null) as { ok?: boolean; error?: string } | null
     setBusy(false)
-    if (!r?.ok) return setError(r?.error ?? 'That didn’t send. Please call us on 020 8127 7001.')
+    if (!r?.ok) return setError(r?.error ?? 'That didn’t send. Please call us on 020 8904 9005.')
     setSent(true)
   }
 
@@ -63,7 +63,7 @@ export function RentEstimate({ feePct }: { feePct: number }) {
         <div className="vx-done">
           <h2>Thank you, {name.split(' ')[0] || 'we’ll be in touch'}.</h2>
           <p>We’ll call you within one working day to arrange a visit and give you an exact rent for your property, with the homes we based it on.</p>
-          <p className="vx-fine">Can’t wait? Call the branch on <a href="tel:+442081277001">020 8127 7001</a>.</p>
+          <p className="vx-fine">Can’t wait? Call the branch on <a href="tel:+442089049005">020 8904 9005</a>.</p>
         </div>
       ) : (
         <div>

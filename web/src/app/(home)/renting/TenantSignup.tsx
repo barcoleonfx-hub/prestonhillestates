@@ -27,7 +27,7 @@ export function TenantSignup({ areas }: { areas: string[] }) {
     const r = await fetch('/api/public/tenant', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, email, phone, maxRent, minBeds, areas: picked, moveBy, furnishing, pets, notes, hp_check: hp }) })
       .then((x) => x.json()).catch(() => null) as { ok?: boolean; error?: string; field?: string } | null
     setBusy(false)
-    if (!r?.ok) return setError({ text: r?.error ?? 'That didn’t send. Please call us on 020 8127 7001.', field: r?.field })
+    if (!r?.ok) return setError({ text: r?.error ?? 'That didn’t send. Please call us on 020 8904 9005.', field: r?.field })
     setDone(true)
   }
 

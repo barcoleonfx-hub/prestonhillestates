@@ -59,7 +59,7 @@ export default async function ValuationPage({ searchParams }: { searchParams: Pr
                 <li>Valued in person by the Preston Road branch</li>
                 <li>Sales and rental valuations</li>
               </ul>
-              <p className="vx-call">Prefer to talk? <a href="tel:+442081277001">020 8127 7001</a></p>
+              <p className="vx-call">Prefer to talk? <a href="tel:+442089049005">020 8904 9005</a></p>
             </div>
           </div>
         </section>
@@ -185,7 +185,7 @@ export default async function ValuationPage({ searchParams }: { searchParams: Pr
           <div className="rv">
             <div className="label"><b>Questions</b></div>
             <h2 className="sect" id="faq-h">Property valuation <em>questions</em></h2>
-            <p className="vx-faq-sub">Can’t see your question? Call the branch on <a href="tel:+442081277001">020 8127 7001</a>.</p>
+            <p className="vx-faq-sub">Can’t see your question? Call the branch on <a href="tel:+442089049005">020 8904 9005</a>.</p>
           </div>
           <div className="vx-faq-list">
             {FAQS.map(([q, a]) => (
@@ -202,7 +202,7 @@ export default async function ValuationPage({ searchParams }: { searchParams: Pr
           <div className="wide vx-final-inner">
             <div>
               <h2>Ready to find out what it’s <em>worth?</em></h2>
-              <p>Two minutes online, or call the branch on <a href="tel:+442081277001">020 8127 7001</a>.</p>
+              <p>Two minutes online, or call the branch on <a href="tel:+442089049005">020 8904 9005</a>.</p>
             </div>
             <a className="btn gold" href="#val-start">Book my free valuation</a>
           </div>
@@ -211,7 +211,7 @@ export default async function ValuationPage({ searchParams }: { searchParams: Pr
 
       <nav className="vx-mobilebar" aria-label="Quick actions">
         <a className="btn gold" href="#val-start">Free valuation</a>
-        <a className="btn ghost" href="tel:+442081277001">Call us</a>
+        <a className="btn ghost" href="tel:+442089049005">Call us</a>
       </nav>
     </PageChrome>
   )

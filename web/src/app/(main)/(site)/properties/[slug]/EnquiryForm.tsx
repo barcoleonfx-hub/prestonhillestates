@@ -28,7 +28,7 @@ export function EnquiryForm({ propertyId, isLet }: { propertyId: string; isLet: 
           <button className="btn btn-gold" type="submit" disabled={pending}>{pending ? 'Sending…' : 'Request a viewing'}</button>
         </form>
       )}
-      <p className="alt">Or call the branch: <a href="tel:+442081277001">020 8127 7001</a></p>
+      <p className="alt">Or call the branch: <a href="tel:+442089049005">020 8904 9005</a></p>
     </div>
   )
 }

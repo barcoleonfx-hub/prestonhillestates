@@ -238,7 +238,7 @@ export async function analyse(raw: string, nowMs = Date.now()): Promise<ImportRo
   const labelledPhone = lead?.phone ?? tidyPhone(field(text, ['phone', 'telephone', 'tel', 'mobile', 'phone number', 'contact number', 'your phone']))
   const about = lead?.about ?? field(text, ['property', 'property address', 'address', 'listing', 'property reference', 'ref', 'regarding'])
   const bodyEmails = (text.match(EMAIL) ?? []).filter((e) => !OWN_DOMAIN.test(e) && !NO_REPLY.test(e) && !/zoopla|onthemarket|wix/i.test(e))
-  const bodyPhone = tidyPhone((text.match(PHONE) ?? []).find((p) => !p.replace(/\D/g, '').endsWith('2081277001')) ?? null)
+  const bodyPhone = tidyPhone((text.match(PHONE) ?? []).find((p) => !p.replace(/\D/g, '').match(/20(81277001|89049005)$/)) ?? null)
 
   const directSender = from?.address && !OWN_DOMAIN.test(from.address) && !NO_REPLY.test(from.address) && source === 'email' ? from : null
   const goodReplyTo = replyTo?.address && !OWN_DOMAIN.test(replyTo.address) && !NO_REPLY.test(replyTo.address) && !/zoopla|onthemarket|wix/i.test(replyTo.address) ? replyTo : null

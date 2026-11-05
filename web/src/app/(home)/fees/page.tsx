@@ -64,7 +64,7 @@ export default function FeesPage() {
             <div className="lx-card"><h3>Independent redress</h3><p>If you’re unhappy with our service and our complaints process hasn’t put it right, you can refer it to {tpo ? <a href={tpo.url} target="_blank" rel="noopener noreferrer">{tpo.name}</a> : 'The Property Ombudsman'}{prs ? <> or the <a href={prs.url} target="_blank" rel="noopener noreferrer">{prs.name}</a></> : null}.</p></div>
             <div className="lx-card"><h3>Deposit protection</h3><p>Tenancy deposits are registered with {md ? <a href={md.url} target="_blank" rel="noopener noreferrer">myDeposits</a> : 'myDeposits'}, a government-approved scheme, within 30 days of being paid.</p></div>
           </div>
-          <p className="fx-note">Questions about any of this? Call the branch on <a href="tel:+442081277001">020 8127 7001</a> or email <a href="mailto:info@prestonhillestates.com">info@prestonhillestates.com</a>.</p>
+          <p className="fx-note">Questions about any of this? Call the branch on <a href="tel:+442089049005">020 8904 9005</a> or email <a href="mailto:info@prestonhillestates.com">info@prestonhillestates.com</a>.</p>
         </section>
       </main>
     </PageChrome>

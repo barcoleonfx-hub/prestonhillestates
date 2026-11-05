@@ -135,9 +135,9 @@ function BuyerSignup({ budget, summary }: { budget: number; summary: string }) {
     try {
       const res = await fetch('/api/public/buyer', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, phone, email, areas, budget, summary, hp_check }) })
       const r = (await res.json()) as { ok: boolean; error?: string; field?: string }
-      setState(r.ok ? { done: true } : { error: r.error ?? 'Something went wrong. Please call us on 020 8127 7001.', field: r.field })
+      setState(r.ok ? { done: true } : { error: r.error ?? 'Something went wrong. Please call us on 020 8904 9005.', field: r.field })
     } catch {
-      setState({ error: 'We couldn’t send that. Please check your connection or call us on 020 8127 7001.' })
+      setState({ error: 'We couldn’t send that. Please check your connection or call us on 020 8904 9005.' })
     }
   }
 

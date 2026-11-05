@@ -26,7 +26,7 @@ async function setup(propertyId: string) {
   const box = await mailboxStatus()
   if (!box?.hasPassword) return { error: 'Connect the office mailbox in Email settings first. Emails are sent from it.' } as const
   const base = await siteBase()
-  const sender: Sender = { name: me.name, phone: '020 8127 7001', email: box.user }
+  const sender: Sender = { name: me.name, phone: '020 8904 9005', email: box.user }
   return { me, p, base, sender }
 }
 

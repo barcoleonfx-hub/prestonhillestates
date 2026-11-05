@@ -86,7 +86,7 @@ export type EmailRecipient = {
 export type Sender = { name: string; phone: string; email: string }
 export type Draft = { subject: string; message: string; highlights: { text: string; note: string | null }[]; why: string[]; preheader: string }
 
-const PHONE = '020 8127 7001'
+const PHONE = '020 8904 9005'
 const gbp = (n: number) => `£${Math.round(n).toLocaleString('en-GB')}`
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 export const firstName = (name: string) => {
@@ -302,7 +302,7 @@ ${highlights}
 ${summary}
 <tr><td align="left" style="padding:30px 40px 8px;" class="px">${button(link, let_ ? 'See the photos & details' : 'View the property')}</td></tr>
 <tr><td style="padding:8px 40px 36px;" class="px">
-<p style="margin:0 0 22px; font-family:${SANS}; font-size:14px; line-height:22px; color:${C.body};">To book a viewing, reply to this email or call <a href="tel:+442081277001" style="color:${C.gold}; text-decoration:none; font-weight:bold;">${PHONE}</a>.</p>
+<p style="margin:0 0 22px; font-family:${SANS}; font-size:14px; line-height:22px; color:${C.body};">To book a viewing, reply to this email or call <a href="tel:+442089049005" style="color:${C.gold}; text-decoration:none; font-weight:bold;">${PHONE}</a>.</p>
 <p style="margin:0; font-family:${SANS}; font-size:15px; line-height:22px; color:${C.ink};">Kind regards,</p>
 <p style="margin:4px 0 0; font-family:${SERIF}; font-size:20px; line-height:26px; color:${C.ink};">${esc(s.name)}</p>
 <p style="margin:2px 0 0; font-family:${SANS}; font-size:13px; line-height:20px; color:${C.faint};">Preston Hill Estates &middot; ${esc(s.phone)}</p>
@@ -315,7 +315,7 @@ ${sellBand}
 <p style="margin:0 0 6px; font-family:${SANS}; font-size:13px; line-height:20px; color:${C.body};"><b>Preston Hill Estates</b> &middot; Est. 2004</p>
 <p style="margin:0 0 6px; font-family:${SANS}; font-size:13px; line-height:20px; color:${C.faint};">271 Preston Road, Harrow HA3 0PS</p>
 <p style="margin:0 0 6px; font-family:${SANS}; font-size:13px; line-height:20px; color:${C.faint};">Monday to Friday 9.00 to 17.30 &middot; Saturday 10.00 to 13.00</p>
-<p style="margin:0 0 18px; font-family:${SANS}; font-size:13px; line-height:20px;"><a href="tel:+442081277001" style="color:${C.gold}; text-decoration:none;">${PHONE}</a> &middot; <a href="mailto:${esc(s.email)}" style="color:${C.gold}; text-decoration:none;">${esc(s.email)}</a></p>
+<p style="margin:0 0 18px; font-family:${SANS}; font-size:13px; line-height:20px;"><a href="tel:+442089049005" style="color:${C.gold}; text-decoration:none;">${PHONE}</a> &middot; <a href="mailto:${esc(s.email)}" style="color:${C.gold}; text-decoration:none;">${esc(s.email)}</a></p>
 <p style="margin:0 0 18px; font-family:${SANS}; font-size:10px; letter-spacing:2px; color:#B8B4A2;">THE PROPERTY OMBUDSMAN &middot; SAFEAGENT &middot; PRS &middot; MYDEPOSITS</p>
 <p style="margin:0 0 6px; font-family:${SANS}; font-size:12px; line-height:18px; color:${C.faint};">You’re getting this because ${esc(because)}.</p>
 <p style="margin:0 0 8px; font-family:${SANS}; font-size:12px; line-height:18px;"><a href="${esc(r.unsubscribeUrl)}" style="color:${C.faint};">Stop emails about homes like this</a></p>
