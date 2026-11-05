@@ -20,11 +20,23 @@ export default function SiteLayout({ children }: { children: React.ReactNode }) 
           <nav className="site-links" aria-label="Main">
             <Link className="l" href="/properties?channel=sale">Buy</Link>
             <Link className="l" href="/properties?channel=let">Rent</Link>
+            <a className="l" href="/renting">Tenants</a>
             <a className="l" href="/landlords">Landlords</a>
             <a className="l" href="/valuation">Free valuation</a>
             <a className="l" href="tel:+442081277001">020 8127 7001</a>
             <Link className="btn btn-gold" href="/properties">Search homes</Link>
           </nav>
+          {/* Phones and tablets: the links fold into a Menu button. */}
+          <details className="mnav">
+            <summary aria-label="Menu"><span className="mnav-bars" aria-hidden="true" /><span className="mnav-open">Menu</span><span className="mnav-close">Close</span></summary>
+            <div className="mnav-panel">
+              <div className="mnav-group"><b>Buying</b><a href="/properties?channel=sale">Homes for sale</a><a href="/mortgage-calculator">How much can I borrow?</a><a href="/sold-prices">Sold prices</a></div>
+              <div className="mnav-group"><b>Renting</b><a href="/properties?channel=let">Homes to rent</a><a href="/renting">Register for new homes to rent</a></div>
+              <div className="mnav-group"><b>Landlords</b><a href="/landlords">Letting &amp; management</a><a href="/landlords#estimate">Rent estimate</a><a href="/fees">Fees &amp; legal</a></div>
+              <div className="mnav-group"><b>Selling</b><a href="/valuation">Free valuation</a><a href="/guides">Guides</a></div>
+              <div className="mnav-cta"><a className="btn btn-gold" href="/valuation">Free valuation</a><a className="btn btn-ghost" href="tel:+442081277001">Call 020 8127 7001</a></div>
+            </div>
+          </details>
         </div>
       </header>
       <main className="site-main">{children}</main>
