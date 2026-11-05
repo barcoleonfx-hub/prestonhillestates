@@ -174,7 +174,7 @@ export default async function LandlordsPage() {
           </figure>
         </section>
 
-        <Reviews />
+        <Reviews category="lettings" title={<>What landlords and tenants <em>say</em></>} />
 
         <section className="wide vx-faq" aria-labelledby="faq-h">
           <div className="rv">

@@ -168,7 +168,7 @@ export default async function ValuationPage({ searchParams }: { searchParams: Pr
           </figure>
         </section>
 
-        <Reviews />
+        <Reviews category="sales" title={<>What sellers and landlords <em>say</em></>} />
 
         <section className="wide vx-guides" aria-labelledby="guides-h">
           <div className="vx-guides-head rv">

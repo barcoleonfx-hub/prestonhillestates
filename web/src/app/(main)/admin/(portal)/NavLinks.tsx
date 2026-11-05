@@ -14,6 +14,7 @@ const ICONS: Record<string, React.ReactNode> = {
   team: <path d="M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20c.6-3.4 3.2-5.5 6.5-5.5s5.9 2.1 6.5 5.5M16 4.3a3.5 3.5 0 0 1 0 6.4M18.5 14.8c1.6.8 2.7 2.6 3 5.2" />,
   user: <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c.8-4 4-6.5 8-6.5s7.2 2.5 8 6.5" />,
   site: <path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6" />,
+  star: <path d="m12 3 2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.6 6.6 19.5l1.2-6L3.3 9.3l6.1-.7z" />,
   shield: <path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6zM8.5 12l2.5 2.5 4.5-5" />,
 }
 
@@ -43,6 +44,7 @@ export function NavLinks({ newEnquiries, today, outcomes, callbacks, isAdmin }: 
       </Link>
       <Link href="/admin/properties" className={on('/admin/properties')}><Icon name="homes" />Properties</Link>
       <Link href="/admin/tenants" className={on('/admin/tenants')}><Icon name="people" />Tenants</Link>
+      <Link href="/admin/reviews" className={on('/admin/reviews')}><Icon name="star" />Reviews</Link>
       <Link href="/admin/enquiries" className={on('/admin/enquiries')}>
         <Icon name="mail" />Enquiries{newEnquiries > 0 ? <span className="count">{newEnquiries}</span> : null}
       </Link>

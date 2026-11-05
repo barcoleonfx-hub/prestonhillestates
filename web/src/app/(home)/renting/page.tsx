@@ -3,6 +3,7 @@ import { displayAddressFor, headlineFor, listPublished, priceLabel, slugFor } fr
 import { TENANT_AREAS } from '@/lib/tenants'
 import { PageChrome } from '../PageChrome'
 import { TenantSignup } from './TenantSignup'
+import { Reviews } from '../Reviews'
 import '../valuation/valuation.css'
 import '../landlords/landlords.css'
 import './renting.css'
@@ -107,6 +108,8 @@ export default async function RentingPage() {
             <a className="btn dark" href="/fees">What you can be charged</a>
           </div>
         </section>
+
+        <Reviews category="lettings" title={<>What tenants and landlords <em>say</em></>} />
 
         <section className="wide vx-faq" aria-labelledby="faq-h">
           <div className="rv">
