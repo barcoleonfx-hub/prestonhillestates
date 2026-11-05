@@ -640,4 +640,25 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       `UPDATE rentals SET ward_source = 'auto' WHERE ward_source = 'manual' AND ward IS NULL AND postcode IS NOT NULL AND council NOT IN ('brent', 'harrow')`,
     ],
   },
+  {
+    id: '027_remove_licensing',
+    sql: [
+      // The licensing section was removed (November 2026): its tables and leftovers go with it.
+      `DROP TABLE IF EXISTS register_hits`,
+      `DROP TABLE IF EXISTS licence_suggestions`,
+      `DROP TABLE IF EXISTS email_files`,
+      `DROP TABLE IF EXISTS email_docs`,
+      `DROP TABLE IF EXISTS scan_queue`,
+      `DROP TABLE IF EXISTS council_registers`,
+      `DROP TABLE IF EXISTS licence_reminders`,
+      `DROP TABLE IF EXISTS licences`,
+      `DROP TABLE IF EXISTS licensing_schemes`,
+      `DROP TABLE IF EXISTS rentals`,
+      `DROP TABLE IF EXISTS postcode_wards`,
+      `DROP TABLE IF EXISTS address_keys`,
+      `DELETE FROM notifications WHERE kind = 'licence'`,
+      `DELETE FROM jobs WHERE name IN ('licensing', 'epc', 'council_registers', 'licence_scan')`,
+      `DELETE FROM settings WHERE key LIKE 'licensing_%' OR key IN ('licence_scan', 'address_keys', 'schemes_seeded')`,
+    ],
+  },
 ]
