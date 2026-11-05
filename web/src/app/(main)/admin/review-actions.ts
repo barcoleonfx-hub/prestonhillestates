@@ -1,5 +1,6 @@
 'use server'
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import { eq } from 'drizzle-orm'
 import { db, ready } from '@/db/client'
 import { reviews, settings } from '@/db/schema'
@@ -31,12 +32,13 @@ export async function updateReview(f: FormData) {
   const me = await requireAdmin()
   await ready()
   const id = str(f, 'id', 64)
-  if (str(f, 'delete') === '1') { await db.delete(reviews).where(eq(reviews.id, id)); await audit(me.id, 'review_delete', 'review', id, ''); done(); return }
+  if (str(f, 'delete') === '1') { await db.delete(reviews).where(eq(reviews.id, id)); await audit(me.id, 'review_delete', 'review', id, ''); done(); redirect('/admin/reviews?saved=deleted') }
   const patch: Partial<typeof reviews.$inferInsert> = {}
   if (f.has('category') && CATS.includes(str(f, 'category'))) patch.category = str(f, 'category')
   if (f.has('shown')) patch.shown = str(f, 'shown') === '1'
   if (Object.keys(patch).length) await db.update(reviews).set(patch).where(eq(reviews.id, id))
   done()
+  redirect('/admin/reviews?saved=review')
 }
 
 /** The overall Google rating and number of reviews, and the link to them, shown next to the selected reviews. */
@@ -50,4 +52,5 @@ export async function saveGoogleSummary(f: FormData) {
   await db.insert(settings).values({ key: 'google_reviews', value, updatedAt: now() }).onConflictDoUpdate({ target: settings.key, set: { value, updatedAt: now() } })
   await audit(me.id, 'google_reviews', 'settings', 'google_reviews', value)
   done()
+  redirect('/admin/reviews?saved=rating')
 }
