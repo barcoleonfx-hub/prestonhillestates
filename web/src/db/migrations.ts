@@ -502,4 +502,40 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       `CREATE TABLE postcode_wards (postcode TEXT PRIMARY KEY, district TEXT, district_code TEXT, ward TEXT, ward_code TEXT, fetched_at TEXT NOT NULL)`,
     ],
   },
+  {
+    id: '018_licence_scan',
+    sql: [
+      // Emails in the mailbox that look like licences or safety certificates, waiting to be read.
+      `CREATE TABLE scan_queue (folder TEXT NOT NULL, uid INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'queued', PRIMARY KEY (folder, uid))`,
+      // What was read from each one, kept so new properties can be matched later without reading the mailbox again.
+      `CREATE TABLE email_docs (
+        id TEXT PRIMARY KEY,
+        folder TEXT NOT NULL,
+        uid INTEGER NOT NULL,
+        message_id TEXT,
+        subject TEXT,
+        from_addr TEXT,
+        sent_at TEXT,
+        kinds TEXT NOT NULL,
+        files TEXT,
+        text TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      )`,
+      `CREATE UNIQUE INDEX email_docs_msg_idx ON email_docs (folder, uid)`,
+      // Details found for a property, for staff to accept or dismiss.
+      `CREATE TABLE licence_suggestions (
+        id TEXT PRIMARY KEY,
+        rental_id TEXT NOT NULL REFERENCES rentals(id) ON DELETE CASCADE,
+        doc_id TEXT NOT NULL REFERENCES email_docs(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL,
+        found TEXT NOT NULL,
+        confidence TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'new',
+        decided_by TEXT,
+        decided_at TEXT,
+        created_at TEXT NOT NULL
+      )`,
+      `CREATE UNIQUE INDEX licence_suggestions_uniq ON licence_suggestions (rental_id, doc_id, kind)`,
+    ],
+  },
 ]

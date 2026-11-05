@@ -3,7 +3,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto'
 import { headers } from 'next/headers'
 import { and, eq, inArray, ne } from 'drizzle-orm'
 import { db } from '@/db/client'
-import { contacts, enquiries, properties, propertyEmails, type Contact, type Property } from '@/db/schema'
+import { contacts, enquiries, properties, propertyEmails, settings, type Contact, type Property } from '@/db/schema'
 import { matchesForProperty, type Match } from './matching'
 import { FURNISHING, PROPERTY_TYPES, TENURES, labelFor } from './options'
 import { displayAddressFor, priceLabel, slugFor, type FullProperty } from './properties'
@@ -17,8 +17,28 @@ export async function siteBase(): Promise<string> {
   if (env && !/localhost|127\.0\.0\.1/.test(env)) return env
   const h = await headers()
   const host = h.get('x-forwarded-host') ?? h.get('host')
-  if (host) return `${h.get('x-forwarded-proto') ?? (/localhost|127\.0\.0\.1/.test(host) ? 'http' : 'https')}://${host}`
+  if (host) {
+    const base = `${h.get('x-forwarded-proto') ?? (/localhost|127\.0\.0\.1/.test(host) ? 'http' : 'https')}://${host}`
+    // Remember it for the scheduler, which has no browser request to read the address from.
+    if (!/localhost|127\.0\.0\.1/.test(host)) await rememberBase(base).catch(() => {})
+    return base
+  }
   return env || 'http://localhost:3000'
+}
+
+let remembered: string | null = null
+async function rememberBase(base: string) {
+  if (remembered === base) return
+  remembered = base
+  await db.insert(settings).values({ key: 'site_base', value: base, updatedAt: new Date().toISOString() }).onConflictDoUpdate({ target: settings.key, set: { value: base, updatedAt: new Date().toISOString() } })
+}
+
+/** The website's address for emails sent by the scheduler: PORTAL_URL, else the address staff last used. */
+export async function knownBase(): Promise<string> {
+  const env = process.env.PORTAL_URL?.replace(/\/$/, '')
+  if (env && !/localhost|127\.0\.0\.1/.test(env)) return env
+  const row = await db.query.settings.findFirst({ where: eq(settings.key, 'site_base') }).catch(() => null)
+  return row?.value ?? env ?? 'http://localhost:3000'
 }
 
 // ---------- unsubscribe links ----------

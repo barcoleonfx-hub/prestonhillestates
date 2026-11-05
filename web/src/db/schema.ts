@@ -375,6 +375,40 @@ export const postcodeWards = sqliteTable('postcode_wards', {
   fetchedAt: text('fetched_at').notNull(),
 })
 
+export const scanQueue = sqliteTable('scan_queue', {
+  folder: text('folder').notNull(),
+  uid: integer('uid').notNull(),
+  status: text('status').notNull().default('queued'),
+}, (t) => [primaryKey({ columns: [t.folder, t.uid] })])
+
+export const emailDocs = sqliteTable('email_docs', {
+  id: text('id').primaryKey(),
+  folder: text('folder').notNull(),
+  uid: integer('uid').notNull(),
+  messageId: text('message_id'),
+  subject: text('subject'),
+  fromAddr: text('from_addr'),
+  sentAt: text('sent_at'),
+  kinds: text('kinds').notNull(),
+  files: text('files'),
+  text: text('text').notNull(),
+  createdAt: text('created_at').notNull(),
+})
+export type EmailDoc = typeof emailDocs.$inferSelect
+
+export const licenceSuggestions = sqliteTable('licence_suggestions', {
+  id: text('id').primaryKey(),
+  rentalId: text('rental_id').notNull().references(() => rentals.id, { onDelete: 'cascade' }),
+  docId: text('doc_id').notNull().references(() => emailDocs.id, { onDelete: 'cascade' }),
+  kind: text('kind').notNull(),
+  found: text('found').notNull(),
+  confidence: text('confidence').notNull(),
+  status: text('status').notNull().default('new'),
+  decidedBy: text('decided_by'),
+  decidedAt: text('decided_at'),
+  createdAt: text('created_at').notNull(),
+})
+
 export const calls = sqliteTable(
   'calls',
   {
