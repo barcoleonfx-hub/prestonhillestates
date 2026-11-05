@@ -26,6 +26,7 @@ export default async function LicensingPage({ searchParams }: { searchParams: Pr
     (!sp.cert || certBad(r)) && (!q || `${r.address} ${r.postcode ?? ''} ${r.landlordName ?? ''} ${r.licences.map((l) => l.number).join(' ')}`.toLowerCase().includes(q)))
   const count = (b: Bucket) => rows.filter((r) => r.a.bucket === b).length
   const wards = [...new Set(rows.map((r) => r.ward).filter(Boolean))].sort() as string[]
+  const councils = [...new Set(['brent', 'harrow', ...rows.map((r) => r.council).filter(Boolean)])] as string[]
   const landlords = [...new Set(rows.map((r) => r.landlordName).filter(Boolean))].sort() as string[]
   const link = (patch: Partial<SP>) => { const p = new URLSearchParams(Object.entries({ ...sp, ...patch }).filter(([, v]) => v) as [string, string][]); const s = p.toString(); return `/admin/licensing${s ? `?${s}` : ''}` }
   const filtered = Object.values(sp).some(Boolean)
@@ -102,13 +103,13 @@ export default async function LicensingPage({ searchParams }: { searchParams: Pr
               </Link>
             ))}
             <Link href={link({ cert: sp.cert ? undefined : '1' })} className={`lic-tile t-amber${sp.cert ? ' on' : ''}${rows.filter(certBad).length ? '' : ' zero'}`} title="Gas safety or EICR expired, due within 30 days or not on file; EPC expired or below E.">
-              <b>{rows.filter(certBad).length}</b><span>Certificates to sort</span>
+              <b>{rows.filter(certBad).length}</b><span>Certificates missing or due</span>
             </Link>
           </div>
 
           <form className="lic-filters" action="/admin/licensing">
             <input className="input" name="q" defaultValue={sp.q} placeholder="Search address, landlord or licence number" aria-label="Search" />
-            <select className="select" name="council" defaultValue={sp.council ?? ''} aria-label="Council"><option value="">All councils</option><option value="brent">Brent</option><option value="harrow">Harrow</option><option value="other">Other</option></select>
+            <select className="select" name="council" defaultValue={sp.council ?? ''} aria-label="Council"><option value="">All councils</option>{councils.map((c) => <option key={c} value={c}>{councilLabel(c)}</option>)}</select>
             <select className="select" name="ward" defaultValue={sp.ward ?? ''} aria-label="Ward"><option value="">All wards</option>{wards.map((w) => <option key={w}>{w}</option>)}</select>
             <select className="select" name="kind" defaultValue={sp.kind ?? ''} aria-label="Licence"><option value="">Any licence</option>{KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}</select>
             <select className="select" name="landlord" defaultValue={sp.landlord ?? ''} aria-label="Landlord"><option value="">All landlords</option>{landlords.map((l) => <option key={l}>{l}</option>)}</select>

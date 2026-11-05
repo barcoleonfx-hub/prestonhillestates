@@ -51,8 +51,9 @@ export async function areaFor(postcode: string): Promise<{ council: Council; dis
       await db.insert(postcodeWards).values(row).onConflictDoNothing()
     } catch { return null }
   }
-  const council = COUNCIL_CODES[row.districtCode ?? ''] ?? (/^brent$/i.test(row.district ?? '') ? 'brent' : /^harrow$/i.test(row.district ?? '') ? 'harrow' : 'other')
-  return { council, district: row.district, ward: council === 'other' ? row.ward : row.ward }
+  // Brent and Harrow by their ONS codes; any other council by its name (e.g. 'ealing').
+  const council = COUNCIL_CODES[row.districtCode ?? ''] ?? (row.district ? row.district.toLowerCase() : 'other')
+  return { council, district: row.district, ward: row.ward }
 }
 
 /** Looks up many postcodes at once (postcodes.io takes 100 per request) and caches them. */
@@ -94,7 +95,7 @@ export async function refreshArea(r: Rental): Promise<boolean> {
 
 const toLicence = (l: LicenceRow): Licence => ({ id: l.id, kind: l.kind as Licence['kind'], council: l.council, number: l.number, status: l.status as Licence['status'], appliedOn: l.appliedOn, startsOn: l.startsOn, expiresOn: l.expiresOn })
 export const factsOf = (r: Rental) => ({
-  council: (r.council as Council | null) ?? null, ward: r.ward, occupancy: (r.occupancy as Occupancy) ?? 'single',
+  council: (r.council as Council | null) ?? null, ward: r.ward, occupancy: (r.occupancy as Occupancy) ?? 'single', noLicenceNeeded: r.noLicenceNeeded,
   gasExpires: r.gasExpires, eicrExpires: r.eicrExpires, epcExpires: r.epcExpires, epcRating: r.epcRating,
 })
 

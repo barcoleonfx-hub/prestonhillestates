@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { kindLabel, OCCUPANCY, fmtDay } from '@/lib/licensing-rules'
+import { councilLabel, kindLabel, OCCUPANCY, fmtDay } from '@/lib/licensing-rules'
 import { commitImport, previewImport, readImportFile, type ImportRow, type Mapping } from '../../../licensing-actions'
 
 const TEMPLATE = 'Address,Postcode,Landlord,Landlord email,Landlord phone,Type,Licence type,Licence number,Licence status,Licence start,Licence expiry,Gas expiry,EICR expiry,EPC expiry,EPC rating,Notes\n"14 Kenton Road, Harrow",HA3 0AB,Mr A Shah,a.shah@example.com,07700 900000,Single household,Selective,BR/SL/12345,Granted,01/04/2024,31/03/2029,12/06/2027,01/02/2030,10/10/2033,D,\n'
@@ -19,20 +19,22 @@ const toBase64 = async (f: File) => { const b = new Uint8Array(await f.arrayBuff
 
 export function ImportRentals() {
   const router = useRouter()
-  const [file, setFile] = useState<{ name: string; head: string[]; rows: string[][] } | null>(null)
+  const [file, setFile] = useState<{ name: string; b64: string; sheets: string[]; sheet: number; head: string[]; rows: string[][] } | null>(null)
   const [map, setMap] = useState<Mapping>({})
   const [preview, setPreview] = useState<ImportRow[] | null>(null)
   const [update, setUpdate] = useState(true)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
-  async function pick(f: File) {
+  async function load(name: string, b64: string, sheet: number) {
     setBusy(true); setMsg(null); setPreview(null)
-    const r = await readImportFile(f.name, await toBase64(f)).catch(() => ({ head: [], rows: [], mapping: {}, error: 'Couldn’t read that file.' }))
+    const r = await readImportFile(name, b64, sheet).catch(() => ({ sheets: [], sheet: 0, head: [], rows: [], mapping: {}, error: 'Couldn’t read that file.' }))
     setBusy(false)
-    if (r.error) { setFile(null); return setMsg({ ok: false, text: r.error }) }
-    setFile({ name: f.name, head: r.head, rows: r.rows }); setMap(r.mapping)
+    if (r.error && !r.sheets.length) { setFile(null); return setMsg({ ok: false, text: r.error }) }
+    if (r.error) setMsg({ ok: false, text: r.error })
+    setFile({ name, b64, sheets: r.sheets, sheet: r.sheet, head: r.head, rows: r.rows }); setMap(r.mapping)
   }
+  const pick = async (f: File) => load(f.name, await toBase64(f), 0)
   useEffect(() => {
     if (!file) return
     const t = setTimeout(async () => setPreview(await previewImport(file.rows, map).catch(() => null)), 300)
@@ -51,6 +53,7 @@ export function ImportRentals() {
   }
   const sample = (i: number | null | undefined) => (i == null ? '' : file?.rows.find((r) => r[i])?.[i] ?? '')
   const fresh = preview?.filter((r) => !r.existing).length ?? 0, old = (preview?.length ?? 0) - fresh
+  const found = preview?.filter((r) => r.postcodeFound).length ?? 0
   const bad = preview?.filter((r) => r.problems.length).length ?? 0
 
   return (
@@ -67,7 +70,13 @@ export function ImportRentals() {
 
       {file ? (
         <>
-          <h2 style={{ marginTop: 22 }}>Match the columns · {file.name} · {file.rows.length} rows</h2>
+          {file.sheets.length > 1 ? (
+            <div className="imp-sheets" role="group" aria-label="Sheet">
+              <span>Sheet:</span>
+              {file.sheets.map((n, i) => <button key={i} type="button" className={i === file.sheet ? 'on' : ''} disabled={busy} onClick={() => load(file.name, file.b64, i)}>{n}</button>)}
+            </div>
+          ) : null}
+          <h2 style={{ marginTop: 22 }}>Match the columns · {file.name}{file.sheets.length > 1 ? ` · ${file.sheets[file.sheet]}` : ''} · {file.rows.length} rows</h2>
           <p className="card-sub">We’ve guessed which column is which. Change any that are wrong, or set them to “Not in this file”.</p>
           <div className="imp-map">
             {FIELDS.map((f) => (
@@ -87,22 +96,22 @@ export function ImportRentals() {
               <div className="today-head" style={{ marginTop: 22 }}>
                 <div>
                   <h2>{fresh} new{old ? ` · ${old} already in the register` : ''}</h2>
-                  <p className="card-sub">{bad ? `${bad} rows have something to check (in red); they can still be imported and fixed afterwards. ` : ''}Nothing is saved until you press Import.</p>
+                  <p className="card-sub">{found ? `${found} postcodes were found for you from the Land Registry address list (marked “found for you”). ` : ''}{bad ? `${bad} rows have something to check (in red); they can still be imported and fixed afterwards. ` : ''}Nothing is saved until you press Import.</p>
                   {old ? <label className="imp-update"><input type="checkbox" checked={update} onChange={(e) => setUpdate(e.target.checked)} /> Fill in the blanks on the {old} already in the register (nothing there is overwritten; a certificate date is only moved later)</label> : null}
                 </div>
                 <button type="button" className="btn btn-gold" disabled={busy || !map.address} onClick={go}>{busy ? 'Importing…' : `Import ${fresh}${old && update ? ` and update ${old}` : ''}`}</button>
               </div>
               <div className="table-wrap lic-import-table">
                 <table className="list">
-                  <thead><tr><th>Address</th><th>Postcode</th><th>Type</th><th>Landlord</th><th>Licence</th><th>Expires</th><th>Gas</th><th>EICR</th><th>EPC</th></tr></thead>
+                  <thead><tr><th>Address</th><th>Postcode</th><th>Council</th><th>Landlord</th><th>Licence</th><th>Expires</th><th>Gas</th><th>EICR</th><th>EPC</th></tr></thead>
                   <tbody>
                     {preview.slice(0, 300).map((r, i) => (
                       <tr key={i} className={r.problems.length ? 'bad' : undefined}>
                         <td>{r.address || '—'}{r.existing ? <span className="pill" style={{ marginLeft: 6 }}>Already in</span> : null}{r.problems.length ? <div className="lic-problem">{r.problems.join('. ')}</div> : null}</td>
-                        <td>{r.postcode ?? '—'}</td>
-                        <td className="addr-sub">{OCCUPANCY.find((o) => o.value === r.occupancy)?.label}</td>
+                        <td>{r.postcode ?? '—'}{r.postcodeFound ? <div className="addr-sub" title="Found in the Land Registry address list from the house number and street. Check it.">found for you</div> : null}</td>
+                        <td className="addr-sub">{r.council === 'auto' ? 'From postcode' : councilLabel(r.council)}{r.occupancy !== 'single' ? <div>{OCCUPANCY.find((o) => o.value === r.occupancy)?.label}</div> : null}</td>
                         <td className="addr-sub">{[r.landlordName, r.landlordEmail, r.landlordPhone].filter(Boolean).join(' · ') || '—'}</td>
-                        <td className="addr-sub">{r.licenceKind ? `${kindLabel(r.licenceKind)}${r.licenceNumber ? ` · ${r.licenceNumber}` : ''}${r.licenceStatus === 'applied' ? ' (applied)' : ''}` : '—'}</td>
+                        <td className="addr-sub">{r.licenceKind ? `${kindLabel(r.licenceKind)}${r.licenceNumber ? ` · ${r.licenceNumber}` : ''}${r.licenceStatus === 'applied' ? ` (applied${r.appliedOn ? ` ${fmtDay(r.appliedOn)}` : ''})` : ''}` : r.licenceNote ?? '—'}</td>
                         <td className="addr-sub">{fmtDay(r.licenceExpiry)}</td>
                         <td className="addr-sub">{fmtDay(r.gasExpires)}</td>
                         <td className="addr-sub">{fmtDay(r.eicrExpires)}</td>

@@ -47,7 +47,10 @@ export function SuggestionReview({ groups, compact }: { groups: Group[]; compact
               <div className="sug-main">
                 <div className="sug-top"><b>{LABEL[s.kind]}</b><span>{what(s)}</span><span className={`sug-conf c-${s.confidence}`}>{s.confidence === 'high' ? 'Clear' : s.confidence === 'medium' ? 'Worked out' : 'Rough guess'}</span></div>
                 <div className="sug-how">{s.found.how}. Now on file: {g.current[s.kind] ?? 'nothing'}.</div>
-                <div className="sug-src">From “{s.doc.subject || '(no subject)'}” · {s.doc.fromAddr} · {s.doc.sentAt ? fmtDay(s.doc.sentAt.slice(0, 10)) : ''}{s.doc.files ? ` · ${s.doc.files.split('\n').join(', ')}` : ''} · folder {s.doc.folder}</div>
+                <div className="sug-src">From “{s.doc.subject || '(no subject)'}” · {s.doc.fromAddr} · {s.doc.sentAt ? fmtDay(s.doc.sentAt.slice(0, 10)) : ''} · folder {s.doc.folder}
+                  {s.doc.pdfs.map((f) => <span key={f.id}> · <a href={`/api/admin/licensing/files/${f.id}`} target="_blank" rel="noreferrer">Open {f.filename}</a></span>)}
+                  {!s.doc.pdfs.length && s.doc.files ? ` · ${s.doc.files.split('\n').join(', ')}` : ''}
+                </div>
               </div>
               {compact ? (
                 <div className="actions">
