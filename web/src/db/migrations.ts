@@ -619,4 +619,17 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       `ALTER TABLE licence_suggestions ADD COLUMN prev TEXT`,
     ],
   },
+  {
+    id: '025_rentman_list',
+    sql: [
+      // Rentman is the master list of properties: its reference, landlord number, rent and whether it's archived
+      // there. sheet_address is how the property was written on the licensing spreadsheet, kept for matching.
+      `ALTER TABLE rentals ADD COLUMN rentman_ref TEXT`,
+      `ALTER TABLE rentals ADD COLUMN landlord_ref TEXT`,
+      `ALTER TABLE rentals ADD COLUMN rent_pcm INTEGER`,
+      `ALTER TABLE rentals ADD COLUMN rentman_archived INTEGER`,
+      `ALTER TABLE rentals ADD COLUMN sheet_address TEXT`,
+      `CREATE INDEX rentals_rentman_ref ON rentals (rentman_ref)`,
+    ],
+  },
 ]
