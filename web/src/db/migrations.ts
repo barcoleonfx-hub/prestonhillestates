@@ -553,4 +553,51 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       `ALTER TABLE rentals ADD COLUMN no_licence_needed INTEGER NOT NULL DEFAULT 0`,
     ],
   },
+  {
+    id: '021_postcodes_and_registers',
+    sql: [
+      // How a rental's postcode was found: from the spreadsheet, the Land Registry list or a map look-up.
+      `ALTER TABLE rentals ADD COLUMN postcode_source TEXT`,
+      `ALTER TABLE rentals ADD COLUMN postcode_note TEXT`,
+      `ALTER TABLE rentals ADD COLUMN postcode_tried_at TEXT`,
+      // Councils' published licence registers, downloaded and checked against our properties.
+      `CREATE TABLE council_registers (
+        id TEXT PRIMARY KEY,
+        council TEXT NOT NULL,
+        name TEXT NOT NULL,
+        url TEXT NOT NULL,
+        page_url TEXT,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        last_fetched_at TEXT,
+        last_ok_at TEXT,
+        last_error TEXT,
+        as_of TEXT,
+        entries INTEGER,
+        file_key TEXT,
+        doc_id TEXT,
+        updated_at TEXT NOT NULL
+      )`,
+      // What each register says about each of our properties, from the latest download.
+      `CREATE TABLE register_hits (
+        rental_id TEXT NOT NULL REFERENCES rentals(id) ON DELETE CASCADE,
+        register_id TEXT NOT NULL REFERENCES council_registers(id) ON DELETE CASCADE,
+        found INTEGER NOT NULL,
+        reference TEXT,
+        kind TEXT,
+        starts_on TEXT,
+        expires_on TEXT,
+        line TEXT,
+        checked_at TEXT NOT NULL,
+        PRIMARY KEY (rental_id, register_id)
+      )`,
+    ],
+  },
+  {
+    id: '022_resolved_address',
+    sql: [
+      // The full address worked out from a shortened or misspelt one ("82 Mountsteward" → "82 Mount Stewart Avenue"),
+      // used to match council registers and emails. The address as typed is kept as it is.
+      `ALTER TABLE rentals ADD COLUMN resolved_address TEXT`,
+    ],
+  },
 ]

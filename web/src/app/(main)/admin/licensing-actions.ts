@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { db, ready } from '@/db/client'
 import { contacts, licences, licensingSchemes, rentals } from '@/db/schema'
 import { requireAdmin } from '@/lib/auth'
@@ -67,10 +67,16 @@ export async function saveRental(_prev: { error?: string } | undefined, f: FormD
     landlordName: i.landlordName, landlordEmail: i.landlordEmail, landlordPhone: i.landlordPhone, landlordContactId: await landlordContact(i.landlordEmail, i.landlordPhone),
     gasExpires: i.gasExpires, eicrExpires: i.eicrExpires, epcExpires: i.epcExpires, epcRating: i.epcRating, notes: i.notes, updatedAt: now(),
     noLicenceNeeded: str(f, 'noLicenceNeeded') === '1',
+    ...(id ? {} : { postcodeSource: i.postcode ? 'manual' : null }),
     ...(area.council ? area : { wardSource: 'auto' }),
   }
   let rid = id
-  if (id) await db.update(rentals).set(values).where(eq(rentals.id, id))
+  if (id) {
+    // A postcode typed or changed by staff counts as checked.
+    const before = await db.query.rentals.findFirst({ where: eq(rentals.id, id) })
+    const pcChanged = before && (before.postcode ?? '') !== (i.postcode ?? '')
+    await db.update(rentals).set({ ...values, ...(pcChanged ? { postcodeSource: i.postcode ? 'manual' : null, postcodeNote: null } : {}) }).where(eq(rentals.id, id))
+  }
   else { rid = uid(); await db.insert(rentals).values({ id: rid, ...values, createdBy: me.id, createdAt: now() }) }
   const r = await db.query.rentals.findFirst({ where: eq(rentals.id, rid) })
   if (r && r.wardSource === 'auto') await refreshArea(r).catch(() => false)
@@ -159,7 +165,7 @@ export async function saveScheme(f: FormData) {
 
 // ---------- importing an existing spreadsheet (e.g. a Rentman export) ----------
 
-export type ImportRow = RentalInput & { licenceKind: string | null; licenceNumber: string | null; licenceStatus: string | null; licenceStart: string | null; licenceExpiry: string | null; appliedOn: string | null; licenceNote: string | null; postcodeFound: boolean; problems: string[]; existing: boolean }
+export type ImportRow = RentalInput & { licenceKind: string | null; licenceNumber: string | null; licenceStatus: string | null; licenceStart: string | null; licenceExpiry: string | null; appliedOn: string | null; licenceNote: string | null; postcodeFound: boolean; postcodeHow: string | null; resolvedAddress: string | null; problems: string[]; existing: boolean }
 export type Mapping = Partial<Record<ImportField, number | null>>
 type ImportField = 'address' | 'address2' | 'town' | 'postcode' | 'council' | 'ward' | 'occupancy' | 'landlordName' | 'landlordEmail' | 'landlordPhone'
   | 'licenceKind' | 'licenceNumber' | 'licenceStatus' | 'licenceStart' | 'licenceExpiry' | 'gasExpires' | 'eicrExpires' | 'epcExpires' | 'epcRating' | 'notes'
@@ -288,24 +294,6 @@ function looseKey(address: string): string | null {
   return m ? `${flat}|${m[1]}|${m[2]}` : null
 }
 
-/** Postcodes for addresses without one, from the Land Registry address list, when the match is unambiguous. */
-async function postcodeFinder(): Promise<(address: string) => string | null> {
-  const { knownAddresses } = await import('@/db/schema')
-  const all = await db.select({ p: knownAddresses.postcode, l: knownAddresses.line }).from(knownAddresses)
-  const byNum = new Map<string, { p: string; l: string }[]>()
-  for (const r of all) { const n = /^(\d+[a-z]?)\s/i.exec(r.l)?.[1]?.toLowerCase(); if (n) byNum.set(n, [...(byNum.get(n) ?? []), { p: r.p, l: normText(r.l) }]) }
-  return (address) => {
-    const a = normText(address)
-    if (/\b(flat|apartment|apt|unit)\b/.test(a)) return null
-    const m = /\b(\d+[a-z]?)\s+([a-z]{3,}(?:\s[a-z]{3,})?)/.exec(a)
-    if (!m) return null
-    const want = ` ${m[1]} ${m[2]}`
-    const hits = (byNum.get(m[1]) ?? []).filter((x) => x.l.startsWith(want))
-    const pcs = [...new Set(hits.map((h) => h.p))]
-    return pcs.length === 1 ? pcs[0] : null
-  }
-}
-
 const keyOf = (address: string, postcode: string | null) => `${address.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()}|${(postcode ?? '').replace(/\s/g, '')}`
 const firstDate = async (t: string) => { const m = /(\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}|\d{4}-\d{2}-\d{2})/.exec(t); return m ? parseDay(m[1]) : null }
 
@@ -314,7 +302,7 @@ async function rowsFrom(rows: string[][], map: Mapping): Promise<ImportRow[]> {
   const existing = new Set(have.map((r) => keyOf(r.a, r.p)))
   const loose = new Map<string, number>()
   for (const r of have) { const k = looseKey(r.a); if (k) loose.set(k, (loose.get(k) ?? 0) + 1) }
-  const find = rows.some((r) => map.postcode == null || !(r[map.postcode] ?? '').trim()) ? await postcodeFinder() : null
+  const { guessPostcode } = await import('@/lib/address-match')
   const out: ImportRow[] = []
   for (const r of rows.slice(0, 3000)) {
     const g = (k: ImportField) => (map[k] != null ? (r[map[k]!] ?? '').trim() : '')
@@ -347,17 +335,20 @@ async function rowsFrom(rows: string[][], map: Mapping): Promise<ImportRow[]> {
     const line = raw.replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').replace(/\s+,/g, ',').trim()
     let pc = fmtPostcode(g('postcode')) ?? fmtPostcode(/[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}/i.exec(line)?.[0])
     const address = line.replace(/,?\s*[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\s*$/i, '').slice(0, 200)
-    let postcodeFound = false
-    if (!pc && address && find) { pc = find(address); postcodeFound = !!pc }
+    let postcodeFound = false, postcodeHow: string | null = null, resolvedAddress: string | null = null
+    if (!pc && address) {
+      const g = await guessPostcode(address, council === 'auto' || council === 'other' ? null : council).catch(() => null)
+      if (g) { pc = g.postcode; postcodeFound = true; postcodeHow = `Found from the ${g.how}`; resolvedAddress = g.resolved }
+    }
     if (!address) problems.push('No address')
-    if (!pc) problems.push('No postcode, so the ward can’t be looked up yet')
+    if (!pc) problems.push('No postcode yet: after import the portal will try a map look-up')
     const lk = looseKey(address)
     out.push({
       address: tidy(address), postcode: pc, council, ward: g('ward') || null, occupancy, management: null,
       landlordName: g('landlordName') || null, landlordEmail: (/\S+@\S+\.\S+/.exec(g('landlordEmail'))?.[0] ?? '').toLowerCase() || null, landlordPhone: g('landlordPhone') || null,
       gasExpires: dates.gasExpires, eicrExpires: dates.eicrExpires, epcExpires: dates.epcExpires, epcRating: (g('epcRating').match(/\b[A-G]\b/i)?.[0] ?? '').toUpperCase() || null,
       notes: [g('notes'), bracket ? `Area: ${bracket}` : '', licenceNote ?? ''].filter(Boolean).join('\n') || null,
-      licenceKind, licenceNumber: g('licenceNumber') || null, licenceStatus, licenceStart: dates.licenceStart, licenceExpiry: expiry, appliedOn, licenceNote, postcodeFound, problems,
+      licenceKind, licenceNumber: g('licenceNumber') || null, licenceStatus, licenceStart: dates.licenceStart, licenceExpiry: expiry, appliedOn, licenceNote, postcodeFound, postcodeHow, resolvedAddress, problems,
       existing: existing.has(keyOf(address, pc)) || (!!lk && loose.get(lk) === 1),
     })
   }
@@ -398,7 +389,8 @@ export async function commitImport(rows: string[][], map: Mapping, update: boole
       if (!update) { skipped++; continue }
       id = have.id
       await db.update(rentals).set({
-        postcode: have.postcode ?? r.postcode, landlordName: have.landlordName ?? r.landlordName, landlordEmail: have.landlordEmail ?? r.landlordEmail, landlordPhone: have.landlordPhone ?? r.landlordPhone,
+        postcode: have.postcode ?? r.postcode,
+        ...(!have.postcode && r.postcode ? { postcodeSource: r.postcodeFound ? 'land_registry' : 'import', postcodeNote: r.postcodeHow, resolvedAddress: have.resolvedAddress ?? r.resolvedAddress } : {}), landlordName: have.landlordName ?? r.landlordName, landlordEmail: have.landlordEmail ?? r.landlordEmail, landlordPhone: have.landlordPhone ?? r.landlordPhone,
         landlordContactId: have.landlordContactId ?? await landlordContact(r.landlordEmail, r.landlordPhone),
         gasExpires: later(r.gasExpires, have.gasExpires), eicrExpires: later(r.eicrExpires, have.eicrExpires), epcExpires: later(r.epcExpires, have.epcExpires),
         epcRating: have.epcRating ?? r.epcRating, occupancy: have.occupancy !== 'single' ? have.occupancy : r.occupancy, updatedAt: now(),
@@ -410,7 +402,7 @@ export async function commitImport(rows: string[][], map: Mapping, update: boole
     } else {
       id = uid()
       await db.insert(rentals).values({
-        id, address: r.address, postcode: r.postcode, occupancy: r.occupancy, management: r.management, landlordName: r.landlordName, landlordEmail: r.landlordEmail, landlordPhone: r.landlordPhone,
+        id, address: r.address, postcode: r.postcode, postcodeSource: r.postcode ? (r.postcodeFound ? 'land_registry' : 'import') : null, postcodeNote: r.postcodeHow, resolvedAddress: r.resolvedAddress, occupancy: r.occupancy, management: r.management, landlordName: r.landlordName, landlordEmail: r.landlordEmail, landlordPhone: r.landlordPhone,
         landlordContactId: await landlordContact(r.landlordEmail, r.landlordPhone), gasExpires: r.gasExpires, eicrExpires: r.eicrExpires, epcExpires: r.epcExpires, epcRating: r.epcRating, notes: r.notes,
         noLicenceNeeded: r.licenceNote === 'Spreadsheet said no licence required',
         ...(area.council ? area : { wardSource: 'auto' }), createdBy: me.id, createdAt: now(), updatedAt: now(),
@@ -431,6 +423,8 @@ export async function commitImport(rows: string[][], map: Mapping, update: boole
   await audit(me.id, 'rental_import', 'rental', 'import', `${added} added, ${updated} updated`)
   // Look up every new council and ward straight away (100 postcodes per request), then match stored emails.
   after(async () => {
+    const { fillPostcodes } = await import('@/lib/licensing')
+    await fillPostcodes({ seconds: 600 }).catch((e) => console.error('postcode finding after import failed', e))
     await fillAreas(1000).catch((e) => console.error('ward look-up after import failed', e))
     const { matchDocs } = await import('@/lib/licensing-scan')
     await matchDocs().catch((e) => console.error('matching emails after import failed', e))
@@ -466,4 +460,44 @@ export async function dismissFound(ids: string[]) {
   const { dismissSuggestions } = await import('@/lib/licensing-scan')
   await dismissSuggestions(ids.slice(0, 1000), me.id)
   done()
+}
+
+// ---------- postcodes and council registers ----------
+
+export async function findPostcodesNow() {
+  const me = await requireAdmin()
+  const { fillPostcodes, fillAreas } = await import('@/lib/licensing')
+  // Clear "tried" so everything missing is tried again now, then work through them after the reply.
+  await db.update(rentals).set({ postcodeTriedAt: null }).where(isNull(rentals.postcode))
+  await audit(me.id, 'postcodes_find', 'rental', 'all')
+  after(async () => { await fillPostcodes({ seconds: 600 }).catch((e) => console.error('postcode finding failed', e)); await fillAreas(1000).catch(() => 0) })
+  done()
+}
+
+export async function checkRegistersNow() {
+  const me = await requireAdmin()
+  const { checkRegisters } = await import('@/lib/council-registers')
+  await audit(me.id, 'registers_check', 'rental', 'all')
+  after(() => checkRegisters({ force: true }).catch((e) => console.error('register check failed', e)))
+  done()
+}
+
+export async function saveRegister(f: FormData) {
+  const me = await requireAdmin()
+  await ready()
+  const { councilRegisters } = await import('@/db/schema')
+  const id = str(f, 'id', 64)
+  const url = str(f, 'url', 600), pageUrl = opt(f, 'pageUrl', 600)
+  if (!/^https?:\/\//.test(url)) return
+  await db.update(councilRegisters).set({ url, pageUrl, enabled: str(f, 'enabled') === '1', updatedAt: now() }).where(eq(councilRegisters.id, id))
+  await audit(me.id, 'register_update', 'council_register', id, url.slice(0, 120))
+  done()
+}
+
+export async function confirmPostcode(f: FormData) {
+  await requireAdmin()
+  await ready()
+  const id = str(f, 'id', 64)
+  await db.update(rentals).set({ postcodeSource: 'manual', postcodeNote: 'Checked by staff' }).where(eq(rentals.id, id))
+  done(id)
 }

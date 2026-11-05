@@ -71,6 +71,39 @@ async function cacheAreas(pcs: string[]) {
   }
 }
 
+/**
+ * Postcodes for rentals that don't have one: the Land Registry address list first (instant, matches
+ * shortened and misspelt streets), then a map look-up for the rest (one a second). Each is labelled with how
+ * it was found, for staff to check. Failed ones are tried again after a week.
+ */
+export async function fillPostcodes(opts: { seconds?: number; online?: boolean } = {}): Promise<{ found: number; tried: number }> {
+  await ready()
+  const { guessPostcode } = await import('./address-match')
+  const { geocodePostcode } = await import('./geocode')
+  const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString()
+  const todo = (await db.select().from(rentals).where(and(eq(rentals.archived, false), isNull(rentals.postcode)))).filter((r) => !r.postcodeTriedAt || r.postcodeTriedAt < weekAgo)
+  const started = Date.now()
+  let found = 0, tried = 0
+  for (const r of todo) {
+    if (Date.now() - started > (opts.seconds ?? 60) * 1000) break
+    tried++
+    const council = r.council && r.council !== 'other' ? r.council : null
+    let pc: string | null = null, source = '', note = '', resolved: string | null = null
+    const g = await guessPostcode(r.address, council).catch(() => null)
+    if (g) { pc = g.postcode; source = 'land_registry'; note = `Found from the ${g.how}`; resolved = g.resolved }
+    else if (opts.online !== false) {
+      const o = await geocodePostcode(r.address, council)
+      if (o) { pc = o.postcode; source = 'online'; note = `Found by ${o.how}`; resolved = o.resolved }
+    }
+    if (pc) {
+      found++
+      await db.update(rentals).set({ postcode: pc, postcodeSource: source, postcodeNote: note, resolvedAddress: resolved, postcodeTriedAt: now(), updatedAt: now() }).where(eq(rentals.id, r.id))
+      await refreshArea({ ...r, postcode: pc }).catch(() => false)
+    } else await db.update(rentals).set({ postcodeTriedAt: now(), postcodeNote: 'Postcode not found automatically: add it by hand' }).where(eq(rentals.id, r.id))
+  }
+  return { found, tried }
+}
+
 /** Council and ward for every rental that's missing them (unless chosen by hand). */
 export async function fillAreas(limit = 200): Promise<number> {
   await ready()
@@ -156,6 +189,7 @@ async function claim(): Promise<boolean> {
 export async function runLicensingChecks(opts: { force?: boolean } = {}): Promise<{ ran: boolean; reminders?: number; areas?: number }> {
   await ready()
   if (!opts.force && !(await claim())) return { ran: false }
+  await fillPostcodes({ seconds: 70 }).catch((e) => console.error('postcode finding failed', e))
   const areas = await fillAreas(200)
 
   const { rows } = await rentalRegister()
