@@ -6,7 +6,7 @@ import { COUNCILS, bucketOf, councilLabel, fmtDay, inWords, kindLabel, OCCUPANCY
 import { archiveRental, lookUpArea, markChecked } from '../../../licensing-actions'
 import { LicenceList } from '../LicenceList'
 import { RentalForm } from '../RentalForm'
-import { bestOf, suggestionsFor } from '@/lib/licensing-scan'
+import { bestOf, documentsFor, suggestionsFor } from '@/lib/licensing-scan'
 import { SuggestionReview } from '../found/SuggestionReview'
 
 export const dynamic = 'force-dynamic'
@@ -19,7 +19,8 @@ export default async function RentalPage({ params, searchParams }: { params: Pro
   const v = await rentalView(id)
   if (!v) notFound()
   const { row: r } = v
-  const found = bestOf(await suggestionsFor([r.id]))
+  const [found, docs] = await Promise.all([suggestionsFor([r.id]).then(bestOf), documentsFor(r.id)])
+  const KIND: Record<string, string> = { licence: 'Licence', gas: 'Gas safety', eicr: 'EICR', epc: 'EPC' }
   const b = bucketOf(r.a.bucket)
   const council = COUNCILS.find((c) => c.value === r.council)
   const mail = r.landlordEmail && r.a.licence?.expiresOn ? `mailto:${r.landlordEmail}?subject=${encodeURIComponent(`Licence renewal: ${r.address}`)}&body=${encodeURIComponent(`Dear ${r.landlordName ?? 'landlord'},\n\nThe ${kindLabel(r.a.licence.kind).toLowerCase()} for ${r.address}${r.a.licence.number ? ` (${r.a.licence.number})` : ''} runs out on ${fmtDay(r.a.validUntil)}. To keep letting it legally, a renewal needs to be made before then.\n\nCould you let us know how you'd like to proceed? We're happy to handle the application for you.\n\nKind regards,\nPreston Hill Estates\n020 8127 7001`)}` : null
@@ -77,6 +78,31 @@ export default async function RentalPage({ params, searchParams }: { params: Pro
         <h2>Licences</h2>
         <p className="card-sub" style={{ margin: '4px 0 12px' }}>{r.a.needed ? `This property needs a ${kindLabel(r.a.needed).toLowerCase()}.` : r.a.upcoming ? `A ${kindLabel(r.a.upcoming.kind).toLowerCase()} will be needed from ${fmtDay(r.a.upcoming.scheme.startsOn)}.` : 'No licence is needed at the moment, but you can keep one on record here.'} Add applications as soon as they’re made: a pending application protects the landlord while the council decides.</p>
         <LicenceList rentalId={r.id} list={r.licences} countingId={r.a.licence?.id ?? null} kind={r.a.needed ?? r.a.upcoming?.kind ?? null} council={r.council} />
+      </section>
+
+      <section className="card card-pad" style={{ marginTop: 18 }} id="documents">
+        <h2>Documents from our emails{docs.length ? ` · ${docs.length}` : ''}</h2>
+        {docs.length ? (
+          <ul className="lic-docs">
+            {docs.map((d) => (
+              <li key={d.id}>
+                <div>
+                  <span className="lic-doc-kinds">{d.kinds.split(',').map((k) => KIND[k] ?? k).join(' · ')}</span>
+                  <b>{d.subject || '(no subject)'}</b>
+                  <span className="addr-sub">{d.fromAddr} · {d.sentAt ? fmtDay(d.sentAt.slice(0, 10)) : ''}</span>
+                </div>
+                <div className="lic-doc-files">
+                  {d.pdfs.length ? d.pdfs.map((f) => (
+                    <span key={f.id}>
+                      <a className="btn btn-ghost btn-sm" href={`/api/admin/licensing/files/${f.id}`} target="_blank" rel="noreferrer">Open {f.filename}</a>
+                      <a className="lic-linkish" href={`/api/admin/licensing/files/${f.id}?download=1`}>Download</a>
+                    </span>
+                  )) : <span className="addr-sub">No PDF attached (details were in the email itself)</span>}
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : <p className="card-sub" style={{ marginTop: 6 }}>None yet. Run <b>Search our emails</b> on the Licensing page: licences and certificates that mention this address appear here, with their PDFs.</p>}
       </section>
 
       <section className="card card-pad" style={{ marginTop: 18 }}>

@@ -9,7 +9,8 @@ import { requireAdmin } from '@/lib/auth'
 import { audit } from '@/lib/contacts'
 import { after } from 'next/server'
 import { fillAreas, fmtPostcode, refreshArea } from '@/lib/licensing'
-import { KINDS, LICENCE_STATUS, OCCUPANCY, WARDS, type Council } from '@/lib/licensing-rules'
+import { KINDS, LICENCE_STATUS, OCCUPANCY, WARDS, normWard } from '@/lib/licensing-rules'
+import { normText } from '@/lib/licensing-extract'
 import { now, uid } from '@/lib/util'
 
 const str = (f: FormData, k: string, max = 300) => String(f.get(k) ?? '').trim().slice(0, max)
@@ -34,17 +35,23 @@ export type RentalInput = {
 function fromForm(f: FormData): RentalInput {
   return {
     address: str(f, 'address', 200), postcode: fmtPostcode(str(f, 'postcode', 12)) ?? (opt(f, 'postcode', 12)?.toUpperCase() ?? null),
-    council: str(f, 'council', 10) || 'auto', ward: opt(f, 'ward', 60), occupancy: OCCUPANCY.some((o) => o.value === str(f, 'occupancy')) ? str(f, 'occupancy') : 'single',
+    council: str(f, 'council', 40) || 'auto', ward: opt(f, 'ward', 60), occupancy: OCCUPANCY.some((o) => o.value === str(f, 'occupancy')) ? str(f, 'occupancy') : 'single',
     management: opt(f, 'management', 20), landlordName: opt(f, 'landlordName', 120), landlordEmail: opt(f, 'landlordEmail', 200)?.toLowerCase() ?? null, landlordPhone: opt(f, 'landlordPhone', 40),
     gasExpires: day(f, 'gasExpires'), eicrExpires: day(f, 'eicrExpires'), epcExpires: day(f, 'epcExpires'), epcRating: (opt(f, 'epcRating', 1) ?? '').toUpperCase() || null, notes: opt(f, 'notes', 4000),
   }
 }
-/** "auto" means look the council and ward up from the postcode; anything else is a choice made by hand. */
-function areaFields(i: RentalInput) {
-  if (i.council === 'auto') return { wardSource: 'auto', council: null as string | null, ward: null as string | null }
-  const council = (['brent', 'harrow', 'other'] as Council[]).includes(i.council as Council) ? i.council : 'other'
-  const ward = council === 'brent' || council === 'harrow' ? (WARDS[council].find((w) => w === i.ward) ?? null) : i.ward
-  return { wardSource: 'manual', council, ward }
+/**
+ * "auto" means look the council and ward up from the postcode. Brent or Harrow with a ward is a choice made by
+ * hand; without a ward we keep the council and still look the ward up. Any other council is kept by name.
+ */
+function areaFields(i: RentalInput): { wardSource: string; council: string | null; ward: string | null } {
+  const c = (i.council || 'auto').toLowerCase().trim()
+  if (c === 'auto') return { wardSource: 'auto', council: null, ward: null }
+  if (c === 'brent' || c === 'harrow') {
+    const ward = WARDS[c].find((w) => normWard(w) === normWard(i.ward)) ?? null
+    return ward ? { wardSource: 'manual', council: c, ward } : { wardSource: 'auto', council: c, ward: null }
+  }
+  return { wardSource: 'manual', council: /^[a-z][a-z .'&-]{1,40}$/.test(c) ? c : 'other', ward: i.ward }
 }
 
 export async function saveRental(_prev: { error?: string } | undefined, f: FormData): Promise<{ error?: string }> {
@@ -59,7 +66,8 @@ export async function saveRental(_prev: { error?: string } | undefined, f: FormD
     address: i.address, postcode: i.postcode, occupancy: i.occupancy, management: i.management,
     landlordName: i.landlordName, landlordEmail: i.landlordEmail, landlordPhone: i.landlordPhone, landlordContactId: await landlordContact(i.landlordEmail, i.landlordPhone),
     gasExpires: i.gasExpires, eicrExpires: i.eicrExpires, epcExpires: i.epcExpires, epcRating: i.epcRating, notes: i.notes, updatedAt: now(),
-    ...(area.wardSource === 'manual' ? area : { wardSource: 'auto' }),
+    noLicenceNeeded: str(f, 'noLicenceNeeded') === '1',
+    ...(area.council ? area : { wardSource: 'auto' }),
   }
   let rid = id
   if (id) await db.update(rentals).set(values).where(eq(rentals.id, id))
@@ -136,7 +144,7 @@ export async function saveScheme(f: FormData) {
   await ready()
   const id = str(f, 'id', 64)
   if (str(f, 'delete') === '1') { await db.delete(licensingSchemes).where(eq(licensingSchemes.id, id)); done(); return }
-  const council = ['brent', 'harrow', 'other'].includes(str(f, 'council')) ? str(f, 'council') : 'brent'
+  const council = ['brent', 'harrow'].includes(str(f, 'council')) ? str(f, 'council') : 'brent'
   const wards = f.getAll('wards').map(String).filter(Boolean)
   const v = {
     council, kind: KINDS.some((k) => k.value === str(f, 'kind')) ? str(f, 'kind') : 'selective', name: str(f, 'name', 160) || 'Licensing scheme',
@@ -151,14 +159,14 @@ export async function saveScheme(f: FormData) {
 
 // ---------- importing an existing spreadsheet (e.g. a Rentman export) ----------
 
-export type ImportRow = RentalInput & { licenceKind: string | null; licenceNumber: string | null; licenceStatus: string | null; licenceStart: string | null; licenceExpiry: string | null; problems: string[]; existing: boolean }
+export type ImportRow = RentalInput & { licenceKind: string | null; licenceNumber: string | null; licenceStatus: string | null; licenceStart: string | null; licenceExpiry: string | null; appliedOn: string | null; licenceNote: string | null; postcodeFound: boolean; problems: string[]; existing: boolean }
 export type Mapping = Partial<Record<ImportField, number | null>>
 type ImportField = 'address' | 'address2' | 'town' | 'postcode' | 'council' | 'ward' | 'occupancy' | 'landlordName' | 'landlordEmail' | 'landlordPhone'
   | 'licenceKind' | 'licenceNumber' | 'licenceStatus' | 'licenceStart' | 'licenceExpiry' | 'gasExpires' | 'eicrExpires' | 'epcExpires' | 'epcRating' | 'notes'
 
 // Exact headings first, then a looser rule for each field (Rentman, Excel lists, other agency software).
 const HEADERS: Record<ImportField, string[]> = {
-  address: ['address', 'property', 'property address', 'address line 1', 'address 1', 'address1', 'street address', 'line 1', 'house name/number and street'],
+  address: ['address', 'property', 'properties', 'property name', 'property address', 'address line 1', 'address 1', 'address1', 'street address', 'line 1', 'house name/number and street'],
   address2: ['address line 2', 'address 2', 'address2', 'line 2', 'locality', 'area'],
   town: ['town', 'city', 'town/city', 'post town'],
   postcode: ['postcode', 'post code', 'zip', 'postal code'],
@@ -170,7 +178,7 @@ const HEADERS: Record<ImportField, string[]> = {
   landlordPhone: ['landlord phone', 'landlord mobile', 'landlord telephone', 'owner phone', 'mobile', 'phone', 'telephone'],
   licenceKind: ['licence type', 'license type', 'scheme', 'licensing scheme'],
   licenceNumber: ['licence number', 'license number', 'licence no', 'license no', 'licence ref', 'licence reference', 'licence', 'license'],
-  licenceStatus: ['licence status', 'license status'],
+  licenceStatus: ['licence status', 'license status', 'no required/found', 'found', 'licence found', 'license found'],
   licenceStart: ['licence start', 'license start', 'licence start date', 'licence issued', 'licence granted', 'date issued'],
   licenceExpiry: ['licence expiry', 'license expiry', 'licence expiry date', 'licence end', 'licence end date', 'licence valid until'],
   gasExpires: ['gas', 'gas safety', 'gas expiry', 'gas safety expiry', 'gas certificate', 'gas cert expiry', 'cp12', 'gas safety certificate expiry'],
@@ -228,64 +236,136 @@ export async function parseDay(raw: string): Promise<string | null> {
   return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
 }
 
-function guessMapping(head: string[]): Mapping {
+const BOROUGHS = /^(brent|harrow|ealing|barnet|hillingdon|hounslow|camden|westminster|kensington|hammersmith|fulham|islington|hackney|haringey|enfield|waltham forest|redbridge|newham|tower hamlets|southwark|lambeth|wandsworth|merton|sutton|croydon|bromley|lewisham|greenwich|bexley|havering|barking|dagenham|kingston|richmond|luton|watford|hertsmere|three rivers|slough|newcastle|birmingham|manchester|leeds|other)\b/i
+const STATUSY = /\b(found|applied|application|licen[cs]e req|not req|no licen|granted|pending|expired|exp\b)/i
+
+function guessMapping(head: string[], rows: string[][] = []): Mapping {
   const h = head.map((x) => x.trim().toLowerCase().replace(/[_]+/g, ' ').replace(/\s+/g, ' '))
   const map: Mapping = {}, used = new Set<number>()
   for (const [k, names] of Object.entries(HEADERS) as [ImportField, string[]][]) { const i = h.findIndex((x, j) => !used.has(j) && names.includes(x)); if (i >= 0) { map[k] = i; used.add(i) } }
   for (const [k, test] of LOOSE) { if (map[k] != null) continue; const i = h.findIndex((x, j) => !used.has(j) && test(x)); if (i >= 0) { map[k] = i; used.add(i) } }
+  // Then by what's in the column: a column of borough names is the council, one of "Found" / "Applied" is the status.
+  const share = (i: number, re: RegExp) => { const vs = rows.slice(0, 200).map((r) => (r[i] ?? '').trim()).filter(Boolean); return vs.length ? vs.filter((v) => re.test(v)).length / vs.length : 0 }
+  for (const [k, re, min] of [['council', BOROUGHS, 0.6], ['licenceStatus', STATUSY, 0.4]] as [ImportField, RegExp, number][]) {
+    if (map[k] != null) continue
+    const i = h.findIndex((_, j) => !used.has(j) && share(j, re) >= min)
+    if (i >= 0) { map[k] = i; used.add(i) }
+  }
   return map
 }
 
-/** Reads an uploaded CSV or Excel file into a table, with a first guess at which column is which. */
-export async function readImportFile(name: string, base64: string): Promise<{ head: string[]; rows: string[][]; mapping: Mapping; error?: string }> {
+/** Reads an uploaded CSV or Excel file (any sheet) into a table, with a first guess at which column is which. */
+export async function readImportFile(name: string, base64: string, sheet = 0): Promise<{ sheets: string[]; sheet: number; head: string[]; rows: string[][]; mapping: Mapping; error?: string }> {
   await requireAdmin()
+  const fail = (error: string) => ({ sheets: [], sheet: 0, head: [], rows: [], mapping: {}, error })
   const buf = Buffer.from(base64, 'base64')
-  if (buf.length > 15 * 1024 * 1024) return { head: [], rows: [], mapping: {}, error: 'That file is too big (15 MB at most).' }
-  let table: string[][]
+  if (buf.length > 15 * 1024 * 1024) return fail('That file is too big (15 MB at most).')
+  let sheets: { name: string; rows: string[][] }[]
   try {
-    if (/\.xlsx$/i.test(name) || buf.subarray(0, 2).toString() === 'PK') { const { readXlsx } = await import('@/lib/xlsx'); table = readXlsx(buf) }
-    else if (/\.xls$/i.test(name)) return { head: [], rows: [], mapping: {}, error: 'Old Excel files (.xls) can’t be read. In Excel, choose File → Save As → Excel Workbook (.xlsx) or CSV.' }
-    else table = splitCsv(buf.toString('utf8'))
-  } catch { return { head: [], rows: [], mapping: {}, error: 'Couldn’t read that file. Save it as .xlsx or .csv and try again.' } }
-  if (table.length < 2) return { head: [], rows: [], mapping: {}, error: 'No rows found. The first row should be the column headings.' }
+    if (/\.xlsx$/i.test(name) || buf.subarray(0, 2).toString() === 'PK') { const { readXlsxSheets } = await import('@/lib/xlsx'); sheets = readXlsxSheets(buf) }
+    else if (/\.xls$/i.test(name)) return fail('Old Excel files (.xls) can’t be read. In Excel, choose File → Save As → Excel Workbook (.xlsx) or CSV.')
+    else sheets = [{ name: 'CSV', rows: splitCsv(buf.toString('utf8')) }]
+  } catch { return fail('Couldn’t read that file. Save it as .xlsx or .csv and try again.') }
+  const n = Math.min(Math.max(0, sheet), sheets.length - 1)
+  const table = sheets[n]?.rows ?? []
+  if (table.length < 2) return { ...fail('No rows found on that sheet. The first row should be the column headings.'), sheets: sheets.map((x) => x.name), sheet: n }
   // Some exports start with a title line: use the first row that looks like headings.
-  const hi = table.findIndex((r) => r.filter((c) => c.trim()).length >= 2 && r.some((c) => /address|postcode|property/i.test(c)))
+  const hi = table.findIndex((r) => r.filter((c) => c.trim()).length >= 2 && r.some((c) => /address|postcode|propert/i.test(c)))
   const start = hi >= 0 ? hi : 0
   const head = table[start].map((c) => c.trim())
-  return { head, rows: table.slice(start + 1, start + 3001).map((r) => head.map((_, i) => (r[i] ?? '').trim())), mapping: guessMapping(head) }
+  const width = Math.max(head.length, ...table.slice(start + 1, start + 50).map((r) => r.length))
+  const fullHead = Array.from({ length: width }, (_, i) => head[i] ?? '')
+  const rows = table.slice(start + 1, start + 3001).map((r) => fullHead.map((_, i) => (r[i] ?? '').trim()))
+  return { sheets: sheets.map((x) => x.name), sheet: n, head: fullHead, rows, mapping: guessMapping(fullHead, rows) }
+}
+
+/** "Flat 5, 10 High Rd" and "flat 5 10 high road london" both become "5|10|high": enough to match shortened addresses. */
+function looseKey(address: string): string | null {
+  const a = normText(address)
+  const flat = /\b(?:flat|apartment|apt|unit)\s+([0-9]+[a-z]?)\b/.exec(a)?.[1] ?? ''
+  const rest = flat ? a.replace(/\b(?:flat|apartment|apt|unit)\s+[0-9]+[a-z]?\b/, ' ') : a
+  const m = /\b(\d+[a-z]?)\s+([a-z]{3,})/.exec(rest)
+  return m ? `${flat}|${m[1]}|${m[2]}` : null
+}
+
+/** Postcodes for addresses without one, from the Land Registry address list, when the match is unambiguous. */
+async function postcodeFinder(): Promise<(address: string) => string | null> {
+  const { knownAddresses } = await import('@/db/schema')
+  const all = await db.select({ p: knownAddresses.postcode, l: knownAddresses.line }).from(knownAddresses)
+  const byNum = new Map<string, { p: string; l: string }[]>()
+  for (const r of all) { const n = /^(\d+[a-z]?)\s/i.exec(r.l)?.[1]?.toLowerCase(); if (n) byNum.set(n, [...(byNum.get(n) ?? []), { p: r.p, l: normText(r.l) }]) }
+  return (address) => {
+    const a = normText(address)
+    if (/\b(flat|apartment|apt|unit)\b/.test(a)) return null
+    const m = /\b(\d+[a-z]?)\s+([a-z]{3,}(?:\s[a-z]{3,})?)/.exec(a)
+    if (!m) return null
+    const want = ` ${m[1]} ${m[2]}`
+    const hits = (byNum.get(m[1]) ?? []).filter((x) => x.l.startsWith(want))
+    const pcs = [...new Set(hits.map((h) => h.p))]
+    return pcs.length === 1 ? pcs[0] : null
+  }
 }
 
 const keyOf = (address: string, postcode: string | null) => `${address.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()}|${(postcode ?? '').replace(/\s/g, '')}`
+const firstDate = async (t: string) => { const m = /(\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}|\d{4}-\d{2}-\d{2})/.exec(t); return m ? parseDay(m[1]) : null }
 
 async function rowsFrom(rows: string[][], map: Mapping): Promise<ImportRow[]> {
-  const existing = new Set((await db.select({ a: rentals.address, p: rentals.postcode }).from(rentals)).map((r) => keyOf(r.a, r.p)))
+  const have = await db.select({ a: rentals.address, p: rentals.postcode }).from(rentals)
+  const existing = new Set(have.map((r) => keyOf(r.a, r.p)))
+  const loose = new Map<string, number>()
+  for (const r of have) { const k = looseKey(r.a); if (k) loose.set(k, (loose.get(k) ?? 0) + 1) }
+  const find = rows.some((r) => map.postcode == null || !(r[map.postcode] ?? '').trim()) ? await postcodeFinder() : null
   const out: ImportRow[] = []
   for (const r of rows.slice(0, 3000)) {
     const g = (k: ImportField) => (map[k] != null ? (r[map[k]!] ?? '').trim() : '')
     const problems: string[] = []
     const dates: Record<string, string | null> = {}
     for (const k of ['licenceStart', 'licenceExpiry', 'gasExpires', 'eicrExpires', 'epcExpires'] as ImportField[]) { dates[k] = await parseDay(g(k)); if (g(k) && !dates[k] && !/^(n\/?a|none|-|tbc|no)$/i.test(g(k))) problems.push(`Couldn’t read the date “${g(k)}”`) }
+    // Type: words like "HMO" or "5+"; a column headed "HMO" with anything in it means an HMO.
     const typeText = g('occupancy').toLowerCase()
-    const occupancy = /5\+|large|mandatory|5 or more/.test(typeText) ? 'hmo_large' : /\bhmo\b|shared house|house share|small hmo/.test(typeText) ? 'hmo_small' : 'single'
+    const occupancy = /5\+|large|mandatory|5 or more/.test(typeText) ? 'hmo_large' : /\bhmo\b|shared house|house share|small hmo|^(y|yes|x|true)$/.test(typeText) ? 'hmo_small' : 'single'
+    // Status in words, as people write it: "Found", "Applied 08/10/26", "No License Req", "Found(Exp-27/10/26)", "No found".
+    const st = g('licenceStatus'), stl = st.toLowerCase()
+    let licenceStatus: string | null = null, appliedOn: string | null = null, licenceNote: string | null = null
+    let expiry = dates.licenceExpiry
+    if (/no\s*licen[cs]e\s*req|not\s*req|not\s*needed|no\s*need|not\s*required/.test(stl)) licenceNote = 'Spreadsheet said no licence required'
+    else if (/\b(no|not)\s*found\b|\bnone\b|\bmissing\b/.test(stl)) licenceNote = 'Spreadsheet said no licence found'
+    else if (/appl|pending|submitted/.test(stl) && !/found|granted/.test(stl)) { licenceStatus = 'applied'; appliedOn = await firstDate(st) }
+    else if (/found|granted|licensed|issued|yes|on portal|valid/.test(stl) || g('licenceNumber') || expiry) {
+      licenceStatus = 'granted'
+      if (!expiry && /exp/.test(stl)) expiry = await firstDate(st)
+      if (/appl/.test(stl)) licenceNote = `Spreadsheet: ${st}`
+    } else if (/exempt/.test(stl)) licenceStatus = 'exempt'
+    if (licenceStatus === 'granted' && !expiry) problems.push('Licence found but no expiry date: add it on the property')
     const kt = g('licenceKind').toLowerCase()
-    const licenceKind = /mandatory/.test(kt) ? 'mandatory_hmo' : /additional|hmo/.test(kt) ? 'additional_hmo' : g('licenceNumber') || dates.licenceExpiry ? (occupancy === 'hmo_large' ? 'mandatory_hmo' : occupancy === 'hmo_small' ? 'additional_hmo' : 'selective') : null
-    const st = g('licenceStatus').toLowerCase()
-    const council = /brent/i.test(g('council')) ? 'brent' : /harrow/i.test(g('council')) ? 'harrow' : g('council') ? 'other' : 'auto'
-    const line = [g('address'), g('address2'), g('town')].filter(Boolean).join(', ').replace(/,\s*,/g, ',')
-    const pc = fmtPostcode(g('postcode')) ?? fmtPostcode(/[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}/i.exec(line)?.[0])
+    const licenceKind = licenceStatus ? (/mandatory/.test(kt) ? 'mandatory_hmo' : /additional|hmo/.test(kt) ? 'additional_hmo' : occupancy === 'hmo_large' ? 'mandatory_hmo' : occupancy === 'hmo_small' ? 'additional_hmo' : 'selective') : null
+    const cv = g('council').toLowerCase().trim()
+    const council = !cv ? 'auto' : /^brent\b/.test(cv) ? 'brent' : /^harrow\b/.test(cv) ? 'harrow' : cv.replace(/[^a-z .'&-]/g, '').trim() || 'other'
+    // "53 KENMORE AVENUE (Preston)": the bracketed note goes in the notes.
+    const raw = [g('address'), g('address2'), g('town')].filter(Boolean).join(', ').replace(/,\s*,/g, ',')
+    const bracket = /\(([^)]*)\)/.exec(raw)?.[1]?.trim()
+    const line = raw.replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').replace(/\s+,/g, ',').trim()
+    let pc = fmtPostcode(g('postcode')) ?? fmtPostcode(/[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}/i.exec(line)?.[0])
     const address = line.replace(/,?\s*[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\s*$/i, '').slice(0, 200)
+    let postcodeFound = false
+    if (!pc && address && find) { pc = find(address); postcodeFound = !!pc }
     if (!address) problems.push('No address')
-    if (!pc) problems.push('No postcode, so the council and ward can’t be looked up')
+    if (!pc) problems.push('No postcode, so the ward can’t be looked up yet')
+    const lk = looseKey(address)
     out.push({
-      address, postcode: pc, council, ward: g('ward') || null, occupancy, management: null,
+      address: tidy(address), postcode: pc, council, ward: g('ward') || null, occupancy, management: null,
       landlordName: g('landlordName') || null, landlordEmail: (/\S+@\S+\.\S+/.exec(g('landlordEmail'))?.[0] ?? '').toLowerCase() || null, landlordPhone: g('landlordPhone') || null,
-      gasExpires: dates.gasExpires, eicrExpires: dates.eicrExpires, epcExpires: dates.epcExpires, epcRating: (g('epcRating').match(/\b[A-G]\b/i)?.[0] ?? '').toUpperCase() || null, notes: g('notes') || null,
-      licenceKind, licenceNumber: g('licenceNumber') || null, licenceStatus: /appl|pending|submitted/.test(st) ? 'applied' : /exempt/.test(st) ? 'exempt' : licenceKind ? 'granted' : null,
-      licenceStart: dates.licenceStart, licenceExpiry: dates.licenceExpiry, problems, existing: existing.has(keyOf(address, pc)),
+      gasExpires: dates.gasExpires, eicrExpires: dates.eicrExpires, epcExpires: dates.epcExpires, epcRating: (g('epcRating').match(/\b[A-G]\b/i)?.[0] ?? '').toUpperCase() || null,
+      notes: [g('notes'), bracket ? `Area: ${bracket}` : '', licenceNote ?? ''].filter(Boolean).join('\n') || null,
+      licenceKind, licenceNumber: g('licenceNumber') || null, licenceStatus, licenceStart: dates.licenceStart, licenceExpiry: expiry, appliedOn, licenceNote, postcodeFound, problems,
+      existing: existing.has(keyOf(address, pc)) || (!!lk && loose.get(lk) === 1),
     })
   }
   return out
 }
+
+/** "70 VICTORIA AVENUE" → "70 Victoria Avenue"; mixed-case text is left as it is. */
+const tidy = (a: string) => (a === a.toUpperCase() ? a.toLowerCase().replace(/\b([a-z])/g, (c) => c.toUpperCase()) : a.replace(/^\s*(\d+[a-z]?)\b/i, (m) => m.toUpperCase()).replace(/\b([a-z])(?=[a-z]{2,})/g, (c) => c.toUpperCase()))
 
 export async function previewImport(rows: string[][], map: Mapping) {
   await requireAdmin()
@@ -303,12 +383,16 @@ export async function commitImport(rows: string[][], map: Mapping, update: boole
   const list = await rowsFrom(rows, map)
   const all = await db.select().from(rentals)
   const byKey = new Map(all.map((r) => [keyOf(r.address, r.postcode), r]))
+  // Shortened addresses ("369 Westcroft") still find "369 Westcroft Way" when only one property fits.
+  const byLoose = new Map<string, typeof all>()
+  for (const r of all) { const k = looseKey(r.address); if (k) byLoose.set(k, [...(byLoose.get(k) ?? []), r]) }
   let added = 0, updated = 0, skipped = 0
   const later = (a: string | null, b: string | null) => (a && (!b || a > b) ? a : b)
   for (const r of list) {
     if (!r.address) { skipped++; continue }
     const area = areaFields(r)
-    const have = byKey.get(keyOf(r.address, r.postcode))
+    const lk = looseKey(r.address)
+    const have = byKey.get(keyOf(r.address, r.postcode)) ?? (lk && byLoose.get(lk)?.length === 1 ? byLoose.get(lk)![0] : undefined)
     let id: string
     if (have) {
       if (!update) { skipped++; continue }
@@ -317,7 +401,10 @@ export async function commitImport(rows: string[][], map: Mapping, update: boole
         postcode: have.postcode ?? r.postcode, landlordName: have.landlordName ?? r.landlordName, landlordEmail: have.landlordEmail ?? r.landlordEmail, landlordPhone: have.landlordPhone ?? r.landlordPhone,
         landlordContactId: have.landlordContactId ?? await landlordContact(r.landlordEmail, r.landlordPhone),
         gasExpires: later(r.gasExpires, have.gasExpires), eicrExpires: later(r.eicrExpires, have.eicrExpires), epcExpires: later(r.epcExpires, have.epcExpires),
-        epcRating: have.epcRating ?? r.epcRating, notes: have.notes ?? r.notes, occupancy: have.occupancy !== 'single' ? have.occupancy : r.occupancy, updatedAt: now(),
+        epcRating: have.epcRating ?? r.epcRating, occupancy: have.occupancy !== 'single' ? have.occupancy : r.occupancy, updatedAt: now(),
+        notes: [have.notes, r.notes && !(have.notes ?? '').includes(r.notes) ? r.notes : null].filter(Boolean).join('\n') || null,
+        ...(!have.council && r.council !== 'auto' ? areaFields(r) : {}),
+        ...(r.licenceNote === 'Spreadsheet said no licence required' && !have.noLicenceNeeded ? { noLicenceNeeded: true } : {}),
       }).where(eq(rentals.id, id))
       updated++
     } else {
@@ -325,17 +412,19 @@ export async function commitImport(rows: string[][], map: Mapping, update: boole
       await db.insert(rentals).values({
         id, address: r.address, postcode: r.postcode, occupancy: r.occupancy, management: r.management, landlordName: r.landlordName, landlordEmail: r.landlordEmail, landlordPhone: r.landlordPhone,
         landlordContactId: await landlordContact(r.landlordEmail, r.landlordPhone), gasExpires: r.gasExpires, eicrExpires: r.eicrExpires, epcExpires: r.epcExpires, epcRating: r.epcRating, notes: r.notes,
-        ...(area.wardSource === 'manual' ? area : { wardSource: 'auto' }), createdBy: me.id, createdAt: now(), updatedAt: now(),
+        noLicenceNeeded: r.licenceNote === 'Spreadsheet said no licence required',
+        ...(area.council ? area : { wardSource: 'auto' }), createdBy: me.id, createdAt: now(), updatedAt: now(),
       })
       byKey.set(keyOf(r.address, r.postcode), { id } as typeof all[number])
       added++
     }
-    if (r.licenceKind && (r.licenceExpiry || r.licenceStatus === 'applied' || r.licenceNumber)) {
+    if (r.licenceKind && r.licenceStatus && (r.licenceExpiry || r.licenceStatus !== 'granted' || r.licenceNumber)) {
       const mine = await db.select().from(licences).where(eq(licences.rentalId, id))
-      const dup = mine.some((l) => (r.licenceNumber && l.number?.toUpperCase() === r.licenceNumber.toUpperCase()) || (r.licenceExpiry && l.expiresOn === r.licenceExpiry))
+      const dup = mine.some((l) => (r.licenceNumber && l.number?.toUpperCase() === r.licenceNumber.toUpperCase()) || (r.licenceExpiry && l.expiresOn === r.licenceExpiry) || (r.licenceStatus === 'applied' && l.status === 'applied' && l.appliedOn === r.appliedOn))
       if (!dup) await db.insert(licences).values({
         id: uid(), rentalId: id, kind: r.licenceKind, council: area.council, number: r.licenceNumber, status: r.licenceStatus ?? 'granted',
-        startsOn: r.licenceStatus === 'applied' ? null : r.licenceStart, expiresOn: r.licenceExpiry, appliedOn: r.licenceStatus === 'applied' ? r.licenceStart : null, notes: 'Imported', createdBy: me.id, createdAt: now(), updatedAt: now(),
+        startsOn: r.licenceStatus === 'applied' ? null : r.licenceStart, expiresOn: r.licenceStatus === 'applied' ? null : r.licenceExpiry, appliedOn: r.licenceStatus === 'applied' ? r.appliedOn ?? r.licenceStart : null,
+        notes: 'Imported from spreadsheet', createdBy: me.id, createdAt: now(), updatedAt: now(),
       })
     }
   }

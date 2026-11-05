@@ -317,6 +317,7 @@ export const rentals = sqliteTable('rentals', {
   epcRating: text('epc_rating'),
   lastCheckedAt: text('last_checked_at'),
   lastCheckedBy: text('last_checked_by'),
+  noLicenceNeeded: integer('no_licence_needed', { mode: 'boolean' }).notNull().default(false),
   notes: text('notes'),
   archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
   createdBy: text('created_by'),
@@ -395,6 +396,15 @@ export const emailDocs = sqliteTable('email_docs', {
   createdAt: text('created_at').notNull(),
 })
 export type EmailDoc = typeof emailDocs.$inferSelect
+
+export const emailFiles = sqliteTable('email_files', {
+  id: text('id').primaryKey(),
+  docId: text('doc_id').notNull().references(() => emailDocs.id, { onDelete: 'cascade' }),
+  filename: text('filename').notNull(),
+  storageKey: text('storage_key').notNull(),
+  size: integer('size').notNull(),
+  createdAt: text('created_at').notNull(),
+})
 
 export const licenceSuggestions = sqliteTable('licence_suggestions', {
   id: text('id').primaryKey(),

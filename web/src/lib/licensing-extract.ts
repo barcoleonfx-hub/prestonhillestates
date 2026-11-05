@@ -66,8 +66,10 @@ export function addressKey(id: string, address: string, postcode: string | null)
   const flat = /\b(?:flat|apartment|apt|unit)\s+([0-9]+[a-z]?)\b/.exec(a)?.[1] ?? null
   const rest = flat ? a.replace(/\b(?:flat|apartment|apt|unit)\s+[0-9]+[a-z]?\b/, ' ') : a
   const m = /\b(\d+[a-z]?)\s+((?:[a-z]+\s){0,3}?(?:road|avenue|street|crescent|gardens|close|drive|lane|court|park|square|terrace|place|way|grove|walk|rise|hill|mews|view|parade|green|row|gate|vale|end|house|mansions))\b/.exec(rest)
-  if (!m) return null
-  return { id, key: ` ${m[1]} ${m[2].trim()} `, flat, postcode: normPostcode(postcode) }
+  if (m) return { id, key: ` ${m[1]} ${m[2].trim()} `, flat, postcode: normPostcode(postcode) }
+  // Shortened addresses ("369 Westcroft", "93 Gordon"): the number and the first word of the street.
+  const short = /\b(\d+[a-z]?)\s+([a-z]{4,})\b/.exec(rest)
+  return short ? { id, key: ` ${short[1]} ${short[2]} `, flat, postcode: normPostcode(postcode) } : null
 }
 
 /** Where in the text a property is mentioned: by number and street, checked against the postcode or the flat number. */

@@ -1,9 +1,12 @@
 import 'server-only'
-import { and, asc, eq, inArray } from 'drizzle-orm'
+import { and, asc, eq, inArray, sql } from 'drizzle-orm'
 import { convert } from 'html-to-text'
 import { simpleParser } from 'mailparser'
 import { db, getClient, ready } from '@/db/client'
-import { emailDocs, licences, licenceSuggestions, rentals, scanQueue, settings, type EmailDoc, type Rental } from '@/db/schema'
+import { emailDocs, emailFiles, licences, licenceSuggestions, rentals, scanQueue, settings, type EmailDoc, type Rental } from '@/db/schema'
+import { mkdir, writeFile } from 'node:fs/promises'
+import path from 'node:path'
+import { localPath } from './storage'
 import { addressKey, classify, extract, findMention, normText, windowAt, type AddressKey, type DocKind, type Found } from './licensing-extract'
 import { openSavedMailbox } from './mailbox'
 import { now, uid } from './util'
@@ -17,6 +20,19 @@ const PER_RUN_MS = 60_000
 const MAX_MESSAGE = 20 * 1024 * 1024
 const MAX_PDF = 6 * 1024 * 1024
 const TEXT_LIMIT = 40_000
+const FILES_CAP = 3 * 1024 * 1024 * 1024 // stop saving PDFs past 3 GB, so the disk never fills
+
+/** Keeps a copy of a PDF from the mailbox, filed under the email it came from. */
+async function keepPdf(docId: string, n: number, filename: string, content: Buffer) {
+  const [{ total }] = await db.select({ total: sql<number>`coalesce(sum(${emailFiles.size}), 0)` }).from(emailFiles)
+  if (Number(total) + content.length > FILES_CAP) return
+  const safe = filename.replace(/[^\w.-]+/g, '_').slice(-80) || 'document.pdf'
+  const key = `licensing/${docId}/${n}-${safe}`
+  const dest = localPath(key)
+  await mkdir(path.dirname(dest), { recursive: true })
+  await writeFile(dest, content)
+  await db.insert(emailFiles).values({ id: uid(), docId, filename: filename.slice(0, 200), storageKey: key, size: content.length, createdAt: now() })
+}
 const SEARCHES: Record<string, unknown>[] = [
   ...['selective licence', 'selective license', 'licence number', 'license number', 'hmo licence', 'hmo license', 'property licence', 'licensing scheme',
     'gas safety', 'cp12', 'eicr', 'electrical installation condition', 'energy performance certificate',
@@ -120,11 +136,13 @@ export async function runLicenceScan(opts: { force?: boolean } = {}): Promise<{ 
           if (!mail) { await done('skipped'); read++; continue }
           const body = mail.text || (mail.html ? convert(mail.html, { wordwrap: false }) : '')
           const files: string[] = []
+          const pdfParts: { name: string; content: Buffer }[] = []
           let pdfs = ''
           for (const a of mail.attachments ?? []) {
             const isPdf = /pdf/i.test(a.contentType) || /\.pdf$/i.test(a.filename ?? '')
             if (!isPdf || a.size > MAX_PDF) continue
             files.push(a.filename ?? 'attachment.pdf')
+            pdfParts.push({ name: a.filename ?? 'attachment.pdf', content: a.content })
             pdfs += `\n\n[${a.filename ?? 'PDF'}]\n${await pdfText(a.content)}`
           }
           const subject = mail.subject ?? ''
@@ -132,11 +150,17 @@ export async function runLicenceScan(opts: { force?: boolean } = {}): Promise<{ 
           const text = `${subject}\n${body}${pdfs}`.slice(0, TEXT_LIMIT)
           const kinds = classify(subject, from, text)
           if (kinds.length) {
+            const docId = uid()
             const ins = await db.insert(emailDocs).values({
-              id: uid(), folder, uid: q.uid, messageId: mail.messageId ?? null, subject: subject.slice(0, 300), fromAddr: from, sentAt: (mail.date ?? new Date()).toISOString(),
+              id: docId, folder, uid: q.uid, messageId: mail.messageId ?? null, subject: subject.slice(0, 300), fromAddr: from, sentAt: (mail.date ?? new Date()).toISOString(),
               kinds: kinds.join(','), files: files.join('\n') || null, text, createdAt: now(),
             }).onConflictDoNothing()
             docs += ins.rowsAffected
+            // Save the PDFs too (also for an email read by an earlier scan, before PDFs were kept).
+            const id = ins.rowsAffected ? docId : (await db.query.emailDocs.findFirst({ where: and(eq(emailDocs.folder, folder), eq(emailDocs.uid, q.uid)) }))?.id
+            if (id && pdfParts.length && !(await db.query.emailFiles.findFirst({ where: eq(emailFiles.docId, id) }))) {
+              for (const [n, f] of pdfParts.entries()) await keepPdf(id, n, f.name, f.content).catch((e) => console.error('could not keep a PDF', e))
+            }
           }
           await done('done'); read++
         }
@@ -187,14 +211,33 @@ export async function matchDocs(rentalIds?: string[]): Promise<number> {
   return added
 }
 
-export type Suggestion = { id: string; rentalId: string; kind: DocKind; found: Found; confidence: string; status: string; doc: Pick<EmailDoc, 'subject' | 'fromAddr' | 'sentAt' | 'files' | 'folder'> }
+export type DocFile = { id: string; filename: string; size: number }
+export type Suggestion = { id: string; rentalId: string; kind: DocKind; found: Found; confidence: string; status: string; doc: Pick<EmailDoc, 'subject' | 'fromAddr' | 'sentAt' | 'files' | 'folder'> & { id: string; pdfs: DocFile[] } }
 
 export async function suggestionsFor(rentalIds?: string[], status = 'new'): Promise<Suggestion[]> {
   await ready()
   const where = rentalIds ? and(eq(licenceSuggestions.status, status), inArray(licenceSuggestions.rentalId, rentalIds)) : eq(licenceSuggestions.status, status)
-  const rows = await db.select({ s: licenceSuggestions, d: { subject: emailDocs.subject, fromAddr: emailDocs.fromAddr, sentAt: emailDocs.sentAt, files: emailDocs.files, folder: emailDocs.folder } })
+  const rows = await db.select({ s: licenceSuggestions, d: { id: emailDocs.id, subject: emailDocs.subject, fromAddr: emailDocs.fromAddr, sentAt: emailDocs.sentAt, files: emailDocs.files, folder: emailDocs.folder } })
     .from(licenceSuggestions).innerJoin(emailDocs, eq(emailDocs.id, licenceSuggestions.docId)).where(where)
-  return rows.map(({ s, d }) => ({ id: s.id, rentalId: s.rentalId, kind: s.kind as DocKind, found: JSON.parse(s.found) as Found, confidence: s.confidence, status: s.status, doc: d }))
+  const files = await filesFor([...new Set(rows.map((r) => r.d.id))])
+  return rows.map(({ s, d }) => ({ id: s.id, rentalId: s.rentalId, kind: s.kind as DocKind, found: JSON.parse(s.found) as Found, confidence: s.confidence, status: s.status, doc: { ...d, pdfs: files.get(d.id) ?? [] } }))
+}
+
+async function filesFor(docIds: string[]) {
+  const out = new Map<string, DocFile[]>()
+  if (!docIds.length) return out
+  const rows = await db.select().from(emailFiles).where(inArray(emailFiles.docId, docIds))
+  for (const f of rows) out.set(f.docId, [...(out.get(f.docId) ?? []), { id: f.id, filename: f.filename, size: f.size }])
+  return out
+}
+
+/** Every licence and certificate email (and its PDFs) matched to a property, newest first, for its documents list. */
+export async function documentsFor(rentalId: string) {
+  await ready()
+  const rows = await db.selectDistinct({ id: emailDocs.id, subject: emailDocs.subject, fromAddr: emailDocs.fromAddr, sentAt: emailDocs.sentAt, kinds: emailDocs.kinds })
+    .from(licenceSuggestions).innerJoin(emailDocs, eq(emailDocs.id, licenceSuggestions.docId)).where(eq(licenceSuggestions.rentalId, rentalId))
+  const files = await filesFor(rows.map((r) => r.id))
+  return rows.map((r) => ({ ...r, pdfs: files.get(r.id) ?? [] })).sort((a, b) => (b.sentAt ?? '').localeCompare(a.sentAt ?? ''))
 }
 
 const rank = (c: string) => (c === 'high' ? 3 : c === 'medium' ? 2 : 1)

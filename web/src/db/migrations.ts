@@ -538,4 +538,19 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       `CREATE UNIQUE INDEX licence_suggestions_uniq ON licence_suggestions (rental_id, doc_id, kind)`,
     ],
   },
+  {
+    id: '019_email_files',
+    sql: [
+      // PDFs (licences, gas safety records, EICRs, EPCs) saved from the mailbox, so they open straight from the portal.
+      `CREATE TABLE email_files (id TEXT PRIMARY KEY, doc_id TEXT NOT NULL REFERENCES email_docs(id) ON DELETE CASCADE, filename TEXT NOT NULL, storage_key TEXT NOT NULL, size INTEGER NOT NULL, created_at TEXT NOT NULL)`,
+      `CREATE INDEX email_files_doc_idx ON email_files (doc_id)`,
+    ],
+  },
+  {
+    id: '020_no_licence_needed',
+    sql: [
+      // Staff (or the imported spreadsheet) have confirmed this property doesn't need a licence, e.g. an exemption.
+      `ALTER TABLE rentals ADD COLUMN no_licence_needed INTEGER NOT NULL DEFAULT 0`,
+    ],
+  },
 ]

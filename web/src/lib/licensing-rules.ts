@@ -1,7 +1,8 @@
 // Property licensing: which schemes apply where, and what state each rented property is in.
 // Pure functions and data with no server imports, so pages and the scheduler use exactly the same rules.
 
-export type Council = 'brent' | 'harrow' | 'other'
+// Brent and Harrow have their schemes loaded; any other council is kept by name (e.g. 'ealing'), or 'other'.
+export type Council = 'brent' | 'harrow' | 'other' | (string & {})
 export type LicenceKind = 'selective' | 'additional_hmo' | 'mandatory_hmo'
 export type Occupancy = 'single' | 'hmo_small' | 'hmo_large'
 export type LicenceStatus = 'granted' | 'applied' | 'refused' | 'exempt'
@@ -26,7 +27,8 @@ export const LICENCE_STATUS: { value: LicenceStatus; label: string }[] = [
   { value: 'exempt', label: 'Exempt / temporary exemption' }, { value: 'refused', label: 'Refused' },
 ]
 export const kindLabel = (k: string) => KINDS.find((x) => x.value === k)?.label ?? k
-export const councilLabel = (c: string | null) => COUNCILS.find((x) => x.value === c)?.label ?? 'Unknown'
+export const councilLabel = (c: string | null) => (c ? COUNCILS.find((x) => x.value === c)?.label ?? c.replace(/\b\w/g, (m) => m.toUpperCase()) : 'Unknown')
+export const isOurCouncil = (c: string | null | undefined) => c === 'brent' || c === 'harrow'
 
 /** Every ward in each borough (2022 boundaries), for choosing one by hand when the postcode look-up can't. */
 export const WARDS: Record<'brent' | 'harrow', string[]> = {
@@ -63,6 +65,7 @@ export type Licence = {
 }
 export type RentalFacts = {
   council: Council | null; ward: string | null; occupancy: Occupancy
+  noLicenceNeeded?: boolean
   gasExpires: string | null; eicrExpires: string | null; epcExpires: string | null; epcRating: string | null
 }
 
@@ -75,7 +78,7 @@ export const BUCKETS: { value: Bucket; label: string; tone: 'red' | 'amber' | 'y
   { value: 'upcoming', label: 'Scheme starting soon', tone: 'amber', about: 'A new scheme will cover this property. Apply before it starts.' },
   { value: 'due180', label: 'Expires within 6 months', tone: 'yellow', about: 'Coming up. Let the landlord know.' },
   { value: 'applied', label: 'Applied, waiting', tone: 'blue', about: 'Application made, so the property is covered while the council decides. Chase if it drags on.' },
-  { value: 'check', label: 'Check the area', tone: 'grey', about: 'We couldn’t work out the ward. Choose it on the property so we can check.' },
+  { value: 'check', label: 'To check', tone: 'grey', about: 'We can’t tell yet: the ward isn’t known (add the postcode), it’s outside Brent and Harrow, or it’s marked not needed in a licensing area.' },
   { value: 'ok', label: 'Licensed', tone: 'green', about: 'Valid for more than 6 months.' },
   { value: 'not_required', label: 'No licence needed', tone: 'green', about: 'No scheme covers this property at the moment.' },
 ]
@@ -140,16 +143,20 @@ export function assess(f: RentalFacts, licences: Licence[], schemes: Scheme[], t
   const pending = mine.find((l) => l.status === 'applied' || (l.status === 'exempt' && (!l.expiresOn || l.expiresOn >= today))) ?? null
   const lapsed = mine.find((l) => l.status === 'granted' && !!l.expiresOn && l.expiresOn < today) ?? null
 
-  const unknownArea = (f.council === 'brent' || f.council === 'harrow') && !f.ward && kind === 'selective'
+  const unknownArea = isOurCouncil(f.council) && !f.ward && kind === 'selective'
   if (!f.council) reasons.push('We don’t know which council this property is in yet.')
-  else if (f.council === 'other') reasons.push('Outside Brent and Harrow: check that council’s own licensing rules.')
+  else if (!isOurCouncil(f.council)) reasons.push(`Outside Brent and Harrow: check ${f.council === 'other' ? 'that council' : councilLabel(f.council)}’s own licensing rules. Any licence on file is still tracked.`)
+  else if (unknownArea) reasons.push(`The ward isn’t known yet (add the postcode), so we can’t confirm which ${councilLabel(f.council)} scheme applies. Any licence on file is still tracked.`)
   if (scheme) reasons.push(`${f.ward ? `${f.ward} ward` : 'This area'} is covered by ${scheme.name} until ${fmtDay(scheme.endsOn)}.`)
   else if (kind === 'mandatory_hmo') reasons.push('5 or more people from 2 or more households: a mandatory HMO licence is needed anywhere in England.')
   else if (f.council === 'brent' || f.council === 'harrow') reasons.push(f.ward ? `No ${kindLabel(kind).toLowerCase()} scheme covers ${f.ward} ward at the moment.` : '')
   if (upcoming) reasons.push(`${upcoming.scheme.name} starts on ${fmtDay(upcoming.scheme.startsOn)} (${inWords(upcoming.days)}). A licence is needed from that date.`)
 
   let bucket: Bucket, licence: Licence | null = null, validUntil: string | null = null, days: number | null = null
-  if (needed) {
+  if (needed && f.noLicenceNeeded && !valid && !pending) {
+    bucket = 'check'
+    reasons.push(`Marked as not needing a licence, but ${scheme ? scheme.name : 'mandatory HMO licensing'} covers it. Check the reason (an exemption?) and note it on the property.`)
+  } else if (needed) {
     if (valid) {
       licence = valid
       validUntil = scheme && scheme.endsOn < valid.expiresOn! ? scheme.endsOn : valid.expiresOn!
@@ -172,7 +179,24 @@ export function assess(f: RentalFacts, licences: Licence[], schemes: Scheme[], t
     licence = valid ?? pending
     bucket = licence ? (licence.status === 'applied' ? 'applied' : 'ok') : 'upcoming'
     days = upcoming.days
-  } else if (unknownArea || !f.council) {
+  } else if ((unknownArea || !f.council || !isOurCouncil(f.council)) && (valid || pending || lapsed)) {
+    // We can't say whether a licence is needed, but one is on file: watch its dates as if it were.
+    if (valid) {
+      licence = valid; validUntil = valid.expiresOn!; days = daysBetween(today, validUntil)
+      bucket = days <= 30 ? 'due30' : days <= 90 ? 'due90' : days <= 180 ? 'due180' : 'ok'
+      reasons.push(`Licence ${valid.number ? `${valid.number} ` : ''}is valid until ${fmtDay(validUntil)} (${inWords(days)}).`)
+    } else if (pending) {
+      licence = pending; bucket = 'applied'; days = pending.appliedOn ? daysBetween(pending.appliedOn, today) : null
+      reasons.push(`Application made${pending.appliedOn ? ` on ${fmtDay(pending.appliedOn)}` : ''}.`)
+    } else {
+      licence = lapsed; bucket = 'expired'; validUntil = lapsed!.expiresOn; days = daysBetween(today, lapsed!.expiresOn!)
+      reasons.push(`Licence ${lapsed!.number ?? ''} expired on ${fmtDay(lapsed!.expiresOn)}.`)
+    }
+  } else if (f.noLicenceNeeded) {
+    bucket = 'not_required'
+    reasons.push('Marked as not needing a licence (by us, or on the spreadsheet we imported).')
+  } else if (unknownArea || !f.council || !isOurCouncil(f.council)) {
+    // Outside Brent and Harrow we don't hold the council's schemes, so we can't say a licence isn't needed.
     bucket = 'check'
   } else {
     // Not needed, but if they hold one we still watch it.
