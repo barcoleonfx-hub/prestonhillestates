@@ -91,8 +91,8 @@ export function ImportRentals() {
     <div className="lic-import">
       <div className="lic-import-pick">
         <label className="btn btn-gold">
-          {busy && !file ? 'Reading…' : file ? 'Choose a different file' : 'Choose an Excel or CSV file'}
-          <input type="file" accept=".xlsx,.csv,.tsv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) pick(f) }} />
+          {busy && !file ? 'Reading…' : file ? 'Choose a different file' : 'Choose an Excel (.xlsx or .xls) or CSV file'}
+          <input type="file" accept=".xlsx,.xls,.csv,.tsv,.txt,text/csv,text/plain,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) pick(f) }} />
         </label>
         <a className="btn btn-ghost" download="licensing-register-template.csv" href={`data:text/csv;charset=utf-8,${encodeURIComponent(TEMPLATE)}`}>Download a template</a>
       </div>

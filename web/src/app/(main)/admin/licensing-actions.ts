@@ -292,9 +292,14 @@ export async function readImportFile(name: string, base64: string, sheet = 0): P
   let sheets: { name: string; rows: string[][] }[]
   try {
     if (/\.xlsx$/i.test(name) || buf.subarray(0, 2).toString() === 'PK') { const { readXlsxSheets } = await import('@/lib/xlsx'); sheets = readXlsxSheets(buf) }
-    else if (/\.xls$/i.test(name)) return fail('Old Excel files (.xls) can’t be read. In Excel, choose File → Save As → Excel Workbook (.xlsx) or CSV.')
+    else if (/\.xls$/i.test(name) || (buf.length >= 4 && buf.readUInt32LE(0) === 0xe011cfd0)) {
+      // Rentman's "XLS": an Excel 97–2003 workbook, a web page or Excel XML, or tab-separated text, depending on version.
+      const { readXlsSheets, decodeText } = await import('@/lib/xls')
+      sheets = readXlsSheets(buf)
+      if (!sheets.length) sheets = [{ name: 'Sheet 1', rows: splitCsv(decodeText(buf)) }]
+    }
     else sheets = [{ name: 'CSV', rows: splitCsv(buf.toString('utf8')) }]
-  } catch { return fail('Couldn’t read that file. Save it as .xlsx or .csv and try again.') }
+  } catch (e) { console.error('import file not readable', name, (e as Error).message); return fail('Couldn’t read that file. Open it in Excel and choose File → Save As → Excel Workbook (.xlsx), then choose the new file here.') }
   const n = Math.min(Math.max(0, sheet), sheets.length - 1)
   const table = sheets[n]?.rows ?? []
   if (table.length < 2) return { ...fail('No rows found on that sheet. The first row should be the column headings.'), sheets: sheets.map((x) => x.name), sheet: n }
