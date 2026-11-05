@@ -1,0 +1,19 @@
+/* The reviews band on the homepage (same look as on the service pages). */
+.rx { padding: clamp(60px, 9vh, 100px) 0; background: var(--gold-wash); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.rx h2.sect { margin-top: 14px; }
+.rx-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; margin-top: 32px; }
+.rx-card { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 20px 22px; display: flex; flex-direction: column; gap: 10px; }
+.rx-top { display: flex; gap: 10px; align-items: center; }
+.rx-top b { display: block; color: var(--ink); }
+.rx-top small { color: var(--faint); font-size: 0.78rem; }
+.rx-avatar { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: var(--charcoal); color: #F3D58E; font-weight: 700; }
+.rx-stars { color: var(--gold); letter-spacing: 2px; }
+.rx-card blockquote { margin: 0; font-size: 1rem; font-family: inherit; font-style: normal; text-align: left; color: var(--ink-soft); line-height: 1.6; }
+.rx-card figcaption { margin-top: auto; font-size: 0.76rem; color: var(--faint); }
+.rx-summary { margin-top: 14px; color: var(--ink-soft); font-size: 0.98rem; }
+.rx-summary b { color: var(--ink); }
+.rx-summary a { color: var(--ink); font-weight: 700; }
+.quote .rx-summary { text-align: center; margin-top: 22px; }
+.rx-star-off { color: #E3DCC8; }
+.rx .rx-summary { text-align: left; }
+@media (min-width: 900px) { .rx-home .rx-cards { grid-template-columns: repeat(3, 1fr); } }
