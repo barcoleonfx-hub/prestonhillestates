@@ -1,4 +1,12 @@
 // Each entry runs once, in order; applied ids are recorded in _migrations.
+
+const q = (s: string) => `'${s.replace(/'/g, "''")}'`
+/** Adds Google reviews copied word for word from screenshots, skipping any already in the portal. */
+const seedReviews = (batch: string, list: [author: string, rating: number, date: string, category: string, text: string][]) =>
+  list.map(([a, r, d, c, t], i) => `INSERT INTO reviews (id, author, rating, text, reviewed_on, category, source, shown, created_by, created_at)
+    SELECT ${q(`${batch}-${i + 1}`)}, ${q(a)}, ${r}, ${q(t)}, ${q(d)}, ${q(c)}, 'google', ${r >= 4 ? 1 : 0}, NULL, ${q(new Date(0).toISOString())}
+    WHERE NOT EXISTS (SELECT 1 FROM reviews WHERE lower(author) = lower(${q(a)}) AND substr(text, 1, 40) = substr(${q(t)}, 1, 40))`)
+
 export const MIGRATIONS: { id: string; sql: string[] }[] = [
   {
     id: '001_initial',
@@ -682,5 +690,20 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
         created_by TEXT, created_at TEXT NOT NULL
       )`,
     ],
+  },
+  {
+    id: '030_google_reviews_1',
+    // From screenshots of the Google Business Profile, Nov 2026. "…" marks where Google cut a long review short.
+    sql: seedReviews('g1', [
+      ['Mitesh Patel', 5, '2024-11-06', 'lettings', 'Fantastic service from Preston Hill estates that genuinely care and help. As a landlord I did not understand the new license rules and Fred helped me unconditionally. I have been working with Fred now for some time and always receive great service.'],
+      ['ali Ali', 5, '2023-10-11', 'lettings', 'Honestly couldnt have asked for a better service, i iust came to get my contract renewed they have always helped me get a good deal. Ive stayed in the property for 4 years and have had no issues! Couldnt have asked for a better real estate company'],
+      ['Kam Patel', 5, '2024-11-06', 'general', '"I can\'t recommend Preston Hill Estates (Fred) highly enough! From the moment I contacted them, their team always go…'],
+      ['sanila fernandes', 5, '2024-11-06', 'general', 'Recently moved to new property, Haque and Fred are very helpful who work in Preston hill agency, I would highly…'],
+      ['Ahmed Fraz', 5, '2024-11-06', 'general', 'Very helpful finding a home, friedly and professionally'],
+      ['Persida Matei', 5, '2024-11-12', 'general', 'Great team, always there to help when needed!'],
+      ['Thao Le', 5, '2024-11-09', 'lettings', 'Since knowing Preston Hills Estates, I have had no problems. Landlord was also super helpful and staff who came to fix…'],
+      ['JIJO Chukkath', 5, '2024-12-19', 'general', 'Very professional team 👏'],
+      ['Henna Hanif', 5, '2024-12-01', 'sales', 'Great service we used Preston Hill Estates to sell our property from start to finish they were very professional, worked to a timely manner and kept us feeling reassured at all times. Definitely recommend 👌'],
+    ]),
   },
 ]
