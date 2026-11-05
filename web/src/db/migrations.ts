@@ -672,4 +672,15 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       )`,
     ],
   },
+  {
+    id: '029_reviews',
+    sql: [
+      // Real client reviews (copied from Google), shown on the sales and lettings pages. Only 4 and 5 stars are shown.
+      `CREATE TABLE reviews (
+        id TEXT PRIMARY KEY, author TEXT NOT NULL, rating INTEGER NOT NULL, text TEXT NOT NULL, reviewed_on TEXT,
+        category TEXT NOT NULL DEFAULT 'general', source TEXT NOT NULL DEFAULT 'google', shown INTEGER NOT NULL DEFAULT 1,
+        created_by TEXT, created_at TEXT NOT NULL
+      )`,
+    ],
+  },
 ]

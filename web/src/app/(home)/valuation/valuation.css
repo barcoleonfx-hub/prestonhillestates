@@ -229,3 +229,9 @@
 .vx-select:focus { outline: none; border-color: var(--gold); }
 .vx-select[aria-invalid="true"] { border-color: #A8442E; }
 .vx-linkish { border: 0; background: none; padding: 0; margin-top: 6px; font: inherit; font-size: 0.82rem; color: var(--gold-deep); font-weight: 600; cursor: pointer; text-decoration: underline; justify-self: start; }
+
+.rx-summary { margin-top: 14px; color: var(--ink-soft); font-size: 0.98rem; }
+.rx-summary b { color: var(--ink); }
+.rx-summary a { color: var(--ink); font-weight: 700; }
+.quote .rx-summary { text-align: center; margin-top: 22px; }
+.rx-star-off { color: #E3DCC8; }

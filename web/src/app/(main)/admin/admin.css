@@ -807,3 +807,10 @@ kbd { font: 600 0.68rem/1 var(--sans, inherit); padding: 3px 6px; border-radius:
   .cmp-scroll { max-height: 80vh; }
   .cmp-jump { display: inline-block; }
 }
+
+/* Reviews */
+.rv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; align-items: end; }
+.rv-form { display: grid; gap: 12px; margin-top: 12px; }
+.rv-form .field, .rv-grid .field { display: grid; gap: 6px; margin: 0; }
+.rv-form .field > span, .rv-grid .field > span { font-size: 0.78rem; font-weight: 600; color: var(--ink-soft); }
+.rv-grid .field.wide { grid-column: 1 / -1; }

@@ -248,6 +248,21 @@ export const contacts = sqliteTable(
   (t) => [index('contacts_phone_idx').on(t.phoneNorm), index('contacts_email_idx').on(t.emailNorm), index('contacts_last_idx').on(t.lastContactAt)],
 )
 
+/** Client reviews copied from Google, for the website. category: 'sales' | 'lettings' | 'general'. */
+export const reviews = sqliteTable('reviews', {
+  id: text('id').primaryKey(),
+  author: text('author').notNull(),
+  rating: integer('rating').notNull(),
+  text: text('text').notNull(),
+  reviewedOn: text('reviewed_on'),
+  category: text('category').notNull().default('general'),
+  source: text('source').notNull().default('google'),
+  shown: integer('shown', { mode: 'boolean' }).notNull().default(true),
+  createdBy: text('created_by'),
+  createdAt: text('created_at').notNull(),
+})
+export type ReviewRow = typeof reviews.$inferSelect
+
 /** What a registered tenant is looking for; matching new lets are emailed to them automatically. */
 export const tenantAlerts = sqliteTable('tenant_alerts', {
   contactId: text('contact_id').primaryKey().references(() => contacts.id, { onDelete: 'cascade' }),
