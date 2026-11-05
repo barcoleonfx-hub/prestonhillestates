@@ -20,6 +20,7 @@ export default function SiteLayout({ children }: { children: React.ReactNode }) 
           <nav className="site-links" aria-label="Main">
             <Link className="l" href="/properties?channel=sale">Buy</Link>
             <Link className="l" href="/properties?channel=let">Rent</Link>
+            <a className="l" href="/landlords">Landlords</a>
             <a className="l" href="/valuation">Free valuation</a>
             <a className="l" href="tel:+442081277001">020 8127 7001</a>
             <Link className="btn btn-gold" href="/properties">Search homes</Link>
@@ -46,7 +47,7 @@ export default function SiteLayout({ children }: { children: React.ReactNode }) 
             </div>
             <div>
               <h4>Property</h4>
-              <p><Link href="/properties?channel=sale">For sale</Link><br /><Link href="/properties?channel=let">To let</Link></p>
+              <p><Link href="/properties?channel=sale">For sale</Link><br /><Link href="/properties?channel=let">To let</Link><br /><a href="/renting">Register as a tenant</a><br /><a href="/landlords">Landlords</a></p>
             </div>
             <div>
               <h4>Accredited</h4>

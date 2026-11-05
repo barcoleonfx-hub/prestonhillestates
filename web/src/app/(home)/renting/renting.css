@@ -1,0 +1,7 @@
+/* Renting page: the sign-up card in the hero. */
+.tx .vx-hero-grid > .tx-form, .tx .vx-hero-grid > .vx-card { grid-column: 2; grid-row: 1 / span 2; }
+@media (max-width: 980px) { .tx .vx-hero-grid > .tx-form, .tx .vx-hero-grid > .vx-card { grid-column: 1; grid-row: auto; } }
+.tx-form h2, .tx .vx-done h2 { font-family: 'Fraunces', Georgia, serif; font-weight: 420; font-size: 1.6rem; color: var(--ink); }
+.tx-form .vx-field { margin-top: 14px; }
+.tx-form .vx-chips { flex-wrap: wrap; }
+.tx-form .vx-actions { align-items: center; gap: 12px; flex-wrap: wrap; }

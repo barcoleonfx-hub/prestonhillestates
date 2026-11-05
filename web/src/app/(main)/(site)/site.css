@@ -17,7 +17,11 @@
 .search-hero h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(2rem, 4.6vw, 3.4rem); line-height: 1.06; letter-spacing: -0.015em; }
 .search-hero h1 em { font-style: italic; font-weight: 340; color: var(--gold-deep); }
 .searchbar2 { margin-top: 22px; display: grid; grid-template-columns: auto 1.5fr 1fr 1fr 1fr auto; gap: 6px; align-items: end; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 12px; box-shadow: var(--shadow-sm); }
-@media (max-width: 960px) { .searchbar2 { grid-template-columns: 1fr 1fr; } .searchbar2 .seg-wrap, .searchbar2 .go { grid-column: 1 / -1; } }
+.searchbar2.lets { grid-template-columns: auto 1.4fr 1fr 0.8fr 1fr 0.9fr auto auto; }
+.searchbar2 .now-check { display: flex; align-items: center; gap: 6px; height: 42px; padding: 0 6px; font-size: 0.86rem; font-weight: 600; color: var(--ink-soft); white-space: nowrap; cursor: pointer; }
+.searchbar2 .now-check input { accent-color: var(--gold-deep); width: 16px; height: 16px; }
+.pcard .price .pw { font-size: 0.78em; font-weight: 500; color: var(--faint); }
+@media (max-width: 960px) { .searchbar2, .searchbar2.lets { grid-template-columns: 1fr 1fr; } .searchbar2 .seg-wrap, .searchbar2 .go { grid-column: 1 / -1; } }
 .searchbar2 .field label { font-size: 0.66rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); font-weight: 700; }
 .results-meta { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 26px 0 16px; flex-wrap: wrap; font-size: 0.9rem; color: var(--ink-soft); }
 .pgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; padding-bottom: 80px; }
@@ -217,3 +221,10 @@
   .borrow-banner { flex-wrap: wrap; }
   .bb-btn { margin-left: 0; width: 100%; justify-content: center; }
 }
+
+/* Homes to rent: the tenant sign-up box under the enquiry form. */
+.tenant-box { margin-top: 16px; padding: 18px; border-radius: 18px; background: var(--gold-wash, #FBF6E9); border: 1px solid var(--line); display: grid; gap: 8px; }
+.tenant-box b { color: var(--ink); }
+.tenant-box p { color: var(--ink-soft); font-size: 0.9rem; line-height: 1.5; margin: 0; }
+.tenant-box .btn { justify-self: start; }
+.tenant-box .tb-link { font-size: 0.86rem; color: var(--ink); font-weight: 600; }

@@ -49,8 +49,13 @@ export default async function PropertyPage({ params }: { params: Params }) {
   const isLet = p.channel === 'let'
   const paragraphs = (p.description || '').split(/\n\s*\n/).map((s) => s.trim()).filter(Boolean)
 
+  // Homes to rent: the weekly figure and the most a holding deposit can be (1 week's rent), as tenants compare them.
+  const monthly = isLet && p.price ? (p.rentFrequency === 'pw' ? (p.price * 52) / 12 : p.rentFrequency === 'pa' ? p.price / 12 : p.price) : null
+  const weekly = monthly ? `£${(Math.floor(((monthly * 12) / 52) * 100) / 100).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : null
   const material: [string, string | null | undefined][] = [
     [isLet ? 'Rent' : 'Price', priceLabel(p)],
+    ['Rent per week', weekly && (p.rentFrequency ?? 'pcm') !== 'pw' ? weekly : null],
+    ['Holding deposit', weekly ? `Up to 1 week’s rent (${weekly}), refundable` : null],
     ['Tenure', labelFor(TENURES, p.tenure)],
     ['Lease remaining', p.leaseYearsRemaining != null ? `${p.leaseYearsRemaining} years` : null],
     ['Ground rent', p.groundRent != null ? `${formatGBP(p.groundRent)} a year` : null],
@@ -208,6 +213,14 @@ export default async function PropertyPage({ params }: { params: Params }) {
 
         <aside className="aside">
           <EnquiryForm propertyId={p.id} isLet={isLet} />
+          {isLet ? (
+            <div className="tenant-box">
+              <b>Not quite right?</b>
+              <p>Tell us what you’re looking for and we’ll email you new homes to rent that fit, often before they reach the portals.</p>
+              <a className="btn btn-gold" href="/renting#register">Get new homes by email</a>
+              <a className="tb-link" href="/fees">What you’ll pay to rent</a>
+            </div>
+          ) : null}
           <div className="branch">
             <LogoMark />
             <div><b>Preston Hill Estates</b>271 Preston Road, Harrow HA3 0PS<br />Ref {p.ref}</div>

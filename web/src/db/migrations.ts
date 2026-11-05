@@ -661,4 +661,15 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       `DELETE FROM settings WHERE key LIKE 'licensing_%' OR key IN ('licence_scan', 'address_keys', 'schemes_seeded')`,
     ],
   },
+  {
+    id: '028_tenant_alerts',
+    sql: [
+      // Tenants who registered what they're looking for. New lets that match are emailed to them automatically.
+      `CREATE TABLE tenant_alerts (
+        contact_id TEXT PRIMARY KEY REFERENCES contacts(id) ON DELETE CASCADE,
+        max_rent INTEGER, min_beds INTEGER, areas TEXT, move_by TEXT, pets INTEGER NOT NULL DEFAULT 0, furnishing TEXT, notes TEXT,
+        active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, last_sent_at TEXT
+      )`,
+    ],
+  },
 ]

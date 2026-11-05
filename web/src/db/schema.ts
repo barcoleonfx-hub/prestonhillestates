@@ -248,6 +248,23 @@ export const contacts = sqliteTable(
   (t) => [index('contacts_phone_idx').on(t.phoneNorm), index('contacts_email_idx').on(t.emailNorm), index('contacts_last_idx').on(t.lastContactAt)],
 )
 
+/** What a registered tenant is looking for; matching new lets are emailed to them automatically. */
+export const tenantAlerts = sqliteTable('tenant_alerts', {
+  contactId: text('contact_id').primaryKey().references(() => contacts.id, { onDelete: 'cascade' }),
+  maxRent: integer('max_rent'),
+  minBeds: integer('min_beds'),
+  areas: text('areas'), // JSON list of places, e.g. ["Kenton","Wembley"]
+  moveBy: text('move_by'),
+  pets: integer('pets', { mode: 'boolean' }).notNull().default(false),
+  furnishing: text('furnishing'),
+  notes: text('notes'),
+  active: integer('active', { mode: 'boolean' }).notNull().default(true),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+  lastSentAt: text('last_sent_at'),
+})
+export type TenantAlert = typeof tenantAlerts.$inferSelect
+
 export const propertyEmails = sqliteTable(
   'property_emails',
   {
