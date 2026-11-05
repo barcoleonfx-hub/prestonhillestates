@@ -169,6 +169,7 @@ export async function runLicenceScan(opts: { force?: boolean } = {}): Promise<{ 
     const left = (await db.select({ u: scanQueue.uid }).from(scanQueue).where(eq(scanQueue.status, 'queued')).limit(1)).length
     if (!left) {
       await matchDocs()
+      await autoApply().catch((e) => console.error('auto-fill failed', e))
       // Totals across every scan, so a re-run doesn't look like it found less.
       const total = (await db.select({ id: emailDocs.id }).from(emailDocs)).length
       const open = (await db.select({ id: licenceSuggestions.id }).from(licenceSuggestions).where(eq(licenceSuggestions.status, 'new'))).length
@@ -192,7 +193,13 @@ export async function matchDocs(rentalIds?: string[]): Promise<number> {
   const keys = rs.flatMap((r) => [addressKey(r.id, r.address, r.postcode), r.resolvedAddress ? addressKey(r.id, r.resolvedAddress, r.postcode) : null]).filter(Boolean) as AddressKey[]
   if (!keys.length) return 0
   let added = 0
-  const docs = await db.select().from(emailDocs)
+  // A page of emails at a time, so years of stored emails are never all in memory at once.
+  const { gt } = await import('drizzle-orm')
+  let after = ''
+  for (;;) {
+  const docs = await db.select().from(emailDocs).where(gt(emailDocs.id, after)).orderBy(asc(emailDocs.id)).limit(150)
+  if (!docs.length) break
+  after = docs[docs.length - 1].id
   for (const d of docs) {
     const norm = normText(d.text)
     const sent = (d.sentAt ?? d.createdAt).slice(0, 10)
@@ -207,6 +214,7 @@ export async function matchDocs(rentalIds?: string[]): Promise<number> {
         added += ins.rowsAffected
       }
     }
+  }
   }
   return added
 }
@@ -254,7 +262,7 @@ export function bestOf(list: Suggestion[]): Suggestion[] {
 }
 
 /** Puts a suggestion into the register: a new licence record, or a certificate date (only ever moved later). */
-export async function applySuggestion(id: string, by: string): Promise<{ ok: boolean; note?: string }> {
+export async function applySuggestion(id: string, by: string | null, mode: 'staff' | 'auto' = 'staff'): Promise<{ ok: boolean; note?: string }> {
   await ready()
   const s = await db.query.licenceSuggestions.findFirst({ where: eq(licenceSuggestions.id, id) })
   if (!s || s.status !== 'new') return { ok: false, note: 'Already dealt with.' }
@@ -262,34 +270,95 @@ export async function applySuggestion(id: string, by: string): Promise<{ ok: boo
   if (!r) return { ok: false }
   const f = JSON.parse(s.found) as Found
   let note: string | undefined
+  // What was there before, so an automatic fill can be undone.
+  let prev: Record<string, unknown> = {}
   if (s.kind === 'licence') {
     const existing = await db.select().from(licences).where(eq(licences.rentalId, r.id))
+    // The same licence: same number or expiry, or a licence of this kind on file with neither (e.g. "Found" on the spreadsheet).
     const same = existing.find((l) => (f.number && l.number?.toUpperCase() === f.number) || (f.expiresOn && l.expiresOn === f.expiresOn))
+      ?? existing.find((l) => l.kind === (f.licenceKind ?? 'selective') && l.status === 'granted' && !l.number && !l.expiresOn)
     if (same) {
+      prev = { licenceId: same.id, number: same.number, expiresOn: same.expiresOn, startsOn: same.startsOn, council: same.council }
       // Fill in anything the existing record is missing; don't overwrite.
       await db.update(licences).set({ number: same.number ?? f.number ?? null, expiresOn: same.expiresOn ?? f.expiresOn ?? null, startsOn: same.startsOn ?? f.startsOn ?? null, council: same.council ?? f.council ?? null, updatedAt: now() }).where(eq(licences.id, same.id))
       note = 'Added to the licence already on file.'
     } else {
+      const lid = uid()
+      prev = { createdLicence: lid }
       await db.insert(licences).values({
-        id: uid(), rentalId: r.id, kind: f.licenceKind ?? 'selective', council: f.council ?? r.council, number: f.number ?? null, status: f.status === 'applied' ? 'applied' : 'granted',
+        id: lid, rentalId: r.id, kind: f.licenceKind ?? 'selective', council: f.council ?? r.council, number: f.number ?? null, status: f.status === 'applied' ? 'applied' : 'granted',
         appliedOn: f.status === 'applied' ? f.startsOn ?? null : null, startsOn: f.status === 'applied' ? null : f.startsOn ?? null, expiresOn: f.expiresOn ?? null,
-        notes: 'Found in the mailbox', createdBy: by, createdAt: now(), updatedAt: now(),
+        notes: mode === 'auto' ? `Filled in automatically: ${f.how}` : `Added from: ${f.how}`, createdBy: by, createdAt: now(), updatedAt: now(),
       })
     }
   } else {
     const col = s.kind === 'gas' ? 'gasExpires' : s.kind === 'eicr' ? 'eicrExpires' : 'epcExpires'
     const cur = r[col as keyof Rental] as string | null
     const patch: Partial<Rental> = {}
+    prev = { [col]: cur, epcRating: r.epcRating }
     if (f.expiresOn && (!cur || f.expiresOn > cur)) (patch as Record<string, string>)[col] = f.expiresOn
     else if (f.expiresOn) note = `Kept the later date already on file (${cur}).`
     if (s.kind === 'epc' && f.rating && (!r.epcRating || (f.expiresOn && (!cur || f.expiresOn >= cur)))) patch.epcRating = f.rating
     if (Object.keys(patch).length) await db.update(rentals).set({ ...patch, updatedAt: now() }).where(eq(rentals.id, r.id))
   }
-  await db.update(licenceSuggestions).set({ status: 'applied', decidedBy: by, decidedAt: now() }).where(eq(licenceSuggestions.id, id))
+  await db.update(licenceSuggestions).set({ status: mode === 'auto' ? 'auto' : 'applied', decidedBy: by, decidedAt: now(), prev: JSON.stringify(prev) }).where(eq(licenceSuggestions.id, id))
   // Other suggestions of the same kind for this property are no longer needed.
   await db.update(licenceSuggestions).set({ status: 'superseded', decidedBy: by, decidedAt: now() })
     .where(and(eq(licenceSuggestions.rentalId, r.id), eq(licenceSuggestions.kind, s.kind), eq(licenceSuggestions.status, 'new')))
   return { ok: true, note }
+}
+
+/** Takes back something filled in automatically: removes the licence it added, or restores the old date. */
+export async function undoSuggestion(id: string, by: string): Promise<boolean> {
+  await ready()
+  const s = await db.query.licenceSuggestions.findFirst({ where: eq(licenceSuggestions.id, id) })
+  if (!s || (s.status !== 'auto' && s.status !== 'applied')) return false
+  const prev = s.prev ? (JSON.parse(s.prev) as Record<string, string | null>) : {}
+  if (s.kind === 'licence') {
+    if (prev.createdLicence) await db.delete(licences).where(eq(licences.id, prev.createdLicence))
+    else if (prev.licenceId) await db.update(licences).set({ number: prev.number, expiresOn: prev.expiresOn, startsOn: prev.startsOn, council: prev.council, updatedAt: now() }).where(eq(licences.id, prev.licenceId))
+  } else {
+    const col = s.kind === 'gas' ? 'gasExpires' : s.kind === 'eicr' ? 'eicrExpires' : 'epcExpires'
+    await db.update(rentals).set({ [col]: prev[col] ?? null, ...(s.kind === 'epc' ? { epcRating: prev.epcRating ?? null } : {}), updatedAt: now() }).where(eq(rentals.id, s.rentalId))
+  }
+  await db.update(licenceSuggestions).set({ status: 'dismissed', decidedBy: by, decidedAt: now() }).where(eq(licenceSuggestions.id, id))
+  return true
+}
+
+/**
+ * Fills in what's clear without waiting for staff: suggestions marked "clear" (the date is written in the
+ * council's email, register or certificate) that fill a gap, or move a certificate date later. Anything that
+ * would change a licence already on file, or that was worked out or guessed, waits for review.
+ */
+export async function autoApply(rentalIds?: string[]): Promise<number> {
+  await ready()
+  const { settings } = await import('@/db/schema')
+  const off = (await db.query.settings.findFirst({ where: eq(settings.key, 'licensing_autofill') }))?.value === 'off'
+  if (off) return 0
+  const best = bestOf(await suggestionsFor(rentalIds)).filter((s) => s.confidence === 'high')
+  if (!best.length) return 0
+  const rs = new Map((await db.select().from(rentals).where(inArray(rentals.id, [...new Set(best.map((s) => s.rentalId))]))).map((r) => [r.id, r]))
+  const ls = await db.select().from(licences).where(inArray(licences.rentalId, [...rs.keys()]))
+  let n = 0
+  for (const s of best) {
+    const r = rs.get(s.rentalId)
+    if (!r) continue
+    let fills = false
+    if (s.kind === 'licence') {
+      const mine = ls.filter((l) => l.rentalId === r.id)
+      // Only when no licence of that kind is on file, or the one on file is this one with gaps.
+      const kind = s.found.licenceKind ?? 'selective'
+      const same = mine.find((l) => s.found.number && l.number?.toUpperCase() === s.found.number)
+      const blank = mine.find((l) => l.kind === kind && l.status === 'granted' && !l.number && !l.expiresOn)
+      // Fills a gap: completes the same licence, or one on file with no number or date, or adds one where there's none.
+      fills = !!s.found.expiresOn && (same ? !same.expiresOn : blank ? true : !mine.some((l) => l.kind === kind && (l.status === 'granted' || l.status === 'applied')))
+    } else {
+      const cur = (s.kind === 'gas' ? r.gasExpires : s.kind === 'eicr' ? r.eicrExpires : r.epcExpires) ?? null
+      fills = !!s.found.expiresOn && (!cur || s.found.expiresOn > cur)
+    }
+    if (fills && (await applySuggestion(s.id, null, 'auto')).ok) n++
+  }
+  return n
 }
 
 export async function dismissSuggestions(ids: string[], by: string) {

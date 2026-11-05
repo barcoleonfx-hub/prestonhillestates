@@ -3,7 +3,10 @@ import { requireAdmin } from '@/lib/auth'
 import { rentalRegister } from '@/lib/licensing'
 import { bestOf, scanState, suggestionsFor } from '@/lib/licensing-scan'
 import { mailboxStatus } from '@/lib/mailbox'
-import { checkRegistersNow, findPostcodesNow, startEmailScan } from '../../licensing-actions'
+import { checkRegistersNow, findPostcodesNow, setAutofill, startEmailScan } from '../../licensing-actions'
+import { db } from '@/db/client'
+import { licenceSuggestions, settings } from '@/db/schema'
+import { eq } from 'drizzle-orm'
 import { hitsFor, registers } from '@/lib/council-registers'
 import { siteBase } from '@/lib/property-email-data'
 import { BUCKETS, KINDS, bucketOf, councilLabel, fmtDay, inWords, isoDay, kindLabel, type Bucket } from '@/lib/licensing-rules'
@@ -24,6 +27,12 @@ export default async function LicensingPage({ searchParams }: { searchParams: Pr
   // Properties in a council whose register we've read, thought to be licensed, but not found on it.
   const notListed = rows.filter((r) => regCouncils.has(r.council ?? '') && !onRegister.has(r.id) && ['ok', 'due30', 'due90', 'due180'].includes(r.a.bucket))
   const notListedIds = new Set(notListed.map((r) => r.id))
+  const [autoRows, autoSetting] = await Promise.all([
+    db.select({ id: licenceSuggestions.id, kind: licenceSuggestions.kind }).from(licenceSuggestions).where(eq(licenceSuggestions.status, 'auto')),
+    db.query.settings.findFirst({ where: eq(settings.key, 'licensing_autofill') }),
+  ])
+  const autofillOn = autoSetting?.value !== 'off'
+  const withEpc = rows.filter((r) => r.epcRef).length, epcChecked = rows.filter((r) => r.epcCheckedAt).length
   const noPostcode = rows.filter((r) => !r.postcode).length
   const autoPostcode = rows.filter((r) => r.postcode && (r.postcodeSource === 'land_registry' || r.postcodeSource === 'online')).length
   const today = isoDay(new Date())
@@ -66,6 +75,27 @@ export default async function LicensingPage({ searchParams }: { searchParams: Pr
           {starting.map((s) => <div key={s.id}><b>{s.name}</b> starts on {fmtDay(s.startsOn)} ({inWords(Math.round((Date.parse(s.startsOn) - Date.now()) / 86400000))}). Properties it covers are marked “Scheme starting soon”.</div>)}
           {ending.map((s) => <div key={s.id}><b>{s.name}</b> ends on {fmtDay(s.endsOn)}. Check whether {councilLabel(s.council)} is renewing it.</div>)}
         </div>
+      ) : null}
+
+      {rows.length ? (
+        <section className="card card-pad lic-auto">
+          <div className="today-head">
+            <div>
+              <h2>Filling itself in</h2>
+              <p className="card-sub">
+                Add addresses and the portal does the rest: postcodes, council and ward, EPCs from GOV.UK, licences and certificates from your emails, and the councils’ registers.
+                {autofillOn ? ' Clear details (dates written in the council’s email, register or certificate, and official EPC records) fill in the gaps by themselves; worked-out dates and guesses wait for you. Nothing you’ve entered is ever overwritten.' : ' Automatic filling is off: everything waits for you to check.'}
+              </p>
+            </div>
+            <form action={setAutofill}><input type="hidden" name="on" value={autofillOn ? '0' : '1'} /><button className="btn btn-ghost btn-sm" type="submit">{autofillOn ? 'Turn off automatic filling' : 'Turn on automatic filling'}</button></form>
+          </div>
+          <ul className="lic-autolist">
+            <li><b>{rows.length - noPostcode}</b> of {rows.length} have a postcode</li>
+            <li><b>{withEpc}</b> EPCs found on GOV.UK{epcChecked > withEpc ? ` (${epcChecked - withEpc} checked with none listed)` : ''}</li>
+            <li><b>{autoRows.length}</b> details filled in automatically{autoRows.length ? <> · <Link href="/admin/licensing/found#auto">see or undo them</Link></> : null}</li>
+            <li><b>{toCheck}</b> propert{toCheck === 1 ? 'y' : 'ies'} with details waiting for you{toCheck ? <> · <Link href="/admin/licensing/found">check them</Link></> : null}</li>
+          </ul>
+        </section>
       ) : null}
 
       {rows.length ? (

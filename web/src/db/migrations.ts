@@ -609,4 +609,14 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       `CREATE INDEX address_keys_idx ON address_keys (kind, k)`,
     ],
   },
+  {
+    id: '024_epc_and_autofill',
+    sql: [
+      // The EPC found on GOV.UK for each rental, and when it was last looked up.
+      `ALTER TABLE rentals ADD COLUMN epc_ref TEXT`,
+      `ALTER TABLE rentals ADD COLUMN epc_checked_at TEXT`,
+      // What a suggestion replaced when it was filled in automatically, so it can be undone.
+      `ALTER TABLE licence_suggestions ADD COLUMN prev TEXT`,
+    ],
+  },
 ]

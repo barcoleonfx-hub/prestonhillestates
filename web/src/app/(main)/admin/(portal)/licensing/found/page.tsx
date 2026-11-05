@@ -3,6 +3,7 @@ import { requireAdmin } from '@/lib/auth'
 import { rentalRegister } from '@/lib/licensing'
 import { fmtDay } from '@/lib/licensing-rules'
 import { bestOf, scanState, suggestionsFor } from '@/lib/licensing-scan'
+import { AutoList } from './AutoList'
 import { SuggestionReview, type Group } from './SuggestionReview'
 
 export const dynamic = 'force-dynamic'
@@ -10,7 +11,7 @@ export const metadata = { title: 'Found in emails' }
 
 export default async function FoundPage() {
   await requireAdmin()
-  const [{ rows }, list, st] = await Promise.all([rentalRegister(), suggestionsFor(), scanState()])
+  const [{ rows }, list, st, auto] = await Promise.all([rentalRegister(), suggestionsFor(), scanState(), suggestionsFor(undefined, 'auto')])
   const best = bestOf(list)
   const byId = new Map(rows.map((r) => [r.id, r]))
   const groups: Group[] = [...new Set(best.map((s) => s.rentalId))].map((id) => {
@@ -34,6 +35,11 @@ export default async function FoundPage() {
       <section className="card card-pad">
         <p className="card-sub" style={{ marginBottom: 12 }}>{groups.length} properties with details to check · {st.docs.toLocaleString('en-GB')} relevant emails read{st.finishedAt ? ` · scan finished ${fmtDay(st.finishedAt.slice(0, 10))}` : ''}. Labels: <b>Clear</b> = the date is written in the email; <b>Worked out</b> = from the inspection date (gas 1 year, EICR 5, EPC 10); <b>Rough guess</b> = from the date the email was sent.</p>
         <SuggestionReview groups={groups} />
+      </section>
+      <section className="card card-pad" id="auto" style={{ marginTop: 18 }}>
+        <h2>Filled in automatically · {auto.length}</h2>
+        <p className="card-sub" style={{ margin: '4px 0 12px' }}>Clear details that filled a gap by themselves. If one is wrong, undo it: the licence it added is removed, or the old date put back.</p>
+        <AutoList items={auto.map((s) => ({ id: s.id, rentalId: s.rentalId, address: rows.find((r) => r.id === s.rentalId)?.address ?? '', kind: s.kind, found: s.found, source: s.doc.subject ?? '', when: s.doc.sentAt, pdf: s.doc.pdfs[0]?.id ?? null }))} />
       </section>
     </>
   )

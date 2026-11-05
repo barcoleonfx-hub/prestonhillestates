@@ -322,6 +322,8 @@ export const rentals = sqliteTable('rentals', {
   postcodeNote: text('postcode_note'),
   postcodeTriedAt: text('postcode_tried_at'),
   resolvedAddress: text('resolved_address'),
+  epcRef: text('epc_ref'),
+  epcCheckedAt: text('epc_checked_at'),
   notes: text('notes'),
   archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
   createdBy: text('created_by'),
@@ -459,6 +461,7 @@ export const licenceSuggestions = sqliteTable('licence_suggestions', {
   status: text('status').notNull().default('new'),
   decidedBy: text('decided_by'),
   decidedAt: text('decided_at'),
+  prev: text('prev'),
   createdAt: text('created_at').notNull(),
 })
 
