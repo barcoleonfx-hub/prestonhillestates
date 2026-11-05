@@ -10,6 +10,7 @@ import { addDays, londonToIso, todayLondon } from '@/lib/time'
 import { LogoMark } from '@/components/Logo'
 import { logout } from '../actions'
 import { NavLinks } from './NavLinks'
+import { licensingCounts } from '@/lib/licensing'
 import { AlertCenter } from './AlertCenter'
 import { CallDrawer } from './CallDrawer'
 
@@ -20,7 +21,7 @@ export default async function PortalLayout({ children }: { children: React.React
   await ready()
   const today = todayLondon()
   const endOfToday = londonToIso(addDays(today, 1), '00:00')!
-  const [[{ n }], todays, mine, overdueAll, [{ due }], staff, props] = await Promise.all([
+  const [[{ n }], todays, mine, overdueAll, [{ due }], staff, props, lic] = await Promise.all([
     db.select({ n: count() }).from(enquiries).where(eq(enquiries.handled, false)),
     listBetween(londonToIso(today, '00:00')!, londonToIso(addDays(today, 1), '00:00')!),
     needingOutcome(admin.id),
@@ -29,6 +30,7 @@ export default async function PortalLayout({ children }: { children: React.React
     activeStaff(),
     db.select({ id: properties.id, ref: properties.ref, channel: properties.channel, displayAddress: properties.displayAddress, street: properties.street, town: properties.town, postcode: properties.postcode })
       .from(properties).where(ne(properties.status, 'withdrawn')).orderBy(desc(properties.updatedAt)).limit(400),
+    licensingCounts().catch(() => ({ urgent: 0 })),
   ])
   const upcomingToday = todays.filter((a) => a.status === 'scheduled').length
   return (
@@ -47,7 +49,7 @@ export default async function PortalLayout({ children }: { children: React.React
           staff={staff.map((s) => ({ id: s.id, name: s.name }))}
           props={props.map((p) => ({ id: p.id, ref: p.ref, channel: p.channel, label: displayAddressFor(p) || 'Untitled' }))}
         />
-        <NavLinks newEnquiries={n} today={upcomingToday} outcomes={Math.max(mine.length, overdueAll.length)} callbacks={due} isAdmin={admin.role === 'admin'} />
+        <NavLinks newEnquiries={n} today={upcomingToday} outcomes={Math.max(mine.length, overdueAll.length)} callbacks={due} licensing={lic.urgent} isAdmin={admin.role === 'admin'} />
         <AlertCenter me={{ id: admin.id, name: admin.name }} initialPending={mine.map(toPending)} />
         <div className="admin-me">
           <div className="who">{admin.name}</div>

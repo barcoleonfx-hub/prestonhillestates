@@ -1,0 +1,135 @@
+import Link from 'next/link'
+import { requireAdmin } from '@/lib/auth'
+import { rentalRegister } from '@/lib/licensing'
+import { BUCKETS, KINDS, bucketOf, councilLabel, fmtDay, inWords, isoDay, kindLabel, type Bucket } from '@/lib/licensing-rules'
+
+export const dynamic = 'force-dynamic'
+export const metadata = { title: 'Licensing' }
+
+type SP = { b?: string; council?: string; ward?: string; kind?: string; landlord?: string; q?: string; cert?: string }
+
+export default async function LicensingPage({ searchParams }: { searchParams: Promise<SP> }) {
+  await requireAdmin()
+  const sp = await searchParams
+  const { rows, schemes } = await rentalRegister()
+  const today = isoDay(new Date())
+  const certBad = (r: (typeof rows)[number]) => r.a.certs.some((c) => c.state === 'expired' || c.state === 'due30' || (c.state === 'missing' && c.key !== 'epc'))
+  const q = (sp.q ?? '').trim().toLowerCase()
+  const shown = rows.filter((r) =>
+    (!sp.b || r.a.bucket === sp.b) && (!sp.council || r.council === sp.council) && (!sp.ward || r.ward === sp.ward) &&
+    (!sp.kind || r.a.needed === sp.kind || r.a.upcoming?.kind === sp.kind) && (!sp.landlord || (r.landlordName ?? '') === sp.landlord) &&
+    (!sp.cert || certBad(r)) && (!q || `${r.address} ${r.postcode ?? ''} ${r.landlordName ?? ''} ${r.licences.map((l) => l.number).join(' ')}`.toLowerCase().includes(q)))
+  const count = (b: Bucket) => rows.filter((r) => r.a.bucket === b).length
+  const wards = [...new Set(rows.map((r) => r.ward).filter(Boolean))].sort() as string[]
+  const landlords = [...new Set(rows.map((r) => r.landlordName).filter(Boolean))].sort() as string[]
+  const link = (patch: Partial<SP>) => { const p = new URLSearchParams(Object.entries({ ...sp, ...patch }).filter(([, v]) => v) as [string, string][]); const s = p.toString(); return `/admin/licensing${s ? `?${s}` : ''}` }
+  const filtered = Object.values(sp).some(Boolean)
+
+  // The next 12 months, by the month each licence (or scheme) runs out.
+  const months = Array.from({ length: 12 }, (_, i) => { const d = new Date(); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() + i); return d.toISOString().slice(0, 7) })
+  const byMonth = months.map((m) => ({ m, items: rows.filter((r) => (r.a.validUntil ?? '').startsWith(m) && r.a.licence?.status === 'granted') }))
+  const starting = schemes.filter((s) => s.startsOn > today && s.startsOn <= isoDay(new Date(Date.now() + 365 * 86400000)))
+  const ending = schemes.filter((s) => s.endsOn >= today && s.endsOn <= isoDay(new Date(Date.now() + 365 * 86400000)))
+
+  return (
+    <>
+      <div className="page-head">
+        <div>
+          <h1>Licensing</h1>
+          <p className="sub">Every property we let or manage, checked against Brent and Harrow’s licensing schemes, with licence and certificate expiry dates. Checked again every few hours; reminders go out 6 months, 90, 60, 30, 14, 7 and 1 days before anything runs out.</p>
+        </div>
+        <div className="actions">
+          <Link className="btn btn-ghost" href="/admin/licensing/schemes">Council schemes</Link>
+          <Link className="btn btn-ghost" href="/admin/licensing/import">Import a spreadsheet</Link>
+          <Link className="btn btn-gold" href="/admin/licensing/new">Add a property</Link>
+        </div>
+      </div>
+
+      {starting.length || ending.length ? (
+        <div className="notice lic-schemes-note">
+          {starting.map((s) => <div key={s.id}><b>{s.name}</b> starts on {fmtDay(s.startsOn)} ({inWords(Math.round((Date.parse(s.startsOn) - Date.now()) / 86400000))}). Properties it covers are marked “Scheme starting soon”.</div>)}
+          {ending.map((s) => <div key={s.id}><b>{s.name}</b> ends on {fmtDay(s.endsOn)}. Check whether {councilLabel(s.council)} is renewing it.</div>)}
+        </div>
+      ) : null}
+
+      {!rows.length ? (
+        <section className="card card-pad lic-empty">
+          <h2>Start your licensing register</h2>
+          <ol>
+            <li><b>Import your current list</b> from Excel or Numbers (saved as CSV), or add properties one at a time.</li>
+            <li>The portal looks up each property’s <b>council and ward</b> from its postcode and works out whether it needs a selective or HMO licence.</li>
+            <li>Add each licence’s <b>number and expiry date</b>, plus gas, EICR and EPC dates. You’ll be reminded well before anything runs out.</li>
+          </ol>
+          <div className="actions" style={{ marginTop: 14 }}><Link className="btn btn-gold" href="/admin/licensing/import">Import a spreadsheet</Link><Link className="btn btn-ghost" href="/admin/licensing/new">Add a property</Link></div>
+        </section>
+      ) : (
+        <>
+          <div className="lic-tiles">
+            {BUCKETS.map((b) => (
+              <Link key={b.value} href={link({ b: sp.b === b.value ? undefined : b.value })} className={`lic-tile t-${b.tone}${sp.b === b.value ? ' on' : ''}${count(b.value) ? '' : ' zero'}`} title={b.about}>
+                <b>{count(b.value)}</b><span>{b.label}</span>
+              </Link>
+            ))}
+            <Link href={link({ cert: sp.cert ? undefined : '1' })} className={`lic-tile t-amber${sp.cert ? ' on' : ''}${rows.filter(certBad).length ? '' : ' zero'}`} title="Gas safety or EICR expired, due within 30 days or not on file; EPC expired or below E.">
+              <b>{rows.filter(certBad).length}</b><span>Certificates to sort</span>
+            </Link>
+          </div>
+
+          <form className="lic-filters" action="/admin/licensing">
+            <input className="input" name="q" defaultValue={sp.q} placeholder="Search address, landlord or licence number" aria-label="Search" />
+            <select className="select" name="council" defaultValue={sp.council ?? ''} aria-label="Council"><option value="">All councils</option><option value="brent">Brent</option><option value="harrow">Harrow</option><option value="other">Other</option></select>
+            <select className="select" name="ward" defaultValue={sp.ward ?? ''} aria-label="Ward"><option value="">All wards</option>{wards.map((w) => <option key={w}>{w}</option>)}</select>
+            <select className="select" name="kind" defaultValue={sp.kind ?? ''} aria-label="Licence"><option value="">Any licence</option>{KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}</select>
+            <select className="select" name="landlord" defaultValue={sp.landlord ?? ''} aria-label="Landlord"><option value="">All landlords</option>{landlords.map((l) => <option key={l}>{l}</option>)}</select>
+            {sp.b ? <input type="hidden" name="b" value={sp.b} /> : null}
+            {sp.cert ? <input type="hidden" name="cert" value="1" /> : null}
+            <button className="btn btn-dark btn-sm" type="submit">Filter</button>
+            {filtered ? <Link className="btn btn-ghost btn-sm" href="/admin/licensing">Clear</Link> : null}
+          </form>
+
+          <section className="card">
+            <div className="table-wrap">
+              <table className="list lic-table">
+                <thead><tr><th>Property</th><th>Area</th><th>Needs</th><th>Status</th><th>Licence</th><th>Certificates</th><th>Landlord</th><th>Checked</th></tr></thead>
+                <tbody>
+                  {shown.map((r) => {
+                    const b = bucketOf(r.a.bucket)
+                    return (
+                      <tr key={r.id} className={`tone-${b.tone}`}>
+                        <td><Link className="addr-main" href={`/admin/licensing/${r.id}`}>{r.address}</Link><div className="addr-sub">{r.postcode ?? 'No postcode'}</div></td>
+                        <td className="addr-sub">{r.council ? councilLabel(r.council) : '—'}{r.ward ? <><br />{r.ward}</> : null}</td>
+                        <td className="addr-sub">{r.a.needed ? kindLabel(r.a.needed) : r.a.upcoming ? `${kindLabel(r.a.upcoming.kind)} from ${fmtDay(r.a.upcoming.scheme.startsOn)}` : 'None now'}</td>
+                        <td>
+                          <span className={`lic-pill t-${b.tone}`}>{b.label}</span>
+                          {r.a.days != null && r.a.validUntil ? <div className="addr-sub">{fmtDay(r.a.validUntil)} · {inWords(r.a.days)}</div> : r.a.bucket === 'upcoming' && r.a.upcoming ? <div className="addr-sub">{inWords(r.a.upcoming.days)}</div> : null}
+                        </td>
+                        <td className="addr-sub">{r.a.licence?.number ?? (r.licences.length ? '—' : 'None on file')}</td>
+                        <td><div className="lic-certs">{r.a.certs.map((c) => <span key={c.key} className={`lic-cert s-${c.state}`} title={`${c.label}: ${c.date ? `${c.days! < 0 ? 'expired' : 'until'} ${fmtDay(c.date)}` : 'not on file'}${c.note ? `. ${c.note}` : ''}`}>{c.key === 'eicr' ? 'EICR' : c.key === 'epc' ? 'EPC' : 'Gas'}</span>)}</div></td>
+                        <td className="addr-sub">{r.landlordName ?? '—'}</td>
+                        <td className="addr-sub">{r.lastCheckedAt ? new Date(r.lastCheckedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' }) : 'Never'}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {!shown.length ? <p className="card-sub" style={{ padding: '6px 20px 20px' }}>Nothing matches. <Link href="/admin/licensing">Show everything</Link>.</p> : null}
+          </section>
+
+          <section className="card card-pad" style={{ marginTop: 18 }}>
+            <h2>Licences running out, month by month</h2>
+            <p className="card-sub" style={{ marginTop: 4 }}>The next 12 months, by the date each licence (or the scheme it’s under) ends.</p>
+            <div className="lic-months">
+              {byMonth.map(({ m, items }) => (
+                <div key={m} className={`lic-month${items.length ? '' : ' empty'}`}>
+                  <h3>{new Date(`${m}-01T12:00:00Z`).toLocaleDateString('en-GB', { month: 'short', year: 'numeric', timeZone: 'UTC' })}<b>{items.length}</b></h3>
+                  <ul>{items.slice(0, 6).map((r) => <li key={r.id}><Link href={`/admin/licensing/${r.id}`}>{r.address}</Link><span>{fmtDay(r.a.validUntil)}</span></li>)}{items.length > 6 ? <li className="more">+{items.length - 6} more</li> : null}</ul>
+                </div>
+              ))}
+            </div>
+          </section>
+        </>
+      )}
+    </>
+  )
+}

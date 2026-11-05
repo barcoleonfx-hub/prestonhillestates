@@ -6,6 +6,7 @@ import { checkMailbox } from '@/lib/mailbox'
 import { backfillAddresses, refreshSoldPrices } from '@/lib/sold-prices'
 import { refreshPostcodeGeo } from '@/lib/postcode-geo'
 import { runCampaigns } from '@/lib/campaign-data'
+import { runLicensingChecks } from '@/lib/licensing'
 import { after } from 'next/server'
 
 export const dynamic = 'force-dynamic'
@@ -28,6 +29,8 @@ export async function GET(req: Request) {
   // Land Registry sold prices: checked daily, reloaded when they publish (monthly). Runs after the reply.
   // Then, once, the address archive back to 1995 for the valuation address finder (a year per run until done).
   after(async () => {
+    // Licensing: council and ward look-ups and expiry reminders, every few hours.
+    await runLicensingChecks().catch((e) => console.error('licensing check failed', e))
     // Email campaigns: the next few emails, within the daily limit.
     await runCampaigns().catch((e) => console.error('campaign sending failed', e))
     await refreshSoldPrices().catch((e) => console.error('sold prices refresh failed', e))

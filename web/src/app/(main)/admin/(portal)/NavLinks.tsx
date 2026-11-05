@@ -14,6 +14,7 @@ const ICONS: Record<string, React.ReactNode> = {
   team: <path d="M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20c.6-3.4 3.2-5.5 6.5-5.5s5.9 2.1 6.5 5.5M16 4.3a3.5 3.5 0 0 1 0 6.4M18.5 14.8c1.6.8 2.7 2.6 3 5.2" />,
   user: <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c.8-4 4-6.5 8-6.5s7.2 2.5 8 6.5" />,
   site: <path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6" />,
+  shield: <path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6zM8.5 12l2.5 2.5 4.5-5" />,
 }
 
 function Icon({ name }: { name: string }) {
@@ -24,7 +25,7 @@ function Icon({ name }: { name: string }) {
   )
 }
 
-export function NavLinks({ newEnquiries, today, outcomes, callbacks, isAdmin }: { newEnquiries: number; today: number; outcomes: number; callbacks: number; isAdmin: boolean }) {
+export function NavLinks({ newEnquiries, today, outcomes, callbacks, licensing, isAdmin }: { newEnquiries: number; today: number; outcomes: number; callbacks: number; licensing: number; isAdmin: boolean }) {
   const path = usePathname()
   const on = (href: string) => (href === '/admin' ? path === '/admin' : path.startsWith(href)) ? 'on' : undefined
   return (
@@ -41,6 +42,9 @@ export function NavLinks({ newEnquiries, today, outcomes, callbacks, isAdmin }: 
         {outcomes > 0 ? <span className="count warn" title="Outcomes waiting">{outcomes}</span> : today > 0 ? <span className="count" title="Today">{today}</span> : null}
       </Link>
       <Link href="/admin/properties" className={on('/admin/properties')}><Icon name="homes" />Properties</Link>
+      <Link href="/admin/licensing" className={on('/admin/licensing')}>
+        <Icon name="shield" />Licensing{licensing > 0 ? <span className="count warn" title="Need action now">{licensing}</span> : null}
+      </Link>
       <Link href="/admin/enquiries" className={on('/admin/enquiries')}>
         <Icon name="mail" />Enquiries{newEnquiries > 0 ? <span className="count">{newEnquiries}</span> : null}
       </Link>

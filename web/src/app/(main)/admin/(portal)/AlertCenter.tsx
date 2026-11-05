@@ -11,7 +11,7 @@ import { openCallLog } from './CallDrawer'
 const POLL_MS = 20_000
 const SOUND_KEY = 'phe_alert_sound'
 
-const TAG: Record<string, string> = { booked: 'New booking', changed: 'Changed', cancelled: 'Cancelled', reminder: 'Reminder', callback: 'Callback due', callback_assigned: 'New callback for you', enquiry: 'New enquiry' }
+const TAG: Record<string, string> = { booked: 'New booking', changed: 'Changed', cancelled: 'Cancelled', reminder: 'Reminder', callback: 'Callback due', callback_assigned: 'New callback for you', enquiry: 'New enquiry', licence: 'Licensing' }
 
 function readSound(): boolean {
   try { return localStorage.getItem(SOUND_KEY) !== 'off' } catch { return true }
@@ -195,6 +195,7 @@ export function AlertCenter({ me, initialPending }: { me: { id: string; name: st
                   <button type="button" className="btn btn-gold btn-sm" onClick={() => ack([a.id])}>Got it</button>
                   {ap ? <Link className="btn btn-ghost btn-sm" href={`/admin/diary/${ap.id}`} onClick={() => ack([a.id])}>Open</Link> : null}
                   {a.kind === 'enquiry' ? <Link className="btn btn-dark btn-sm" href="/admin/enquiries" onClick={() => ack([a.id])}>Open enquiries</Link> : null}
+                  {a.kind === 'licence' ? <Link className="btn btn-dark btn-sm" href={/\/admin\/licensing\/[\w-]+/.exec(a.body ?? '')?.[0] ?? '/admin/licensing'} onClick={() => ack([a.id])}>Open</Link> : null}
                   {tk?.contactId ? <button type="button" className="btn btn-dark btn-sm" onClick={() => { ack([a.id]); openCallLog({ contactId: tk.contactId!, direction: 'out' }) }}>Log the call</button> : null}
                   {tk?.contactId ? <Link className="btn btn-ghost btn-sm" href={`/admin/contacts/${tk.contactId}`} onClick={() => ack([a.id])}>Their record</Link> : null}
                 </div>
