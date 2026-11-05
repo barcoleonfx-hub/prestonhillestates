@@ -1,0 +1,14 @@
+/* Fees and legal page. */
+.fx-hero { padding: clamp(120px, 16vh, 170px) 0 clamp(30px, 5vh, 50px); background: radial-gradient(ellipse 60% 50% at 85% 20%, rgba(247,240,222,0.9), transparent 70%), var(--bg); }
+.fx-hero h1.display { margin-top: 18px; font-size: clamp(2.4rem, 5vw, 4rem); }
+.fx-hero .sub { margin-top: 18px; max-width: 60ch; color: var(--ink-soft); font-size: 1.05rem; line-height: 1.6; }
+.fx-sect { padding-block: clamp(30px, 5vh, 50px); }
+.fx-table { margin-top: 20px; border: 1px solid var(--line); border-radius: 20px; overflow: hidden; background: var(--surface); }
+.fx-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 20px; padding: 16px 22px; border-top: 1px solid var(--line-soft); line-height: 1.55; color: var(--ink-soft); }
+.fx-row:first-child { border-top: 0; }
+.fx-row.head { background: var(--gold-tint); color: var(--ink); font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 700; }
+.fx-row b { color: var(--ink); display: block; }
+.fx-row small { display: block; margin-top: 4px; font-size: 0.86rem; }
+@media (max-width: 640px) { .fx-row { grid-template-columns: 1fr; gap: 6px; } .fx-row.head { display: none; } }
+.fx-note { margin-top: 16px; color: var(--ink-soft); max-width: 70ch; line-height: 1.6; }
+.fx-note a, .fx .lx-card a { color: var(--ink); font-weight: 700; }
