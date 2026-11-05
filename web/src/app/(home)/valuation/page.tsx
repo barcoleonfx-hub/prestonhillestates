@@ -133,7 +133,7 @@ export default async function ValuationPage({ searchParams }: { searchParams: Pr
                 <h3>Letting with us</h3>
                 <ul>
                   <li>Vetted tenants and deposits protected with myDeposits</li>
-                  <li>Rent-guarantee options available</li>
+                  <li>Rent guarantee included in our fully managed service</li>
                   <li>Full management handled by the branch, not a call centre</li>
                 </ul>
                 <a className="link" href="/valuation?intent=letting#val-start">Book a rental valuation <span className="ar">⟶</span></a>
