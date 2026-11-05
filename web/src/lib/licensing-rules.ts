@@ -143,7 +143,16 @@ function certFor(key: Cert['key'], date: string | null, today: string, rating?: 
 /** Where a rented property stands on licensing today, and why. */
 export function assess(f: RentalFacts, licences: Licence[], schemes: Scheme[], today = isoDay(new Date())): Assessment {
   const reasons: string[] = []
-  const kind = kindFor(f.occupancy)
+  // A property saved as a single household that holds a current HMO licence (on file or on the council's register)
+  // is let as an HMO: the HMO licence is the one that counts, and no selective licence is needed as well.
+  const isHmo = (k: string | null | undefined) => k === 'mandatory_hmo' || k === 'additional_hmo'
+  const hmoHeld = f.occupancy !== 'single' ? null
+    // The newest licence on file says how it's let: an HMO licence (even one that has run out, which then needs renewing).
+    : ([...licences].filter((l) => l.status === 'granted' || l.status === 'applied').sort((x, y) => (y.expiresOn ?? y.appliedOn ?? '').localeCompare(x.expiresOn ?? x.appliedOn ?? '')).find(() => true)?.kind === 'selective' ? null
+      : licences.filter((l) => isHmo(l.kind) && (l.status === 'granted' || l.status === 'applied')).sort((x, y) => (y.expiresOn ?? '').localeCompare(x.expiresOn ?? ''))[0]?.kind
+      ?? (f.register && isHmo(f.register.kind) && (!f.register.expiresOn || f.register.expiresOn >= today) ? f.register.kind : null)) as LicenceKind | null
+  const kind = hmoHeld ?? kindFor(f.occupancy)
+  if (hmoHeld) reasons.push(`It holds a ${kindLabel(hmoHeld).replace(/^\w/, (c) => c.toLowerCase())}, so it’s treated as an HMO and doesn’t need a selective licence as well. Its type is saved as single household: change it under Details if it’s let as an HMO.`)
   const active = (s: Scheme) => s.startsOn <= today && s.endsOn >= today
   const scheme = kind === 'mandatory_hmo' ? null : schemes.find((s) => s.kind === kind && active(s) && covers(s, f)) ?? null
   const needed: LicenceKind | null = kind === 'mandatory_hmo' ? 'mandatory_hmo' : scheme ? kind : null
