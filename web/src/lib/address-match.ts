@@ -1,5 +1,6 @@
 import 'server-only'
 import { normText } from './licensing-extract'
+import { STREET_END, compactOf, fits } from './property-match'
 
 // Finding the postcode for an address typed the way people type them in a spreadsheet: shortened
 // ("369 Westcroft"), joined up ("Mountsteward"), misspelt ("Tokington", "Haydan Close"), or a flat
@@ -17,8 +18,6 @@ const outward = (pc: string) => pc.split(' ')[0]
 
 type Entry = { pc: string; num: string | null; street: string; flat: string | null }
 
-const compactOf = (s: string) => s.replace(/\s+/g, '')
-const STREET_END = /\s(road|avenue|street|crescent|gardens|close|drive|lane|court|park|square|terrace|place|way|grove|walk|rise|hill|mews|view|parade|green|row|gate|vale|end|house|mansions|broadway|circus|approach|chase|heights)$/
 const BUILDING = /^(.+?\s(?:court|house|lodge|mansions|heights|point|place|tower|apartments))\b/
 // Streets and buildings are filed under their first two letters, so a fuzzy look-up only compares likely names.
 const head = (s: string) => compactOf(s).slice(0, 2)
@@ -89,27 +88,6 @@ async function byHead(kind: 'st' | 'bld', name: string): Promise<Map<string, Ent
   const out = new Map<string, Entry[]>()
   for (const x of r.rows as unknown as { street: string; flat: string | null; pc: string }[]) out.set(x.street, [...(out.get(x.street) ?? []), { pc: x.pc, num: x.flat, street: x.street, flat: x.flat }])
   return out
-}
-
-function distance(a: string, b: string) {
-  if (Math.abs(a.length - b.length) > 3) return 9
-  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)])
-  for (let j = 1; j <= b.length; j++) d[0][j] = j
-  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1))
-  return d[a.length][b.length]
-}
-
-/** How well a typed street ("westcroft", "mountsteward", "tokington") fits a real one ("westcroft way"). */
-function fits(typed: string, real: string): number {
-  const t = compactOf(typed), r = compactOf(real.replace(STREET_END, ''))
-  if (r === t || compactOf(real) === t) return 0
-  if (r.startsWith(t) && t.length >= 4) return 0.5 // shortened: "westcroft" → "westcroftway"
-  // Misspelt: one letter out if it starts the same; two only for long names sharing their first three letters
-  // (so "Flamstead" is never read as "Farmstead").
-  const allowed = (x: string) => (t[0] !== x[0] ? 0 : t.length >= 8 && t.slice(0, 3) === x.slice(0, 3) ? 2 : t.length >= 5 ? 1 : 0)
-  if (t.length >= 5) { const d = distance(t, r); if (d <= allowed(r)) return d }
-  if (t.length >= 6 && r.length > t.length) { const x = r.slice(0, t.length); const d = distance(t, x); if (d <= Math.min(1, allowed(x))) return 1.5 }
-  return 99
 }
 
 export type PostcodeGuess = { postcode: string; street: string; how: string; resolved: string | null }

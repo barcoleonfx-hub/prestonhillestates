@@ -3,14 +3,14 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { and, eq, isNull } from 'drizzle-orm'
-import { db, ready } from '@/db/client'
-import { contacts, licences, licensingSchemes, rentals } from '@/db/schema'
+import { db, getClient, ready } from '@/db/client'
+import { contacts, licences, licensingSchemes, rentals, type Rental } from '@/db/schema'
 import { requireAdmin } from '@/lib/auth'
 import { audit } from '@/lib/contacts'
 import { after } from 'next/server'
 import { fillAreas, fmtPostcode, refreshArea } from '@/lib/licensing'
 import { KINDS, LICENCE_STATUS, OCCUPANCY, WARDS, normWard } from '@/lib/licensing-rules'
-import { normText } from '@/lib/licensing-extract'
+import { normPostcode, normText } from '@/lib/licensing-extract'
 import { now, uid } from '@/lib/util'
 
 const str = (f: FormData, k: string, max = 300) => String(f.get(k) ?? '').trim().slice(0, max)
@@ -166,10 +166,18 @@ export async function saveScheme(f: FormData) {
 
 // ---------- importing an existing spreadsheet (e.g. a Rentman export) ----------
 
-export type ImportRow = RentalInput & { licenceKind: string | null; licenceNumber: string | null; licenceStatus: string | null; licenceStart: string | null; licenceExpiry: string | null; appliedOn: string | null; licenceNote: string | null; postcodeFound: boolean; postcodeHow: string | null; resolvedAddress: string | null; problems: string[]; existing: boolean }
+/** Which of our properties a spreadsheet row was matched to. `choice` is what Import does unless you change it: a property id, 'new' or 'skip'. */
+export type ImportMatch = { kind: 'matched' | 'likely' | 'choose' | 'none'; id: string | null; label: string | null; archived: boolean; how: string | null; choice: string; candidates: { id: string; label: string }[] }
+export type ImportRow = RentalInput & {
+  licenceKind: string | null; licenceNumber: string | null; licenceStatus: string | null; licenceStart: string | null; licenceExpiry: string | null; appliedOn: string | null; licenceNote: string | null
+  postcodeFound: boolean; postcodeHow: string | null; resolvedAddress: string | null; problems: string[]; existing: boolean
+  rentmanRef: string | null; landlordRef: string | null; rentPcm: number | null; rentmanArchived: boolean | null; match: ImportMatch | null
+}
+export type ImportKind = 'rentman' | 'sheet'
 export type Mapping = Partial<Record<ImportField, number | null>>
 type ImportField = 'address' | 'address2' | 'town' | 'postcode' | 'council' | 'ward' | 'occupancy' | 'landlordName' | 'landlordEmail' | 'landlordPhone'
   | 'licenceKind' | 'licenceNumber' | 'licenceStatus' | 'licenceStart' | 'licenceExpiry' | 'gasExpires' | 'eicrExpires' | 'epcExpires' | 'epcRating' | 'notes'
+  | 'rentmanRef' | 'number' | 'street' | 'rent' | 'landlordRef' | 'rentmanArchived'
 
 // Exact headings first, then a looser rule for each field (Rentman, Excel lists, other agency software).
 const HEADERS: Record<ImportField, string[]> = {
@@ -193,6 +201,13 @@ const HEADERS: Record<ImportField, string[]> = {
   epcExpires: ['epc', 'epc expiry', 'epc expiry date', 'epc valid until', 'energy performance certificate expiry'],
   epcRating: ['epc rating', 'energy rating', 'epc grade', 'energy efficiency rating', 'rating'],
   notes: ['notes', 'comments', 'note'],
+  // Rentman's property export: Propref, Number, Street, Town, City, Postcode, Rental, Telephone, Available, Archived, Llord.
+  rentmanRef: ['propref', 'prop ref', 'property ref', 'property reference', 'property id', 'rentman ref'],
+  number: ['number', 'house number', 'house no', 'no', 'no.', 'building number', 'flat/house number'],
+  street: ['street', 'street name'],
+  rent: ['rental', 'rent', 'rent pcm', 'monthly rent', 'rent amount'],
+  landlordRef: ['llord', 'llord ref', 'landlord ref', 'landlord id', 'landlord number', 'landlord no'],
+  rentmanArchived: ['archived', 'archive', 'inactive', 'withdrawn'],
 }
 const LOOSE: [ImportField, (h: string) => boolean][] = [
   ['licenceExpiry', (h) => /licen[cs]/.test(h) && /expir|end|until|renew/.test(h)],
@@ -205,7 +220,7 @@ const LOOSE: [ImportField, (h: string) => boolean][] = [
   ['eicrExpires', (h) => /eicr|electric/.test(h)],
   ['landlordEmail', (h) => /(landlord|owner)/.test(h) && /mail/.test(h)],
   ['landlordPhone', (h) => /(landlord|owner)/.test(h) && /phone|mobile|tel/.test(h)],
-  ['landlordName', (h) => /(landlord|owner)/.test(h) && !/mail|phone|mobile|tel|address|ref|id\b/.test(h)],
+  ['landlordName', (h) => /(landlord|owner)/.test(h) && !/mail|phone|mobile|tel|address|ref|id\b|\bno\b|number/.test(h)],
   ['postcode', (h) => /post ?code/.test(h)],
   ['address2', (h) => /(address|line) ?2/.test(h)],
   ['address', (h) => /(address|line) ?1|^property address|^address$/.test(h)],
@@ -246,8 +261,13 @@ export async function parseDay(raw: string): Promise<string | null> {
 const BOROUGHS = /^(brent|harrow|ealing|barnet|hillingdon|hounslow|camden|westminster|kensington|hammersmith|fulham|islington|hackney|haringey|enfield|waltham forest|redbridge|newham|tower hamlets|southwark|lambeth|wandsworth|merton|sutton|croydon|bromley|lewisham|greenwich|bexley|havering|barking|dagenham|kingston|richmond|luton|watford|hertsmere|three rivers|slough|newcastle|birmingham|manchester|leeds|other)\b/i
 const STATUSY = /\b(found|applied|application|licen[cs]e req|not req|no licen|granted|pending|expired|exp\b)/i
 
+const normHead = (head: string[]) => head.map((x) => x.trim().toLowerCase().replace(/[_]+/g, ' ').replace(/\s+/g, ' '))
+/** Rentman's property list (all our properties), rather than a licensing spreadsheet. */
+const isRentman = (head: string[]) => { const h = normHead(head); return h.includes('propref') || h.includes('llord') || (h.includes('number') && h.includes('street') && !h.some((x) => /address/.test(x))) }
+const isRentmanMap = (map: Mapping) => map.rentmanRef != null || (map.number != null && map.street != null && map.address == null)
+
 function guessMapping(head: string[], rows: string[][] = []): Mapping {
-  const h = head.map((x) => x.trim().toLowerCase().replace(/[_]+/g, ' ').replace(/\s+/g, ' '))
+  const h = normHead(head)
   const map: Mapping = {}, used = new Set<number>()
   for (const [k, names] of Object.entries(HEADERS) as [ImportField, string[]][]) { const i = h.findIndex((x, j) => !used.has(j) && names.includes(x)); if (i >= 0) { map[k] = i; used.add(i) } }
   for (const [k, test] of LOOSE) { if (map[k] != null) continue; const i = h.findIndex((x, j) => !used.has(j) && test(x)); if (i >= 0) { map[k] = i; used.add(i) } }
@@ -258,13 +278,15 @@ function guessMapping(head: string[], rows: string[][] = []): Mapping {
     const i = h.findIndex((_, j) => !used.has(j) && share(j, re) >= min)
     if (i >= 0) { map[k] = i; used.add(i) }
   }
+  // In Rentman's list "Telephone" is the property's own line, not the landlord's.
+  if (isRentman(head) && map.landlordPhone != null && h[map.landlordPhone] === 'telephone') map.landlordPhone = null
   return map
 }
 
 /** Reads an uploaded CSV or Excel file (any sheet) into a table, with a first guess at which column is which. */
-export async function readImportFile(name: string, base64: string, sheet = 0): Promise<{ sheets: string[]; sheet: number; head: string[]; rows: string[][]; mapping: Mapping; error?: string }> {
+export async function readImportFile(name: string, base64: string, sheet = 0): Promise<{ sheets: string[]; sheet: number; head: string[]; rows: string[][]; mapping: Mapping; kind: ImportKind; error?: string }> {
   await requireAdmin()
-  const fail = (error: string) => ({ sheets: [], sheet: 0, head: [], rows: [], mapping: {}, error })
+  const fail = (error: string) => ({ sheets: [], sheet: 0, head: [], rows: [], mapping: {}, kind: 'sheet' as ImportKind, error })
   const buf = Buffer.from(base64, 'base64')
   if (buf.length > 15 * 1024 * 1024) return fail('That file is too big (15 MB at most).')
   let sheets: { name: string; rows: string[][] }[]
@@ -283,26 +305,36 @@ export async function readImportFile(name: string, base64: string, sheet = 0): P
   const width = Math.max(head.length, ...table.slice(start + 1, start + 50).map((r) => r.length))
   const fullHead = Array.from({ length: width }, (_, i) => head[i] ?? '')
   const rows = table.slice(start + 1, start + 3001).map((r) => fullHead.map((_, i) => (r[i] ?? '').trim()))
-  return { sheets: sheets.map((x) => x.name), sheet: n, head: fullHead, rows, mapping: guessMapping(fullHead, rows) }
-}
-
-/** "Flat 5, 10 High Rd" and "flat 5 10 high road london" both become "5|10|high": enough to match shortened addresses. */
-function looseKey(address: string): string | null {
-  const a = normText(address)
-  const flat = /\b(?:flat|apartment|apt|unit)\s+([0-9]+[a-z]?)\b/.exec(a)?.[1] ?? ''
-  const rest = flat ? a.replace(/\b(?:flat|apartment|apt|unit)\s+[0-9]+[a-z]?\b/, ' ') : a
-  const m = /\b(\d+[a-z]?)\s+([a-z]{3,})/.exec(rest)
-  return m ? `${flat}|${m[1]}|${m[2]}` : null
+  return { sheets: sheets.map((x) => x.name), sheet: n, head: fullHead, rows, mapping: guessMapping(fullHead, rows), kind: isRentman(fullHead) ? 'rentman' : 'sheet' }
 }
 
 const keyOf = (address: string, postcode: string | null) => `${address.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()}|${(postcode ?? '').replace(/\s/g, '')}`
 const firstDate = async (t: string) => { const m = /(\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}|\d{4}-\d{2}-\d{2})/.exec(t); return m ? parseDay(m[1]) : null }
+const yes = (s: string) => /^(true|yes|y|1|x|archived)$/i.test(s.trim())
+const labelOf = (r: Pick<Rental, 'address' | 'postcode' | 'rentmanRef' | 'archived'>) => `${r.address}${r.postcode ? `, ${r.postcode}` : ''}${r.rentmanRef ? ` · Rentman ${r.rentmanRef}` : ''}${r.archived ? ' · archived' : ''}`
+
+/** "Flat 2" + "58 Elmsleigh Avenue" → "Flat 2, 58 Elmsleigh Avenue"; "58" + "Elmsleigh Avenue" → "58 Elmsleigh Avenue". */
+function joinNumber(num: string, street: string) {
+  if (!street) return num
+  if (!num || normText(street).trim().startsWith(normText(num).trim())) return street
+  // "Flat 100, Premier House, 112" + "Station Rd" → "Flat 100, Premier House, 112 Station Rd"
+  return `${num}${/^\d/.test(street) || !/\d+[a-z]?$/i.test(num.trim()) ? ', ' : ' '}${street}`
+}
 
 async function rowsFrom(rows: string[][], map: Mapping): Promise<ImportRow[]> {
-  const have = await db.select({ a: rentals.address, p: rentals.postcode }).from(rentals)
-  const existing = new Set(have.map((r) => keyOf(r.a, r.p)))
-  const loose = new Map<string, number>()
-  for (const r of have) { const k = looseKey(r.a); if (k) loose.set(k, (loose.get(k) ?? 0) + 1) }
+  const rentman = isRentmanMap(map)
+  const have = await db.select().from(rentals)
+  const byId = new Map(have.map((r) => [r.id, r]))
+  const byRef = new Map(have.filter((r) => r.rentmanRef).map((r) => [r.rentmanRef!, r]))
+  const { indexByNumber, matchAddress } = await import('@/lib/property-match')
+  const known = (list: Rental[]) => list.map((r) => ({ id: r.id, address: r.address, postcode: r.postcode, other: [r.resolvedAddress, r.sheetAddress], trustedPostcode: r.postcodeSource !== 'land_registry' && r.postcodeSource !== 'online' }))
+  // Rentman rows join properties that came from a licensing spreadsheet (not ones already linked to Rentman);
+  // spreadsheet rows are matched against everything, archived included.
+  const pool = known(rentman ? have.filter((r) => !r.rentmanRef) : have)
+  const index = indexByNumber(pool)
+  // Street names in the Land Registry list, to tell a slip ("Harkett Road" for Harkett Close) from a real other street.
+  const streets = new Set(((await getClient().execute("SELECT DISTINCT street FROM address_keys WHERE kind = 'st'")).rows as unknown as { street: string }[]).map((x) => x.street))
+  const streetExists = (st: string) => (streets.size ? streets.has(st) : undefined)
   const { guessPostcode } = await import('@/lib/address-match')
   const out: ImportRow[] = []
   for (const r of rows.slice(0, 3000)) {
@@ -331,26 +363,45 @@ async function rowsFrom(rows: string[][], map: Mapping): Promise<ImportRow[]> {
     const cv = g('council').toLowerCase().trim()
     const council = !cv ? 'auto' : /^brent\b/.test(cv) ? 'brent' : /^harrow\b/.test(cv) ? 'harrow' : cv.replace(/[^a-z .'&-]/g, '').trim() || 'other'
     // "53 KENMORE AVENUE (Preston)": the bracketed note goes in the notes.
-    const raw = [g('address'), g('address2'), g('town')].filter(Boolean).join(', ').replace(/,\s*,/g, ',')
+    const first = g('address') || joinNumber(g('number'), g('street'))
+    const raw = [first, g('address2'), g('town')].filter(Boolean).join(', ').replace(/,\s*,/g, ',')
     const bracket = /\(([^)]*)\)/.exec(raw)?.[1]?.trim()
     const line = raw.replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').replace(/\s+,/g, ',').trim()
     let pc = fmtPostcode(g('postcode')) ?? fmtPostcode(/[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}/i.exec(line)?.[0])
-    const address = line.replace(/,?\s*[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\s*$/i, '').slice(0, 200)
+    const address = tidy(line.replace(/,?\s*[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\s*$/i, '').slice(0, 200))
+    const rentmanRef = g('rentmanRef') || null
+    const rentPcm = Number(g('rent').replace(/[£,\s]/g, '').replace(/\.\d*$/, '')) || null
+
+    // Which of our properties this is.
+    let match: ImportMatch | null = null
+    const byRefHit = rentmanRef ? byRef.get(rentmanRef) : undefined
+    if (byRefHit) match = { kind: 'matched', id: byRefHit.id, label: labelOf(byRefHit), archived: byRefHit.archived, how: 'Already in from Rentman', choice: byRefHit.id, candidates: [] }
+    else if (address && have.length) {
+      const m = matchAddress(address, pc, pool, index, streetExists)
+      const hit = m.id ? byId.get(m.id) : undefined
+      const candidates = m.candidates.map((c) => byId.get(c.id)).filter(Boolean).map((c) => ({ id: c!.id, label: labelOf(c!) }))
+      const choice = hit ? hit.id : m.kind === 'choose' && !rentman ? 'skip' : 'new'
+      const how = !hit ? (m.kind === 'choose' ? 'More than one property fits: choose which' : rentman ? null : have.some((x) => x.rentmanRef) ? 'Not found in the Rentman list' : null)
+        : rentman ? 'Joins the property from your licensing spreadsheet' : m.kind === 'likely' ? 'Spelt differently: check it’s the right one' : null
+      match = { kind: m.kind, id: hit?.id ?? null, label: hit ? labelOf(hit) : null, archived: !!hit?.archived, how, choice, candidates }
+    }
+    const target = match?.id ? byId.get(match.id) : undefined
     let postcodeFound = false, postcodeHow: string | null = null, resolvedAddress: string | null = null
-    if (!pc && address) {
-      const g = await guessPostcode(address, council === 'auto' || council === 'other' ? null : council).catch(() => null)
-      if (g) { pc = g.postcode; postcodeFound = true; postcodeHow = `Found from the ${g.how}`; resolvedAddress = g.resolved }
+    if (!pc && target?.postcode) pc = target.postcode
+    if (!pc && address && !target) {
+      const gp = await guessPostcode(address, council === 'auto' || council === 'other' ? null : council).catch(() => null)
+      if (gp) { pc = gp.postcode; postcodeFound = true; postcodeHow = `Found from the ${gp.how}`; resolvedAddress = gp.resolved }
     }
     if (!address) problems.push('No address')
     if (!pc) problems.push('No postcode yet: after import the portal will try a map look-up')
-    const lk = looseKey(address)
     out.push({
-      address: tidy(address), postcode: pc, council, ward: g('ward') || null, occupancy, management: null,
+      address, postcode: pc, council, ward: g('ward') || null, occupancy, management: null,
       landlordName: g('landlordName') || null, landlordEmail: (/\S+@\S+\.\S+/.exec(g('landlordEmail'))?.[0] ?? '').toLowerCase() || null, landlordPhone: g('landlordPhone') || null,
       gasExpires: dates.gasExpires, eicrExpires: dates.eicrExpires, epcExpires: dates.epcExpires, epcRating: (g('epcRating').match(/\b[A-G]\b/i)?.[0] ?? '').toUpperCase() || null,
       notes: [g('notes'), bracket ? `Area: ${bracket}` : '', licenceNote ?? ''].filter(Boolean).join('\n') || null,
       licenceKind, licenceNumber: g('licenceNumber') || null, licenceStatus, licenceStart: dates.licenceStart, licenceExpiry: expiry, appliedOn, licenceNote, postcodeFound, postcodeHow, resolvedAddress, problems,
-      existing: existing.has(keyOf(address, pc)) || (!!lk && loose.get(lk) === 1),
+      existing: !!target, rentmanRef, landlordRef: g('landlordRef') || null, rentPcm: rentPcm && rentPcm > 0 && rentPcm < 1_000_000 ? rentPcm : null,
+      rentmanArchived: rentman && map.rentmanArchived != null ? yes(g('rentmanArchived')) : null, match,
     })
   }
   return out
@@ -366,66 +417,88 @@ export async function previewImport(rows: string[][], map: Mapping) {
 }
 
 /**
- * Adds new properties. With `update`, properties already in the register get their blanks filled in
- * (and a certificate date moved later if the spreadsheet's is newer); nothing already there is overwritten.
+ * Adds new properties and updates the ones each row was matched to (`choices` overrides the match for a row:
+ * a property id, 'new' or 'skip'). Nothing already filled in is overwritten, except that Rentman's address and
+ * postcode replace ones typed on a spreadsheet or worked out by the portal. A certificate date only moves later.
  */
-export async function commitImport(rows: string[][], map: Mapping, update: boolean): Promise<{ added: number; updated: number; skipped: number }> {
+export async function commitImport(rows: string[][], map: Mapping, update: boolean, choices: Record<number, string> = {}): Promise<{ added: number; updated: number; skipped: number; joined: number }> {
   const me = await requireAdmin()
   await ready()
   const list = await rowsFrom(rows, map)
-  const all = await db.select().from(rentals)
-  const byKey = new Map(all.map((r) => [keyOf(r.address, r.postcode), r]))
-  // Shortened addresses ("369 Westcroft") still find "369 Westcroft Way" when only one property fits.
-  const byLoose = new Map<string, typeof all>()
-  for (const r of all) { const k = looseKey(r.address); if (k) byLoose.set(k, [...(byLoose.get(k) ?? []), r]) }
-  let added = 0, updated = 0, skipped = 0
+  const byId = new Map((await db.select().from(rentals)).map((r) => [r.id, r]))
+  const madeNow = new Map<string, string>()
+  let added = 0, updated = 0, skipped = 0, joined = 0
   const later = (a: string | null, b: string | null) => (a && (!b || a > b) ? a : b)
-  for (const r of list) {
-    if (!r.address) { skipped++; continue }
+  for (const [i, r] of list.entries()) {
+    const choice = choices[i] ?? r.match?.choice ?? 'new'
+    if (!r.address || choice === 'skip') { skipped++; continue }
+    let have = choice !== 'new' ? byId.get(choice) : undefined
+    // One Rentman property per register entry: a second Rentman row for the same one is added on its own.
+    if (have && r.rentmanRef && have.rentmanRef && have.rentmanRef !== r.rentmanRef) have = undefined
+    // The same address twice on one spreadsheet is one property; on Rentman, two refs are two lettings (rooms, flats).
+    if (!have && !r.rentmanRef && madeNow.has(keyOf(r.address, r.postcode))) have = byId.get(madeNow.get(keyOf(r.address, r.postcode))!)
     const area = areaFields(r)
-    const lk = looseKey(r.address)
-    const have = byKey.get(keyOf(r.address, r.postcode)) ?? (lk && byLoose.get(lk)?.length === 1 ? byLoose.get(lk)![0] : undefined)
     let id: string
     if (have) {
-      if (!update) { skipped++; continue }
+      if (!update && !r.rentmanRef) { skipped++; continue }
       id = have.id
-      await db.update(rentals).set({
+      const patch: Partial<typeof rentals.$inferInsert> = {
         postcode: have.postcode ?? r.postcode,
-        ...(!have.postcode && r.postcode ? { postcodeSource: r.postcodeFound ? 'land_registry' : 'import', postcodeNote: r.postcodeHow, resolvedAddress: have.resolvedAddress ?? r.resolvedAddress } : {}), landlordName: have.landlordName ?? r.landlordName, landlordEmail: have.landlordEmail ?? r.landlordEmail, landlordPhone: have.landlordPhone ?? r.landlordPhone,
+        ...(!have.postcode && r.postcode ? { postcodeSource: r.rentmanRef ? 'rentman' : r.postcodeFound ? 'land_registry' : 'import', postcodeNote: r.postcodeHow, resolvedAddress: have.resolvedAddress ?? r.resolvedAddress } : {}), landlordName: have.landlordName ?? r.landlordName, landlordEmail: have.landlordEmail ?? r.landlordEmail, landlordPhone: have.landlordPhone ?? r.landlordPhone,
         landlordContactId: have.landlordContactId ?? await landlordContact(r.landlordEmail, r.landlordPhone),
         gasExpires: later(r.gasExpires, have.gasExpires), eicrExpires: later(r.eicrExpires, have.eicrExpires), epcExpires: later(r.epcExpires, have.epcExpires),
         epcRating: have.epcRating ?? r.epcRating, occupancy: have.occupancy !== 'single' ? have.occupancy : r.occupancy, updatedAt: now(),
         notes: [have.notes, r.notes && !(have.notes ?? '').includes(r.notes) ? r.notes : null].filter(Boolean).join('\n') || null,
         ...(!have.council && r.council !== 'auto' ? areaFields(r) : {}),
         ...(r.licenceNote === 'Spreadsheet said no licence required' && !have.noLicenceNeeded ? { noLicenceNeeded: true } : {}),
-      }).where(eq(rentals.id, id))
+      }
+      if (r.rentmanRef) {
+        // Rentman is the master list: its address and postcode win over ones typed on a spreadsheet or worked out.
+        if (!have.rentmanRef) joined++
+        Object.assign(patch, { rentmanRef: r.rentmanRef, landlordRef: r.landlordRef ?? have.landlordRef, rentPcm: r.rentPcm ?? have.rentPcm, rentmanArchived: r.rentmanArchived })
+        if (have.address !== r.address) Object.assign(patch, { address: r.address, sheetAddress: have.rentmanRef ? have.sheetAddress : have.sheetAddress ?? have.address, resolvedAddress: null })
+        if (r.postcode && have.postcodeSource !== 'manual' && normPostcode(r.postcode) !== normPostcode(have.postcode)) {
+          Object.assign(patch, { postcode: r.postcode, postcodeSource: 'rentman', postcodeNote: null, resolvedAddress: null, epcCheckedAt: null, ...(have.wardSource !== 'manual' ? { council: null, ward: null, wardSource: 'auto' } : {}) })
+        } else if (r.postcode && have.postcodeSource !== 'manual') Object.assign(patch, { postcodeSource: 'rentman', postcodeNote: null }) // Rentman confirms it
+        // Archived follows Rentman when it changes there; a property on the licensing sheet isn't archived just
+        // because Rentman has it archived the first time they're joined.
+        if (have.rentmanRef && have.rentmanArchived !== r.rentmanArchived && r.rentmanArchived != null) patch.archived = r.rentmanArchived
+      } else {
+        // On the licensing sheet, so it's one we look after now.
+        if (have.archived) patch.archived = false
+        if (normText(r.address).trim() !== normText(have.address).trim()) patch.sheetAddress = r.address
+      }
+      await db.update(rentals).set(patch).where(eq(rentals.id, id))
       updated++
     } else {
       id = uid()
       await db.insert(rentals).values({
-        id, address: r.address, postcode: r.postcode, postcodeSource: r.postcode ? (r.postcodeFound ? 'land_registry' : 'import') : null, postcodeNote: r.postcodeHow, resolvedAddress: r.resolvedAddress, occupancy: r.occupancy, management: r.management, landlordName: r.landlordName, landlordEmail: r.landlordEmail, landlordPhone: r.landlordPhone,
+        id, address: r.address, postcode: r.postcode, postcodeSource: r.postcode ? (r.rentmanRef ? 'rentman' : r.postcodeFound ? 'land_registry' : 'import') : null, postcodeNote: r.postcodeHow, resolvedAddress: r.resolvedAddress, occupancy: r.occupancy, management: r.management, landlordName: r.landlordName, landlordEmail: r.landlordEmail, landlordPhone: r.landlordPhone,
         landlordContactId: await landlordContact(r.landlordEmail, r.landlordPhone), gasExpires: r.gasExpires, eicrExpires: r.eicrExpires, epcExpires: r.epcExpires, epcRating: r.epcRating, notes: r.notes,
         noLicenceNeeded: r.licenceNote === 'Spreadsheet said no licence required',
+        rentmanRef: r.rentmanRef, landlordRef: r.landlordRef, rentPcm: r.rentPcm, rentmanArchived: r.rentmanArchived, archived: !!r.rentmanArchived,
         ...(area.council ? area : { wardSource: 'auto' }), createdBy: me.id, createdAt: now(), updatedAt: now(),
       })
-      byKey.set(keyOf(r.address, r.postcode), { id } as typeof all[number])
+      madeNow.set(keyOf(r.address, r.postcode), id)
       added++
     }
+    const fresh = await db.query.rentals.findFirst({ where: eq(rentals.id, id) })
+    if (fresh) byId.set(id, fresh)
     if (r.licenceKind && r.licenceStatus && (r.licenceExpiry || r.licenceStatus !== 'granted' || r.licenceNumber)) {
       const mine = await db.select().from(licences).where(eq(licences.rentalId, id))
       const dup = mine.some((l) => (r.licenceNumber && l.number?.toUpperCase() === r.licenceNumber.toUpperCase()) || (r.licenceExpiry && l.expiresOn === r.licenceExpiry) || (r.licenceStatus === 'applied' && l.status === 'applied' && l.appliedOn === r.appliedOn))
       if (!dup) await db.insert(licences).values({
-        id: uid(), rentalId: id, kind: r.licenceKind, council: area.council, number: r.licenceNumber, status: r.licenceStatus ?? 'granted',
+        id: uid(), rentalId: id, kind: r.licenceKind, council: area.council ?? fresh?.council ?? null, number: r.licenceNumber, status: r.licenceStatus ?? 'granted',
         startsOn: r.licenceStatus === 'applied' ? null : r.licenceStart, expiresOn: r.licenceStatus === 'applied' ? null : r.licenceExpiry, appliedOn: r.licenceStatus === 'applied' ? r.appliedOn ?? r.licenceStart : null,
         notes: 'Imported from spreadsheet', createdBy: me.id, createdAt: now(), updatedAt: now(),
       })
     }
   }
-  await audit(me.id, 'rental_import', 'rental', 'import', `${added} added, ${updated} updated`)
+  await audit(me.id, 'rental_import', 'rental', 'import', `${added} added, ${updated} updated${joined ? `, ${joined} joined to Rentman` : ''}`)
   // Then everything else happens on its own: postcodes, wards, EPCs, emails, council registers.
   after(async () => { const { fillInEverything } = await import('@/lib/licensing'); await fillInEverything(me.id) })
   done()
-  return { added, updated, skipped }
+  return { added, updated, skipped, joined }
 }
 
 // ---------- details found in the mailbox ----------

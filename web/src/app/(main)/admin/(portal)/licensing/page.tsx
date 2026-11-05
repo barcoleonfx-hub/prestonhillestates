@@ -9,6 +9,7 @@ import { licenceSuggestions, settings } from '@/db/schema'
 import { eq } from 'drizzle-orm'
 import { hitsFor, registers } from '@/lib/council-registers'
 import { siteBase } from '@/lib/property-email-data'
+import { LicTabs } from './LicTabs'
 import { BUCKETS, KINDS, bucketOf, councilLabel, fmtDay, inWords, isoDay, kindLabel, type Bucket } from '@/lib/licensing-rules'
 
 export const dynamic = 'force-dynamic'
@@ -61,7 +62,7 @@ export default async function LicensingPage({ searchParams }: { searchParams: Pr
       <div className="page-head">
         <div>
           <h1>Licensing</h1>
-          <p className="sub">Every property we let or manage, checked against Brent and Harrow’s licensing schemes, with licence and certificate expiry dates. Checked again every few hours; reminders go out 6 months, 90, 60, 30, 14, 7 and 1 days before anything runs out.</p>
+          <p className="sub">Every current property, checked against Brent and Harrow’s licensing schemes, with licence and certificate expiry dates. Checked again every few hours; reminders go out 6 months, 90, 60, 30, 14, 7 and 1 days before anything runs out.</p>
         </div>
         <div className="actions">
           <Link className="btn btn-ghost" href="/admin/licensing/schemes">Council schemes</Link>
@@ -69,6 +70,7 @@ export default async function LicensingPage({ searchParams }: { searchParams: Pr
           <Link className="btn btn-gold" href="/admin/licensing/new">Add a property</Link>
         </div>
       </div>
+      <LicTabs on="licensing" tracked={rows.length} />
 
       {starting.length || ending.length ? (
         <div className="notice lic-schemes-note">

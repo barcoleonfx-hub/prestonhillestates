@@ -911,6 +911,22 @@ kbd { font: 600 0.68rem/1 var(--sans, inherit); padding: 3px 6px; border-radius:
 .imp-sheets button { all: unset; cursor: pointer; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); font-weight: 600; }
 .imp-sheets button.on { background: var(--charcoal); color: #fff; border-color: var(--charcoal); }
 .imp-sheets button:focus-visible { outline: 2px solid var(--focus); }
+.imp-k { font-weight: 700; }
+.imp-k.likely { color: #9a6700; }
+.imp-k.choose, .imp-k.none { color: var(--red, #b3261e); }
+.imp-match { display: grid; gap: 3px; min-width: 240px; max-width: 400px; }
+.imp-match .select { padding: 6px 8px; font-size: 0.82rem; }
+.imp-match small { font-size: 0.74rem; color: var(--faint); line-height: 1.3; }
+.imp-match.k-likely .select { border-color: #d4a72c; background: #fff8e1; }
+.imp-match.k-choose .select, .imp-match.k-skip .select { border-color: #e5a29c; background: #fdf0ef; }
+.imp-match.k-none .select { border-color: #e5a29c; }
+.imp-match.k-picked .select { border-color: var(--gold-deep); }
+.lic-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin: -4px 0 18px; overflow-x: auto; }
+.lic-tabs a { padding: 9px 14px; font-weight: 600; font-size: 0.9rem; color: var(--faint); text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; }
+.lic-tabs a.on { color: var(--ink, inherit); border-bottom-color: var(--gold-deep); }
+.lic-tabs a b { font-weight: 700; margin-left: 6px; font-size: 0.78rem; background: var(--line); border-radius: 999px; padding: 1px 7px; }
+.lic-props td .addr-sub + .addr-sub { margin-top: 2px; }
+.lic-props .lic-pill { white-space: nowrap; }
 .lic-docs { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .lic-docs li { display: flex; justify-content: space-between; gap: 14px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; flex-wrap: wrap; }
 .lic-docs li > div:first-child { display: flex; flex-direction: column; gap: 2px; min-width: 0; }

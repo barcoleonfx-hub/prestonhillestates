@@ -34,6 +34,7 @@ export default async function RentalPage({ params, searchParams }: { params: Pro
           <h1 style={{ marginTop: 6 }}>{r.address}</h1>
           {r.resolvedAddress && r.resolvedAddress.toLowerCase() !== r.address.toLowerCase() ? <p className="sub" style={{ marginTop: 2 }}>Read as <b>{r.resolvedAddress}</b> (used to match council registers and emails)</p> : null}
           <p className="sub">{[r.postcode, r.council ? `${councilLabel(r.council)}${r.ward ? `, ${r.ward} ward` : ''}` : 'Council not known yet', OCCUPANCY.find((o) => o.value === r.occupancy)?.label].filter(Boolean).join(' · ')}{r.wardSource === 'manual' ? ' (chosen by hand)' : ''}</p>
+          {r.rentmanRef || r.sheetAddress ? <p className="sub" style={{ marginTop: 2 }}>{[r.rentmanRef ? `Rentman ref ${r.rentmanRef}${r.rentmanArchived ? ' (archived on Rentman)' : ''}` : null, r.rentPcm ? `£${r.rentPcm.toLocaleString('en-GB')} pcm` : null, r.landlordRef && !r.landlordName ? `landlord no. ${r.landlordRef}` : null, r.sheetAddress ? `on your licensing sheet as “${r.sheetAddress}”` : null].filter(Boolean).join(' · ')}</p> : null}
         </div>
         <div className="actions">
           {r.archived ? null : <form action={archiveRental}><input type="hidden" name="id" value={r.id} /><input type="hidden" name="on" value="1" /><button className="btn btn-ghost" type="submit">No longer with us</button></form>}
