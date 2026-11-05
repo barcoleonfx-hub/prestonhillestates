@@ -1,3 +1,4 @@
+import { connection } from 'next/server'
 import { googleSummary, reviewsFor } from '@/lib/reviews-data'
 import './reviews.css'
 
@@ -9,6 +10,8 @@ export type ReviewCategory = 'sales' | 'lettings' | 'any'
 
 /** `site`: on the property pages, which have their own layout (always cards, in their page width). */
 export async function Reviews({ category = 'any', title, site = false }: { category?: ReviewCategory; title?: React.ReactNode; site?: boolean }) {
+  // Read when the page is visited (never baked in at build time), so new reviews show straight away.
+  await connection()
   const [list, g] = await Promise.all([reviewsFor(category).catch(() => []), googleSummary().catch(() => ({ rating: null, count: null, url: null }))])
   if (!list.length) return null
   const summary = g.rating && g.count ? (
