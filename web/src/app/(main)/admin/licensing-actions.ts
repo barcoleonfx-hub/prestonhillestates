@@ -442,9 +442,39 @@ export async function previewImport(rows: string[][], map: Mapping) {
  * a property id, 'new' or 'skip'). Nothing already filled in is overwritten, except that Rentman's address and
  * postcode replace ones typed on a spreadsheet or worked out by the portal. A certificate date only moves later.
  */
-export async function commitImport(rows: string[][], map: Mapping, update: boolean, choices: Record<number, string> = {}): Promise<{ added: number; updated: number; skipped: number; joined: number }> {
+export type ImportResult = { added: number; updated: number; skipped: number; joined: number; tracked: number; error?: string }
+export type LastImport = { status: 'running' | 'done' | 'failed'; at: string; by: string; label: string; rows: number } & Partial<ImportResult>
+
+async function noteImport(v: LastImport) {
+  const { settings } = await import('@/db/schema')
+  const value = JSON.stringify(v)
+  await db.insert(settings).values({ key: 'licensing_last_import', value, updatedAt: now() }).onConflictDoUpdate({ target: settings.key, set: { value, updatedAt: now() } })
+}
+export async function lastImport(): Promise<LastImport | null> {
+  const { settings } = await import('@/db/schema')
+  const r = await db.query.settings.findFirst({ where: eq(settings.key, 'licensing_last_import') })
+  try { return r ? (JSON.parse(r.value) as LastImport) : null } catch { return null }
+}
+
+/** Imports the rows, and records how it went (shown on the Licensing page), so a failed import is never silent. */
+export async function commitImport(rows: string[][], map: Mapping, update: boolean, choices: Record<number, string> = {}, label = 'Spreadsheet'): Promise<ImportResult> {
   const me = await requireAdmin()
   await ready()
+  const base = { at: now(), by: me.name, label: label.slice(0, 120), rows: rows.length }
+  await noteImport({ ...base, status: 'running' })
+  try {
+    const r = await importRows(me, rows, map, update, choices)
+    await noteImport({ ...base, ...r, status: 'done', at: now() })
+    return r
+  } catch (e) {
+    console.error('licensing import failed', label, e)
+    const error = (e as Error).message?.slice(0, 300) || 'unknown error'
+    await noteImport({ ...base, status: 'failed', error, at: now() }).catch(() => {})
+    return { added: 0, updated: 0, skipped: 0, joined: 0, tracked: 0, error }
+  }
+}
+
+async function importRows(me: { id: string; name: string }, rows: string[][], map: Mapping, update: boolean, choices: Record<number, string>): Promise<ImportResult> {
   const list = await rowsFrom(rows, map)
   const byId = new Map((await db.select().from(rentals)).map((r) => [r.id, r]))
   const madeNow = new Map<string, string>()
@@ -519,7 +549,8 @@ export async function commitImport(rows: string[][], map: Mapping, update: boole
   // Then everything else happens on its own: postcodes, wards, EPCs, emails, council registers.
   after(async () => { const { fillInEverything } = await import('@/lib/licensing'); await fillInEverything(me.id) })
   done()
-  return { added, updated, skipped, joined }
+  const tracked = (await db.select({ id: rentals.id }).from(rentals).where(eq(rentals.archived, false))).length
+  return { added, updated, skipped, joined, tracked }
 }
 
 // ---------- details found in the mailbox ----------

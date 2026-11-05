@@ -52,7 +52,7 @@ export function ImportRentals() {
     if (!file) return
     const t = setTimeout(async () => {
       const r = await previewImport(file.rows, map).catch(() => null)
-      if (!r) setMsg({ ok: false, text: 'The portal didn’t answer while reading the rows. Wait a minute and choose the file again.' })
+      if (!r) setMsg({ ok: false, text: 'The portal didn’t answer while reading the rows. Reload the page (⌘R or F5) and choose the file again: the portal may have been updated since this page was opened.' })
       setPreview(r)
     }, 300)
     return () => clearTimeout(t)
@@ -61,12 +61,17 @@ export function ImportRentals() {
   async function go() {
     if (!file) return
     setBusy(true)
-    const r = await commitImport(file.rows, map, update, choices).catch(() => null)
+    const label = `${file.name}${file.sheets.length > 1 ? ` · ${file.sheets[file.sheet]} tab` : ''}`
+    let failed = ''
+    const r = await commitImport(file.rows, map, update, choices, label).catch((e: Error) => { failed = e?.message ?? ''; return null })
     setBusy(false)
-    if (!r) return setMsg({ ok: false, text: 'The import didn’t finish. Try again.' })
-    setMsg({ ok: true, text: `${r.added} added${r.updated ? `, ${r.updated} already in the register updated` : ''}${r.joined ? ` (${r.joined} joined to the property from your licensing spreadsheet)` : ''}${r.skipped ? `, ${r.skipped} left out` : ''}. Councils, wards, EPCs, emails and council registers are being checked now.` })
+    // The page was opened before the portal was updated: its Import button no longer matches the server.
+    if (!r && /server action|deployment|failed to find/i.test(failed)) return setMsg({ ok: false, text: 'The portal has been updated since this page was opened. Reload the page (⌘R or F5), choose the file again and press Import. Nothing was saved.' })
+    if (!r) return setMsg({ ok: false, text: 'The portal didn’t answer: it may have been restarting. Wait a minute, reload the page and import again. If part of it was saved, nothing is duplicated.' })
+    if (r.error) return setMsg({ ok: false, text: `The import stopped: ${r.error}. Nothing after that point was saved. Try again; if it happens again, send a screenshot of this message.` })
+    setMsg({ ok: true, text: `${r.added} added${r.updated ? `, ${r.updated} already in the register updated` : ''}${r.joined ? ` (${r.joined} joined to the property from your licensing spreadsheet)` : ''}${r.skipped ? `, ${r.skipped} left out` : ''}. ${r.tracked} properties are now tracked for licensing. Councils, wards, EPCs, emails and council registers are being checked now.` })
     setFile(null); setPreview(null)
-    setTimeout(() => router.push('/admin/licensing'), 3000)
+    setTimeout(() => router.push('/admin/licensing'), 4000)
   }
   const sample = (i: number | null | undefined) => (i == null ? '' : file?.rows.find((r) => r[i])?.[i] ?? '')
   const rentman = file?.kind === 'rentman' || map.rentmanRef != null
