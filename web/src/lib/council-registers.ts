@@ -68,25 +68,10 @@ async function download(reg: CouncilRegister): Promise<{ buf: Buffer; kind: 'pdf
 
 async function textOf(file: { buf: Buffer; kind: string }): Promise<{ text: string; pages: number }> {
   if (file.kind === 'pdf') {
-    const { getDocumentProxy } = await import('unpdf')
-    const pdf = await getDocumentProxy(new Uint8Array(file.buf))
-    const parts: string[] = []
-    for (let i = 1; i <= Math.min(pdf.numPages, 2500); i++) {
-      const page = await pdf.getPage(i)
-      const c = await page.getTextContent()
-      // Keep each table row on its own line, so an address and its licence details stay together.
-      let line = '', lastY: number | null = null
-      for (const it of c.items as { str: string; transform: number[] }[]) {
-        const y = Math.round(it.transform[5])
-        if (lastY != null && Math.abs(y - lastY) > 2) { parts.push(line.trim()); line = '' }
-        line += `${it.str} `; lastY = y
-      }
-      if (line.trim()) parts.push(line.trim())
-      page.cleanup()
-    }
-    const pages = pdf.numPages
-    await pdf.destroy()
-    return { text: parts.join('\n'), pages }
+    // Big registers (Brent's runs to hundreds of pages) are read in a separate process to keep memory low.
+    const { pdfTextIsolated } = await import('./isolated')
+    const text = await pdfTextIsolated(file.buf)
+    return { text, pages: 0 }
   }
   if (file.kind === 'xlsx') {
     const { readXlsxSheets } = await import('./xlsx')

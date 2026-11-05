@@ -31,17 +31,26 @@ export async function GET(req: Request) {
   // Land Registry sold prices: checked daily, reloaded when they publish (monthly). Runs after the reply.
   // Then, once, the address archive back to 1995 for the valuation address finder (a year per run until done).
   after(async () => {
-    // Licensing: council and ward look-ups and expiry reminders, every few hours.
-    await runLicensingChecks().catch((e) => console.error('licensing check failed', e))
-    // Reading the mailbox for licences and certificates, while a scan is running (about a minute per run).
-    await runLicenceScan().catch((e) => console.error('licence email scan failed', e))
-    // Councils' published licence registers: downloaded and checked against our properties once a week.
-    await checkRegisters().catch((e) => console.error('council register check failed', e))
-    // Email campaigns: the next few emails, within the daily limit.
+    // Heavy jobs take turns: when one does real work, the rest wait for the next run (two minutes later),
+    // so the server never does two memory-hungry things back to back.
+    // Campaign emails are light (a dozen per run): always send them.
     await runCampaigns().catch((e) => console.error('campaign sending failed', e))
-    await refreshSoldPrices().catch((e) => console.error('sold prices refresh failed', e))
-    await backfillAddresses().catch((e) => console.error('address backfill failed', e))
-    await refreshPostcodeGeo().catch((e) => console.error('postcode positions failed', e))
+    const heavy = [
+      () => runLicensingChecks(), // every few hours: postcodes, wards, licence reminders
+      () => checkRegisters(), // weekly: download and read the councils' registers
+      () => runLicenceScan(), // while a mailbox scan is running
+      () => refreshSoldPrices(), // daily check, monthly reload
+      () => backfillAddresses(), // once: the address archive back to 1995
+      () => refreshPostcodeGeo(), // every few months
+    ]
+    for (const job of heavy) {
+      try {
+        const r = (await job()) as { ran?: boolean } | undefined
+        if (r?.ran) break
+      } catch (e) { console.error('background job failed', e); break }
+    }
+    const rss = Math.round(process.memoryUsage().rss / 1e6)
+    if (rss > 380) console.warn(`background jobs: server memory ${rss} MB`)
   })
   return Response.json({ ok: true, sent, callbacks, retention, mailbox })
 }
