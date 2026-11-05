@@ -59,6 +59,21 @@ export const SEED_SCHEMES: Omit<Scheme, 'id'>[] = [
   { council: 'harrow', kind: 'additional_hmo', name: 'Harrow additional HMO licensing (new)', wards: ['*'], startsOn: '2027-01-06', endsOn: '2032-01-05', sourceUrl: 'https://www.harrow.gov.uk/licences/licences-houses-multiple-occupation-hmos', checkedOn: '2026-11-05', notes: 'Approved and scheduled to start on 6 January 2027. Confirm the date with Harrow.' },
 ]
 
+/** Added to existing registers too (once each, by tag): councils outside Brent and Harrow where our properties are. */
+export const MORE_SCHEMES: (Omit<Scheme, 'id'> & { tag: string })[] = [
+  { tag: 'barnet-1', council: 'barnet', kind: 'selective', name: 'No selective licensing in Barnet', wards: [], startsOn: '2020-01-01', endsOn: '2099-12-31', sourceUrl: 'https://www.barnet.gov.uk/housing/private-housing/property-licensing/changes-property-licensing-including-houses-multiple', checkedOn: '2026-11-05', notes: 'No selective scheme in force. Barnet consulted on one from 15 June to 15 September 2026: if Cabinet approves it, add the scheme and its wards here.' },
+  { tag: 'barnet-2', council: 'barnet', kind: 'additional_hmo', name: 'Barnet additional HMO licensing', wards: ['*'], startsOn: '2022-10-27', endsOn: '2027-10-26', sourceUrl: 'https://www.barnet.gov.uk/housing/private-housing/property-licensing/changes-property-licensing-including-houses-multiple', checkedOn: '2026-11-05', notes: 'Borough-wide. Confirm the dates on Barnet’s page.' },
+]
+/** Where to check councils we don't hold schemes for. */
+export const COUNCIL_PAGES: Record<string, string> = {
+  ealing: 'https://www.ealing.gov.uk/info/201086/housing/3306/private_rented_properties/8',
+  luton: 'https://www.luton.gov.uk/selectivelicensing',
+  barnet: 'https://www.barnet.gov.uk/housing/private-housing/property-licensing/changes-property-licensing-including-houses-multiple',
+  hillingdon: 'https://www.hillingdon.gov.uk/property-licensing',
+  camden: 'https://www.camden.gov.uk/property-licensing',
+  hounslow: 'https://www.hounslow.gov.uk/info/20094/private_housing/1801/property_licensing',
+}
+
 export type Licence = {
   id: string; kind: LicenceKind; council: string | null; number: string | null; status: LicenceStatus
   appliedOn: string | null; startsOn: string | null; expiresOn: string | null
@@ -66,6 +81,8 @@ export type Licence = {
 export type RentalFacts = {
   council: Council | null; ward: string | null; occupancy: Occupancy
   noLicenceNeeded?: boolean
+  /** The property's entry on the council's own public register, at the last weekly check. */
+  register?: { name: string; reference: string | null; kind: string | null; startsOn: string | null; expiresOn: string | null; checkedOn: string } | null
   gasExpires: string | null; eicrExpires: string | null; epcExpires: string | null; epcRating: string | null
 }
 
@@ -78,7 +95,7 @@ export const BUCKETS: { value: Bucket; label: string; tone: 'red' | 'amber' | 'y
   { value: 'upcoming', label: 'Scheme starting soon', tone: 'amber', about: 'A new scheme will cover this property. Apply before it starts.' },
   { value: 'due180', label: 'Expires within 6 months', tone: 'yellow', about: 'Coming up. Let the landlord know.' },
   { value: 'applied', label: 'Applied, waiting', tone: 'blue', about: 'Application made, so the property is covered while the council decides. Chase if it drags on.' },
-  { value: 'check', label: 'To check', tone: 'grey', about: 'We can’t tell yet: the ward isn’t known (add the postcode), it’s outside Brent and Harrow, or it’s marked not needed in a licensing area.' },
+  { value: 'check', label: 'To check', tone: 'grey', about: 'We can’t tell yet: the ward hasn’t been looked up, the council hasn’t been set up (Other councils), or it’s marked not needed in a licensing area.' },
   { value: 'ok', label: 'Licensed', tone: 'green', about: 'Valid for more than 6 months.' },
   { value: 'not_required', label: 'No licence needed', tone: 'green', about: 'No scheme covers this property at the moment.' },
 ]
@@ -142,28 +159,40 @@ export function assess(f: RentalFacts, licences: Licence[], schemes: Scheme[], t
   const valid = mine.find((l) => l.status === 'granted' && (!l.startsOn || l.startsOn <= today) && !!l.expiresOn && l.expiresOn >= today) ?? null
   const pending = mine.find((l) => l.status === 'applied' || (l.status === 'exempt' && (!l.expiresOn || l.expiresOn >= today))) ?? null
   const lapsed = mine.find((l) => l.status === 'granted' && !!l.expiresOn && l.expiresOn < today) ?? null
+  // Listed on the council's own register: that's the council saying it's licensed, whatever we hold.
+  const reg = f.register && (!f.register.kind || !want || f.register.kind === want) && (!f.register.expiresOn || f.register.expiresOn >= today) ? f.register : null
+  const regLicence: Licence | null = reg ? { id: 'register', kind: ((reg.kind as LicenceKind) ?? want ?? 'selective'), council: f.council, number: reg.reference, status: 'granted', appliedOn: null, startsOn: reg.startsOn, expiresOn: reg.expiresOn } : null
+  const validNow = valid ?? (regLicence?.expiresOn ? regLicence : null)
+  const regOnly = !validNow && regLicence ? regLicence : null
+  const regNote = reg ? `Listed on the ${reg.name}${reg.reference ? ` (ref ${reg.reference})` : ''}, checked ${fmtDay(reg.checkedOn)}.` : ''
 
-  const unknownArea = isOurCouncil(f.council) && !f.ward && kind === 'selective'
+  // A council is "known" when we hold its schemes, or a decision that it has none (Brent and Harrow always).
+  const known = isOurCouncil(f.council) || (!!f.council && schemes.some((s) => s.council === f.council))
+  const wardMatters = isOurCouncil(f.council) || schemes.some((s) => s.council === f.council && s.kind === kind && s.wards.length > 0 && !s.wards.includes('*'))
+  const unknownArea = known && !f.ward && kind === 'selective' && wardMatters
   if (!f.council) reasons.push('We don’t know which council this property is in yet.')
-  else if (!isOurCouncil(f.council)) reasons.push(`Outside Brent and Harrow: check ${f.council === 'other' ? 'that council' : councilLabel(f.council)}’s own licensing rules. Any licence on file is still tracked.`)
-  else if (unknownArea) reasons.push(`The ward isn’t known yet (add the postcode), so we can’t confirm which ${councilLabel(f.council)} scheme applies. Any licence on file is still tracked.`)
+  else if (!known) reasons.push(`${f.council === 'other' ? 'This council' : councilLabel(f.council)} hasn’t been set up yet: decide once, under “Other councils” on the Licensing page, whether it runs selective licensing and in which wards. Any licence on file is still tracked.`)
+  else if (unknownArea) reasons.push(`The ward isn’t known yet, so we can’t confirm which ${councilLabel(f.council)} scheme applies. It’s looked up from the postcode automatically. Any licence on file is still tracked.`)
   if (scheme) reasons.push(`${f.ward ? `${f.ward} ward` : 'This area'} is covered by ${scheme.name} until ${fmtDay(scheme.endsOn)}.`)
   else if (kind === 'mandatory_hmo') reasons.push('5 or more people from 2 or more households: a mandatory HMO licence is needed anywhere in England.')
-  else if (f.council === 'brent' || f.council === 'harrow') reasons.push(f.ward ? `No ${kindLabel(kind).toLowerCase()} scheme covers ${f.ward} ward at the moment.` : '')
+  else if (known && !unknownArea) reasons.push(f.ward ? `No ${kindLabel(kind).toLowerCase()} scheme covers ${f.ward} ward at the moment.` : `No ${kindLabel(kind).toLowerCase()} scheme in ${councilLabel(f.council)} at the moment.`)
   if (upcoming) reasons.push(`${upcoming.scheme.name} starts on ${fmtDay(upcoming.scheme.startsOn)} (${inWords(upcoming.days)}). A licence is needed from that date.`)
 
   let bucket: Bucket, licence: Licence | null = null, validUntil: string | null = null, days: number | null = null
-  if (needed && f.noLicenceNeeded && !valid && !pending) {
+  if (needed && f.noLicenceNeeded && !validNow && !regOnly && !pending) {
     bucket = 'check'
     reasons.push(`Marked as not needing a licence, but ${scheme ? scheme.name : 'mandatory HMO licensing'} covers it. Check the reason (an exemption?) and note it on the property.`)
   } else if (needed) {
-    if (valid) {
-      licence = valid
-      validUntil = scheme && scheme.endsOn < valid.expiresOn! ? scheme.endsOn : valid.expiresOn!
-      if (validUntil !== valid.expiresOn) reasons.push(`The licence runs to ${fmtDay(valid.expiresOn)}, but the scheme ends on ${fmtDay(validUntil)}. If the council renews the scheme, a new licence will be needed.`)
+    if (validNow) {
+      licence = validNow
+      validUntil = scheme && scheme.endsOn < validNow.expiresOn! ? scheme.endsOn : validNow.expiresOn!
+      if (validUntil !== validNow.expiresOn) reasons.push(`The licence runs to ${fmtDay(validNow.expiresOn)}, but the scheme ends on ${fmtDay(validUntil)}. If the council renews the scheme, a new licence will be needed.`)
       days = daysBetween(today, validUntil)
       bucket = days <= 30 ? 'due30' : days <= 90 ? 'due90' : days <= 180 ? 'due180' : 'ok'
-      reasons.push(`Licence ${valid.number ? `${valid.number} ` : ''}is valid until ${fmtDay(validUntil)} (${inWords(days)}).`)
+      reasons.push(`Licence ${validNow.number ? `${validNow.number} ` : ''}is valid until ${fmtDay(validUntil)} (${inWords(days)}).${validNow === regLicence ? ` ${regNote}` : ''}`)
+    } else if (regOnly) {
+      licence = regOnly; bucket = 'ok'
+      reasons.push(`${regNote} The register doesn’t give an expiry date: add it from the licence to get renewal reminders.`)
     } else if (pending) {
       licence = pending; bucket = 'applied'
       days = pending.appliedOn ? daysBetween(pending.appliedOn, today) : null
@@ -176,15 +205,18 @@ export function assess(f: RentalFacts, licences: Licence[], schemes: Scheme[], t
       reasons.push('No licence or application is on file. Letting it without one is an offence: apply straight away, or add the licence if there is one.')
     }
   } else if (upcoming) {
-    licence = valid ?? pending
+    licence = validNow ?? regOnly ?? pending
     bucket = licence ? (licence.status === 'applied' ? 'applied' : 'ok') : 'upcoming'
     days = upcoming.days
-  } else if ((unknownArea || !f.council || !isOurCouncil(f.council)) && (valid || pending || lapsed)) {
+  } else if ((unknownArea || !f.council || !known) && (validNow || regOnly || pending || lapsed)) {
     // We can't say whether a licence is needed, but one is on file: watch its dates as if it were.
-    if (valid) {
-      licence = valid; validUntil = valid.expiresOn!; days = daysBetween(today, validUntil)
+    if (validNow) {
+      licence = validNow; validUntil = validNow.expiresOn!; days = daysBetween(today, validUntil)
       bucket = days <= 30 ? 'due30' : days <= 90 ? 'due90' : days <= 180 ? 'due180' : 'ok'
-      reasons.push(`Licence ${valid.number ? `${valid.number} ` : ''}is valid until ${fmtDay(validUntil)} (${inWords(days)}).`)
+      reasons.push(`Licence ${validNow.number ? `${validNow.number} ` : ''}is valid until ${fmtDay(validUntil)} (${inWords(days)}).${validNow === regLicence ? ` ${regNote}` : ''}`)
+    } else if (regOnly) {
+      licence = regOnly; bucket = 'ok'
+      reasons.push(`${regNote} The register doesn’t give an expiry date: add it from the licence to get renewal reminders.`)
     } else if (pending) {
       licence = pending; bucket = 'applied'; days = pending.appliedOn ? daysBetween(pending.appliedOn, today) : null
       reasons.push(`Application made${pending.appliedOn ? ` on ${fmtDay(pending.appliedOn)}` : ''}.`)
@@ -195,14 +227,14 @@ export function assess(f: RentalFacts, licences: Licence[], schemes: Scheme[], t
   } else if (f.noLicenceNeeded) {
     bucket = 'not_required'
     reasons.push('Marked as not needing a licence (by us, or on the spreadsheet we imported).')
-  } else if (unknownArea || !f.council || !isOurCouncil(f.council)) {
-    // Outside Brent and Harrow we don't hold the council's schemes, so we can't say a licence isn't needed.
+  } else if (unknownArea || !f.council || !known) {
+    // A council we hold no schemes (or decision) for: we can't say a licence isn't needed.
     bucket = 'check'
   } else {
     // Not needed, but if they hold one we still watch it.
-    licence = valid ?? pending
+    licence = validNow ?? regOnly ?? pending
     bucket = 'not_required'
-    if (valid?.expiresOn) { validUntil = valid.expiresOn; days = daysBetween(today, valid.expiresOn) }
+    if (validNow?.expiresOn) { validUntil = validNow.expiresOn; days = daysBetween(today, validNow.expiresOn) }
   }
   const order: Bucket[] = ['unlicensed', 'expired', 'due30', 'upcoming', 'due90', 'check', 'due180', 'applied', 'ok', 'not_required']
   const urgency = order.indexOf(bucket) * 100000 + (days ?? 50000) + (certIssues ? -1 : 0)

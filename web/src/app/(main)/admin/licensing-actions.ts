@@ -44,9 +44,11 @@ function fromForm(f: FormData): RentalInput {
  * "auto" means look the council and ward up from the postcode. Brent or Harrow with a ward is a choice made by
  * hand; without a ward we keep the council and still look the ward up. Any other council is kept by name.
  */
-function areaFields(i: RentalInput): { wardSource: string; council: string | null; ward: string | null } {
+function areaFields(i: RentalInput, fromSheet = false): { wardSource: string; council: string | null; ward: string | null } {
   const c = (i.council || 'auto').toLowerCase().trim()
   if (c === 'auto') return { wardSource: 'auto', council: null, ward: null }
+  // A council typed on a spreadsheet ("Heringe", "Ealing") is only a hint: the postcode look-up still decides.
+  if (fromSheet && c !== 'brent' && c !== 'harrow') return { wardSource: 'auto', council: /^[a-z][a-z .'&-]{1,40}$/.test(c) ? c : 'other', ward: null }
   if (c === 'brent' || c === 'harrow') {
     const ward = WARDS[c].find((w) => normWard(w) === normWard(i.ward)) ?? null
     return ward ? { wardSource: 'manual', council: c, ward } : { wardSource: 'auto', council: c, ward: null }
@@ -146,13 +148,37 @@ export async function deleteLicence(f: FormData) {
   done(rentalId)
 }
 
+/** One decision for a council outside Brent and Harrow: it has no selective licensing (so no licence is needed there). */
+export async function decideCouncil(f: FormData) {
+  const me = await requireAdmin()
+  await ready()
+  const council = str(f, 'council', 40).toLowerCase()
+  if (!/^[a-z][a-z .'&-]{1,40}$/.test(council) || council === 'brent' || council === 'harrow') return
+  const { councilLabel } = await import('@/lib/licensing-rules')
+  const today = new Date().toISOString().slice(0, 10)
+  await db.insert(licensingSchemes).values({
+    id: uid(), council, kind: 'selective', name: `No selective licensing in ${councilLabel(council)}`, wards: '[]', startsOn: '2020-01-01', endsOn: '2099-12-31',
+    sourceUrl: opt(f, 'sourceUrl', 400), checkedOn: today, notes: `Checked on the council’s website by ${me.name} on ${today}. If the council brings in a scheme, add it here with its wards.`, updatedAt: now(),
+  })
+  await audit(me.id, 'council_decided', 'licensing_scheme', council, 'no selective licensing')
+  done()
+}
+
+/** Looks up the council and ward for every property that's missing one, now rather than at the next check. */
+export async function lookUpWardsNow() {
+  await requireAdmin()
+  after(async () => { const n = await fillAreas(2000).catch(() => 0); if (n) done() })
+  done()
+}
+
 export async function saveScheme(f: FormData) {
   const me = await requireAdmin()
   await ready()
   const id = str(f, 'id', 64)
   if (str(f, 'delete') === '1') { await db.delete(licensingSchemes).where(eq(licensingSchemes.id, id)); done(); return }
-  const council = ['brent', 'harrow'].includes(str(f, 'council')) ? str(f, 'council') : 'brent'
-  const wards = f.getAll('wards').map(String).filter(Boolean)
+  // Any council: Brent and Harrow, or one named the way the postcode look-up names it ("ealing", "barnet").
+  const council = /^[a-z][a-z .'&-]{1,40}$/.test(str(f, 'council').toLowerCase()) ? str(f, 'council').toLowerCase() : 'brent'
+  const wards = [...f.getAll('wards').map(String), ...str(f, 'moreWards', 1000).split(/[,;\n]/)].map((w) => w.trim()).filter(Boolean)
   const v = {
     council, kind: KINDS.some((k) => k.value === str(f, 'kind')) ? str(f, 'kind') : 'selective', name: str(f, 'name', 160) || 'Licensing scheme',
     wards: JSON.stringify(str(f, 'whole') === '1' ? ['*'] : wards), startsOn: day(f, 'startsOn') ?? new Date().toISOString().slice(0, 10), endsOn: day(f, 'endsOn') ?? '2099-12-31',
@@ -488,7 +514,7 @@ async function importRows(me: { id: string; name: string }, rows: string[][], ma
     if (have && r.rentmanRef && have.rentmanRef && have.rentmanRef !== r.rentmanRef) have = undefined
     // The same address twice on one spreadsheet is one property; on Rentman, two refs are two lettings (rooms, flats).
     if (!have && !r.rentmanRef && madeNow.has(keyOf(r.address, r.postcode))) have = byId.get(madeNow.get(keyOf(r.address, r.postcode))!)
-    const area = areaFields(r)
+    const area = areaFields(r, true)
     let id: string
     if (have) {
       if (!update && !r.rentmanRef) { skipped++; continue }
@@ -500,7 +526,7 @@ async function importRows(me: { id: string; name: string }, rows: string[][], ma
         gasExpires: later(r.gasExpires, have.gasExpires), eicrExpires: later(r.eicrExpires, have.eicrExpires), epcExpires: later(r.epcExpires, have.epcExpires),
         epcRating: have.epcRating ?? r.epcRating, occupancy: have.occupancy !== 'single' ? have.occupancy : r.occupancy, updatedAt: now(),
         notes: [have.notes, r.notes && !(have.notes ?? '').includes(r.notes) ? r.notes : null].filter(Boolean).join('\n') || null,
-        ...(!have.council && r.council !== 'auto' ? areaFields(r) : {}),
+        ...(!have.council && r.council !== 'auto' ? areaFields(r, true) : {}),
         ...(r.licenceNote === 'Spreadsheet said no licence required' && !have.noLicenceNeeded ? { noLicenceNeeded: true } : {}),
       }
       if (r.rentmanRef) {
