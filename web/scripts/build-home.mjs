@@ -81,6 +81,8 @@ html = swap(html, '    </nav>\n  </div>\n</header>', `    </nav>
   </div>
 </header>`)
 html = swap(html, '<a class="btn dark" href="#">View all properties</a>', '<a class="btn dark" href="/properties">View all properties</a>')
+// Real Google reviews from the portal replace the single quote (the page falls back to it if there are none).
+html = swap(html, /  <!-- ————— quote ————— -->\n  <section class="quote">[\s\S]*?<\/section>/, (m) => `  <!--REVIEWS-->${m}<!--/REVIEWS-->`)
 html = swap(html, /<div class="cardgrid">[\s\S]*?<p class="sample-note">[\s\S]*?<\/p>/, '<div class="cardgrid"><!--LISTINGS--></div>')
 html = swap(html, '<a class="link" href="#">Selling with us', '<a class="link" href="/valuation?intent=selling">Selling with us')
 html = swap(html, '<a class="link" href="#">Letting with us', '<a class="link" href="/landlords">Letting with us')

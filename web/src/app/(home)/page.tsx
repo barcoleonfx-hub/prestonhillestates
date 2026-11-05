@@ -3,6 +3,8 @@ import { listPublished, priceLabel, slugFor, displayAddressFor, statusLabel } fr
 import { labelFor, PROPERTY_TYPES } from '@/lib/options'
 import { MARKUP, SCRIPT } from './home-content'
 import { LR_CREDIT, patchSummary } from '@/lib/sold-prices'
+import { googleSummary, reviewsFor } from '@/lib/reviews-data'
+import './home-reviews.css'
 
 export const dynamic = 'force-dynamic'
 
@@ -59,8 +61,37 @@ async function marketBand(): Promise<string> {
   </section>`
 }
 
+/** "What our clients say": real Google reviews chosen in the portal, with the overall rating and a link to them all. */
+async function reviewsBand(): Promise<string | null> {
+  const [list, g] = await Promise.all([reviewsFor('any', 12).catch(() => []), googleSummary().catch(() => ({ rating: null, count: null, url: null }))])
+  // Complete reviews first: ones Google cut short (ending "…") only fill any gaps.
+  const real = list.filter((r) => r.source === 'Google review').sort((a, b) => Number(/…$/.test(a.text)) - Number(/…$/.test(b.text))).slice(0, 6)
+  if (!real.length) return null
+  const stars = (n: number) => '★'.repeat(n)
+  const link = g.url ? ` · <a href="${esc(g.url)}" target="_blank" rel="noopener noreferrer">Read them all on Google ↗</a>` : ''
+  const summary = g.rating && g.count
+    ? `<p class="rx-summary rv d1"><span class="rx-stars" aria-hidden="true">${stars(Math.round(g.rating))}<span class="rx-star-off">${stars(5 - Math.round(g.rating))}</span></span> <b>${g.rating.toFixed(1)}</b> out of 5 from <b>${g.count.toLocaleString('en-GB')}</b> Google reviews${link}</p>`
+    : g.url ? `<p class="rx-summary rv d1"><a href="${esc(g.url)}" target="_blank" rel="noopener noreferrer">Read all our reviews on Google ↗</a></p>` : ''
+  const cards = real.map((r, i) => `<figure class="rx-card rv${i ? ` d${Math.min(i, 3)}` : ''}">
+      <div class="rx-top"><span class="rx-avatar" aria-hidden="true">${esc(r.name[0]?.toUpperCase() ?? '')}</span><span><b>${esc(r.name)}</b>${r.date ? `<small>${esc(r.date)}</small>` : ''}</span></div>
+      ${r.rating ? `<div class="rx-stars" aria-label="${r.rating} out of 5 stars">${stars(r.rating)}</div>` : ''}
+      <blockquote>${esc(r.text)}</blockquote>
+      <figcaption>Google review</figcaption>
+    </figure>`).join('\n')
+  return `<section class="rx rx-home" aria-labelledby="rx-h">
+    <div class="wide">
+      <div class="label rv"><b>Reviews</b> · from Google</div>
+      <h2 class="sect rv d1" id="rx-h">What our clients <em>say</em></h2>
+      ${summary}
+      <div class="rx-cards">${cards}</div>
+    </div>
+  </section>`
+}
+
 export default async function HomePage() {
+  const reviews = await reviewsBand()
   const html = MARKUP.replace('<!--LISTINGS-->', await listingCards()).replace('<!--MARKET-->', await marketBand())
+    .replace(/<!--REVIEWS-->[\s\S]*?<!--\/REVIEWS-->/, (m) => reviews ?? m)
   return (
     <>
       <div style={{ display: 'contents' }} dangerouslySetInnerHTML={{ __html: html }} />
