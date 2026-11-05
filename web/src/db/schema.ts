@@ -297,6 +297,84 @@ export const campaignRecipients = sqliteTable(
   (t) => [primaryKey({ columns: [t.campaignId, t.contactId] }), index('campaign_recipients_status_idx').on(t.status, t.campaignId)],
 )
 
+export const rentals = sqliteTable('rentals', {
+  id: text('id').primaryKey(),
+  address: text('address').notNull(),
+  postcode: text('postcode'),
+  council: text('council'),
+  ward: text('ward'),
+  wardSource: text('ward_source'),
+  occupancy: text('occupancy').notNull().default('single'),
+  management: text('management'),
+  landlordContactId: text('landlord_contact_id').references(() => contacts.id, { onDelete: 'set null' }),
+  landlordName: text('landlord_name'),
+  landlordEmail: text('landlord_email'),
+  landlordPhone: text('landlord_phone'),
+  propertyId: text('property_id').references(() => properties.id, { onDelete: 'set null' }),
+  gasExpires: text('gas_expires'),
+  eicrExpires: text('eicr_expires'),
+  epcExpires: text('epc_expires'),
+  epcRating: text('epc_rating'),
+  lastCheckedAt: text('last_checked_at'),
+  lastCheckedBy: text('last_checked_by'),
+  notes: text('notes'),
+  archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
+  createdBy: text('created_by'),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+})
+export type Rental = typeof rentals.$inferSelect
+
+export const licences = sqliteTable('licences', {
+  id: text('id').primaryKey(),
+  rentalId: text('rental_id').notNull().references(() => rentals.id, { onDelete: 'cascade' }),
+  kind: text('kind').notNull(),
+  council: text('council'),
+  number: text('number'),
+  holder: text('holder'),
+  status: text('status').notNull().default('granted'),
+  appliedOn: text('applied_on'),
+  startsOn: text('starts_on'),
+  expiresOn: text('expires_on'),
+  maxOccupants: integer('max_occupants'),
+  maxHouseholds: integer('max_households'),
+  conditions: text('conditions'),
+  notes: text('notes'),
+  createdBy: text('created_by'),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+})
+export type LicenceRow = typeof licences.$inferSelect
+
+export const licensingSchemes = sqliteTable('licensing_schemes', {
+  id: text('id').primaryKey(),
+  council: text('council').notNull(),
+  kind: text('kind').notNull(),
+  name: text('name').notNull(),
+  wards: text('wards').notNull(),
+  startsOn: text('starts_on').notNull(),
+  endsOn: text('ends_on').notNull(),
+  sourceUrl: text('source_url'),
+  checkedOn: text('checked_on'),
+  notes: text('notes'),
+  updatedAt: text('updated_at').notNull(),
+})
+
+export const licenceReminders = sqliteTable('licence_reminders', {
+  rentalId: text('rental_id').notNull(),
+  key: text('key').notNull(),
+  sentAt: text('sent_at').notNull(),
+}, (t) => [primaryKey({ columns: [t.rentalId, t.key] })])
+
+export const postcodeWards = sqliteTable('postcode_wards', {
+  postcode: text('postcode').primaryKey(),
+  district: text('district'),
+  districtCode: text('district_code'),
+  ward: text('ward'),
+  wardCode: text('ward_code'),
+  fetchedAt: text('fetched_at').notNull(),
+})
+
 export const calls = sqliteTable(
   'calls',
   {
