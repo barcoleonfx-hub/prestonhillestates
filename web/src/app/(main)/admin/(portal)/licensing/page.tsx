@@ -3,14 +3,16 @@ import { requireAdmin } from '@/lib/auth'
 import { rentalRegister } from '@/lib/licensing'
 import { bestOf, scanState, suggestionsFor } from '@/lib/licensing-scan'
 import { mailboxStatus } from '@/lib/mailbox'
-import { checkRegistersNow, findPostcodesNow, lastImport, setAutofill, startEmailScan } from '../../licensing-actions'
+import { checkRegistersNow, decideCouncil, findPostcodesNow, lastImport, lookUpWardsNow, setAutofill, startEmailScan } from '../../licensing-actions'
+import { fits, parseAddress } from '@/lib/property-match'
+import { normPostcode } from '@/lib/licensing-extract'
 import { db } from '@/db/client'
 import { licenceSuggestions, rentals, settings } from '@/db/schema'
 import { count as countOf, eq } from 'drizzle-orm'
 import { hitsFor, registers } from '@/lib/council-registers'
 import { siteBase } from '@/lib/property-email-data'
 import { LicTabs } from './LicTabs'
-import { BUCKETS, KINDS, bucketOf, councilLabel, fmtDay, inWords, isoDay, kindLabel, type Bucket } from '@/lib/licensing-rules'
+import { COUNCIL_PAGES, BUCKETS, KINDS, bucketOf, councilLabel, fmtDay, inWords, isoDay, kindLabel, type Bucket } from '@/lib/licensing-rules'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Licensing' }
@@ -38,6 +40,22 @@ export default async function LicensingPage({ searchParams }: { searchParams: Pr
   const liStuck = li?.status === 'running' && liAge > 10 * 60_000
   const withEpc = rows.filter((r) => r.epcRef).length, epcChecked = rows.filter((r) => r.epcCheckedAt).length
   const noPostcode = rows.filter((r) => !r.postcode).length
+  // Councils we hold no schemes (or decision) for: one decision each settles every property there.
+  const knownCouncils = new Set(['brent', 'harrow', ...schemes.map((x) => x.council)])
+  const undecided = new Map<string, typeof rows>()
+  for (const r of rows) if (r.council && r.council !== 'other' && !knownCouncils.has(r.council)) undecided.set(r.council, [...(undecided.get(r.council) ?? []), r])
+  const noWard = rows.filter((r) => r.postcode && (!r.council || r.council === 'brent' || r.council === 'harrow') && !r.ward).length
+  // The same home listed twice (e.g. "107 Vivan Avenue" and "107 Vivian Avenue" at one postcode).
+  const twins: [typeof rows[number], typeof rows[number]][] = []
+  const byHome = new Map<string, typeof rows>()
+  for (const r of rows) { const pa = parseAddress(r.address); if (!pa.num || !r.postcode) continue; const k = `${normPostcode(r.postcode)}|${pa.num}|${pa.flat ?? ''}`; byHome.set(k, [...(byHome.get(k) ?? []), r]) }
+  for (const g of byHome.values()) for (let i = 0; i < g.length; i++) for (let j = i + 1; j < g.length; j++) {
+    // Spelt differently ("vivan" / "vivian"), or exactly the same address. Different floors or rooms of one house
+    // ("111 Ground Floor Flat…" and "111 First Floor Flat…") are separate lettings, not duplicates.
+    const a = parseAddress(g[i].address).street, b = parseAddress(g[j].address).street
+    const same = normPostcode(g[i].address) === normPostcode(g[j].address)
+    if ((a !== b && Math.min(fits(a, b), fits(b, a)) <= 2) || same) twins.push([g[i], g[j]])
+  }
   const autoPostcode = rows.filter((r) => r.postcode && (r.postcodeSource === 'land_registry' || r.postcodeSource === 'online')).length
   const today = isoDay(new Date())
   const certBad = (r: (typeof rows)[number]) => r.a.certs.some((c) => c.state === 'expired' || c.state === 'due30' || (c.state === 'missing' && c.key !== 'epc'))
@@ -178,10 +196,48 @@ export default async function LicensingPage({ searchParams }: { searchParams: Pr
               {noPostcode ? <Link className="btn btn-ghost btn-sm" href={link({ pc: 'none' })}>Show the {noPostcode} without</Link> : null}
               {autoPostcode ? <Link className="btn btn-ghost btn-sm" href={link({ pc: 'auto' })}>Check the {autoPostcode} found automatically</Link> : null}
               {noPostcode ? <form action={findPostcodesNow}><button className="btn btn-gold btn-sm" type="submit">Find missing postcodes</button></form> : null}
+              {noWard ? <form action={lookUpWardsNow}><button className="btn btn-gold btn-sm" type="submit">Look up {noWard} missing ward{noWard === 1 ? '' : 's'} now</button></form> : null}
             </div>
+            {noWard ? <p className="card-sub" style={{ marginTop: 8 }}><b>{noWard}</b> Brent or Harrow propert{noWard === 1 ? 'y has' : 'ies have'} a postcode but no ward yet, so they show as “To check”. Wards are looked up automatically after each import and every few hours; press the button to do it now.</p> : null}
             <p className="card-sub" style={{ marginTop: 8 }}>Tries the Land Registry address list (reads shortened and misspelt streets), then a map look-up. Runs in the background.</p>
           </section>
         </div>
+      ) : null}
+
+      {undecided.size ? (
+        <section className="card card-pad lic-others">
+          <h2>Other councils: decide once</h2>
+          <p className="card-sub">These properties are outside Brent and Harrow, so they show as “To check” until each council is set up. Check the council’s licensing page once, then either say it has no selective licensing, or add its scheme with the wards it covers. Every property there is then worked out automatically, and new ones too.</p>
+          <ul className="lic-reglist">
+            {[...undecided.entries()].sort((a, b) => b[1].length - a[1].length).map(([c, rs]) => (
+              <li key={c}>
+                <b>{councilLabel(c)} · {rs.length} propert{rs.length === 1 ? 'y' : 'ies'}</b>
+                <span className="addr-sub">{[...new Set(rs.map((r) => r.ward).filter(Boolean))].join(', ') || 'Council as written on the spreadsheet: it’s confirmed (and the ward found) from the postcode automatically.'}</span>
+                {rs.some((r) => r.licences.some((l) => l.status === 'granted' || l.status === 'applied')) ? <span className="addr-sub"><b>{rs.filter((r) => r.licences.some((l) => l.status === 'granted' || l.status === 'applied')).length} have a licence or application on file</b>, so {councilLabel(c)} probably licenses at least some wards: check before choosing “no selective licensing”.</span> : null}
+                <div className="actions" style={{ marginTop: 6 }}>
+                  {COUNCIL_PAGES[c] ? <a className="btn btn-dark btn-sm" href={COUNCIL_PAGES[c]} target="_blank" rel="noreferrer">{councilLabel(c)}’s licensing page</a> : <a className="btn btn-dark btn-sm" href={`https://www.google.com/search?q=${encodeURIComponent(`${councilLabel(c)} council selective licensing wards`)}`} target="_blank" rel="noreferrer">Find {councilLabel(c)}’s licensing page</a>}
+                  <form action={decideCouncil}><input type="hidden" name="council" value={c} />{COUNCIL_PAGES[c] ? <input type="hidden" name="sourceUrl" value={COUNCIL_PAGES[c]} /> : null}<button className="btn btn-ghost btn-sm" type="submit">No selective licensing in {councilLabel(c)}</button></form>
+                  <Link className="btn btn-ghost btn-sm" href={`/admin/licensing/schemes?council=${encodeURIComponent(c)}#add`}>It has a scheme: choose the wards</Link>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {twins.length ? (
+        <section className="card card-pad lic-others">
+          <h2>Possibly listed twice</h2>
+          <p className="card-sub">Same postcode and house number, nearly the same street: probably one home entered twice (on Rentman or the spreadsheet). Open the one to drop and press “No longer with us”; its licence details can be added to the other first.</p>
+          <ul className="lic-reglist">
+            {twins.slice(0, 30).map(([a, b]) => (
+              <li key={`${a.id}-${b.id}`}>
+                <span><Link href={`/admin/licensing/${a.id}`}>{a.address}</Link>{a.rentmanRef ? ` (Rentman ${a.rentmanRef})` : ''} and <Link href={`/admin/licensing/${b.id}`}>{b.address}</Link>{b.rentmanRef ? ` (Rentman ${b.rentmanRef})` : ''}</span>
+                <span className="addr-sub">{a.postcode}{a.landlordName && a.landlordName === b.landlordName ? ` · both ${a.landlordName}` : ''}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
       ) : null}
 
       {!rows.length ? (
@@ -235,7 +291,7 @@ export default async function LicensingPage({ searchParams }: { searchParams: Pr
                           <span className={`lic-pill t-${b.tone}`}>{b.label}</span>
                           {r.a.days != null && r.a.validUntil ? <div className="addr-sub">{fmtDay(r.a.validUntil)} · {inWords(r.a.days)}</div> : r.a.bucket === 'upcoming' && r.a.upcoming ? <div className="addr-sub">{inWords(r.a.upcoming.days)}</div> : null}
                         </td>
-                        <td className="addr-sub">{r.a.licence?.number ?? (r.licences.length ? '—' : 'None on file')}</td>
+                        <td className="addr-sub">{r.a.licence?.id === 'register' ? <>{r.a.licence.number ?? 'On the register'}<div>from the council register</div></> : r.a.licence?.number ?? (r.licences.length ? '—' : 'None on file')}</td>
                         <td><div className="lic-certs">{r.a.certs.map((c) => <span key={c.key} className={`lic-cert s-${c.state}`} title={`${c.label}: ${c.date ? `${c.days! < 0 ? 'expired' : 'until'} ${fmtDay(c.date)}` : 'not on file'}${c.note ? `. ${c.note}` : ''}`}>{c.key === 'eicr' ? 'EICR' : c.key === 'epc' ? 'EPC' : 'Gas'}</span>)}</div></td>
                         <td className="addr-sub">{r.landlordName ?? '—'}</td>
                         <td className="addr-sub">{r.lastCheckedAt ? new Date(r.lastCheckedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' }) : 'Never'}</td>

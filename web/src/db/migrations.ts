@@ -632,4 +632,12 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       `CREATE INDEX rentals_rentman_ref ON rentals (rentman_ref)`,
     ],
   },
+  {
+    id: '026_sheet_councils_follow_postcode',
+    sql: [
+      // Councils typed on a licensing spreadsheet outside Brent and Harrow were kept as if chosen by hand, so the
+      // postcode look-up never corrected them ("heringe", "heartsmere") or found the ward. Let the postcode decide.
+      `UPDATE rentals SET ward_source = 'auto' WHERE ward_source = 'manual' AND ward IS NULL AND postcode IS NOT NULL AND council NOT IN ('brent', 'harrow')`,
+    ],
+  },
 ]
