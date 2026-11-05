@@ -24,7 +24,7 @@ export default function MortgageCalculatorPage() {
     mainEntity: FAQS.map(([q, a]) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } })),
   }
   return (
-    <PageChrome>
+    <PageChrome reviews="sales">
       <main className="vx" id="top">
         <section className="wide mc-hero">
           <div className="label"><b>Buying</b> · Mortgage calculator</div>

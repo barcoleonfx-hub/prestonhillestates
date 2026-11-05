@@ -1,3 +1,4 @@
+import { Reviews } from '@/app/(home)/Reviews'
 import Link from 'next/link'
 import type { Metadata } from 'next'
 import { notFound, permanentRedirect } from 'next/navigation'
@@ -227,6 +228,7 @@ export default async function PropertyPage({ params }: { params: Params }) {
           </div>
         </aside>
       </div>
+      <Reviews site category={isLet ? 'lettings' : 'sales'} title={isLet ? <>What tenants and landlords <em>say</em></> : <>What our clients <em>say</em></>} />
     </div>
   )
 }

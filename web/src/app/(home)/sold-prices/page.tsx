@@ -26,7 +26,7 @@ export default async function SoldPricesPage({ searchParams }: { searchParams: P
   const href = (t: string) => `/sold-prices?postcode=${encodeURIComponent(raw)}${t ? `&type=${t}` : ''}`
 
   return (
-    <PageChrome>
+    <PageChrome reviews="sales">
       <main className="spg" id="top">
         <section className="spg-hero">
           <div className="wide">

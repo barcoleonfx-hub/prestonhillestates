@@ -1,5 +1,6 @@
 import Script from 'next/script'
 import { FOOTER, HEADER, SPRITE } from './home-content'
+import { Reviews, type ReviewCategory } from './Reviews'
 
 const CHROME_JS = `(function(){
   var h=document.getElementById('siteHeader'); if(h){var f=function(){h.classList.toggle('scrolled',window.scrollY>30)};addEventListener('scroll',f,{passive:true});f();}
@@ -10,12 +11,16 @@ const CHROME_JS = `(function(){
     top.addEventListener('click',function(){window.scrollTo({top:0,behavior:'smooth'})});}
 })();`
 
-/** Header, footer and scroll effects shared by pages built in the homepage design. */
-export function PageChrome({ children }: { children: React.ReactNode }) {
+/**
+ * Header, footer and scroll effects shared by pages built in the homepage design. Every page gets the Google
+ * reviews above the footer; pages that place them themselves pass reviews={false}.
+ */
+export function PageChrome({ children, reviews = 'any' }: { children: React.ReactNode; reviews?: ReviewCategory | false }) {
   return (
     <>
       <div style={{ display: 'contents' }} dangerouslySetInnerHTML={{ __html: SPRITE + HEADER }} />
       {children}
+      {reviews ? <Reviews category={reviews} /> : null}
       <div style={{ display: 'contents' }} dangerouslySetInnerHTML={{ __html: FOOTER }} />
       <button type="button" id="toTop" className="to-top" aria-label="Back to top">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 15 6-6 6 6" /></svg>

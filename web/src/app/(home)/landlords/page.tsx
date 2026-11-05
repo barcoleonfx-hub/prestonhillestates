@@ -42,7 +42,7 @@ export default async function LandlordsPage() {
   const shown = lets.filter((p) => p.status === 'available').slice(0, 3)
 
   return (
-    <PageChrome>
+    <PageChrome reviews={false}>
       <main className="vx lx" id="top">
         <section className="vx-hero">
           <div className="wide vx-hero-grid">
