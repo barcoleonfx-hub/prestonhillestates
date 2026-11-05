@@ -5,6 +5,7 @@ import { requireAdmin } from '@/lib/auth'
 import { googleSummary } from '@/lib/reviews-data'
 import { saveGoogleSummary, updateReview } from '../../review-actions'
 import { AddReview } from './AddReview'
+import { ScreenshotImport } from './ScreenshotImport'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Reviews' }
@@ -39,7 +40,13 @@ export default async function ReviewsPage({ searchParams }: { searchParams: Prom
       </section>
 
       <section className="card card-pad" style={{ marginBottom: 18 }}>
-        <h2>Add a review</h2>
+        <h2>Add reviews from screenshots</h2>
+        <p className="card-sub">Take screenshots of your reviews on Google (on your phone or computer) and upload them. The portal reads the names, stars, dates and words for you to check before they’re added.</p>
+        <ScreenshotImport />
+      </section>
+
+      <section className="card card-pad" style={{ marginBottom: 18 }}>
+        <h2>Or add one by hand</h2>
         <p className="card-sub">Open your Google Business Profile, copy a review and paste it here exactly as written. Reviews of 3 stars or fewer can be kept here for your records but are never shown.</p>
         <AddReview />
       </section>

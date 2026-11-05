@@ -54,3 +54,36 @@ export async function saveGoogleSummary(f: FormData) {
   done()
   redirect('/admin/reviews?saved=rating')
 }
+
+export type FoundReview = { author: string; rating: number; when: string; month: string | null; text: string; truncated: boolean; duplicate: boolean }
+const key = (author: string, text: string) => `${author.toLowerCase().replace(/[^a-z0-9]/g, '')}|${text.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 60)}`
+
+/** Reads uploaded screenshots of Google reviews and returns what's in them, for checking before adding. */
+export async function readScreenshots(f: FormData): Promise<{ reviews: FoundReview[]; error?: string }> {
+  await requireAdmin()
+  await ready()
+  const files = f.getAll('shots').filter((x): x is File => x instanceof File && x.size > 0).slice(0, 6)
+  if (!files.length) return { reviews: [], error: 'Choose one or more screenshots first.' }
+  const { readReviewScreenshots } = await import('@/lib/review-reader')
+  const r = await readReviewScreenshots(await Promise.all(files.map(async (x) => ({ type: x.type, data: Buffer.from(await x.arrayBuffer()) }))))
+  const have = new Set((await db.select({ a: reviews.author, t: reviews.text }).from(reviews)).map((x) => key(x.a, x.t)))
+  return { error: r.error, reviews: r.reviews.map((x) => ({ ...x, duplicate: have.has(key(x.author, x.text)) })) }
+}
+
+/** Adds the reviews ticked on the screenshot import (only 4 and 5 stars are ever shown on the website). */
+export async function addReviews(items: { author: string; rating: number; month: string | null; text: string; category: string }[]): Promise<{ added: number }> {
+  const me = await requireAdmin()
+  await ready()
+  const have = new Set((await db.select({ a: reviews.author, t: reviews.text }).from(reviews)).map((x) => key(x.a, x.t)))
+  let added = 0
+  for (const i of items.slice(0, 60)) {
+    const author = String(i.author ?? '').trim().slice(0, 80), text = String(i.text ?? '').trim().slice(0, 3000), rating = Math.round(Number(i.rating))
+    if (!author || !text || !(rating >= 1 && rating <= 5) || have.has(key(author, text))) continue
+    const month = /^\d{4}-\d{2}$/.test(String(i.month ?? '')) ? `${i.month}-01` : null
+    await db.insert(reviews).values({ id: uid(), author, rating, text, reviewedOn: month, category: CATS.includes(i.category) ? i.category : 'general', source: 'google', shown: rating >= 4, createdBy: me.id, createdAt: now() })
+    have.add(key(author, text)); added++
+  }
+  if (added) await audit(me.id, 'review_import', 'review', 'screenshots', `${added} added`)
+  done()
+  return { added }
+}
