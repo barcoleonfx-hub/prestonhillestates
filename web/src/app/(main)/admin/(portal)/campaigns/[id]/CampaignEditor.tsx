@@ -7,6 +7,7 @@ import {
   type Audience, type Block, type BlockKind, type Content, type Reader, type Role, type Shared,
 } from '@/lib/campaign'
 import { countAudience, saveCampaign, startCampaign, testCampaign } from '../../../campaign-actions'
+import { PeopleList } from './PeopleList'
 
 const KINDS: { kind: BlockKind; label: string; about: string }[] = [
   { kind: 'letter', label: 'Letter', about: 'A heading and a note from the branch' },
@@ -23,6 +24,13 @@ const CTA: { value: Extract<Block, { kind: 'cta' }>['variant']; label: string }[
   { value: 'mortgage', label: 'Borrowing calculator' }, { value: 'register', label: 'Homes to rent' },
 ]
 const generic = (base: string): Reader => ({ contactId: null, name: 'Sam Example', email: 'sam@example.com', roles: ['other'], outward: null, areas: null, budget: null, minBeds: null, position: null, unsubscribeUrl: `${base}/unsubscribe` })
+// Made-up readers for each kind of person, for previewing sections nobody in the sample list would see.
+const EXAMPLES: Record<Role, Partial<Reader>> = {
+  buyer: { name: 'Alex Example', budget: 600000, minBeds: 3, outward: 'HA3' }, tenant: { name: 'Alex Example', budget: 1800, minBeds: 2, outward: 'HA9' },
+  landlord: { name: 'Alex Example', outward: 'HA3' }, seller: { name: 'Alex Example', outward: 'HA3' }, other: { name: 'Alex Example' },
+}
+const example = (base: string, r: Role): Reader => ({ ...generic(base), ...EXAMPLES[r], contactId: `example-${r}`, roles: [r] })
+const readerShows = (b: Block, r: Reader) => b.kind !== 'article' || r.roles.some((x) => b.show.includes(x)) || (!r.roles.length && b.show.includes('other'))
 
 type Props = {
   id: string; readOnly: boolean; isAdmin: boolean; canSend: boolean
@@ -67,8 +75,30 @@ export function CampaignEditor(p: Props) {
     return () => clearTimeout(t)
   }, [audience, p.readOnly])
 
-  const reader = (as === 'generic' ? null : p.samples.find((s) => s.contactId === as)) ?? generic(p.shared.base)
-  const rendered = useMemo(() => renderCampaign(content, reader, p.shared, { campaign: name, sender: p.sender, month: p.month }), [content, reader, p.shared, name, p.sender, p.month])
+  const reader = (as === 'generic' ? null : as.startsWith('example-') ? example(p.shared.base, as.slice(8) as Role) : p.samples.find((s) => s.contactId === as)) ?? generic(p.shared.base)
+  const rendered = useMemo(() => renderCampaign(content, reader, p.shared, { campaign: name, sender: p.sender, month: p.month, markers: true }), [content, reader, p.shared, name, p.sender, p.month])
+  const wrap = useRef<HTMLDivElement>(null)
+  const [switched, setSwitched] = useState<string | null>(null)
+  const [showPeople, setShowPeople] = useState(false)
+
+  /** Opens a section for editing. If the current preview reader wouldn't see it, preview as someone who would. */
+  const openBlock = (b: Block | null) => {
+    setOpen(b?.id ?? null)
+    setSwitched(null)
+    if (!b || readerShows(b, reader)) return
+    if (b.kind !== 'article') return
+    const who = p.samples.find((s) => readerShows(b, s))
+    const next = who ? who.contactId! : `example-${b.show[0] ?? 'other'}`
+    setAs(next)
+    setSwitched(who ? who.name : `an example ${ROLES.find((x) => x.value === b.show[0])?.label.toLowerCase() ?? 'reader'}`)
+  }
+  // Keep the section being edited in view in the preview.
+  const scrollPreview = (id: string | null, smooth = true) => {
+    const f = frame.current, w = wrap.current
+    const el = id ? f?.contentDocument?.querySelector(`[data-block="${id}"]`) as HTMLElement | null : null
+    if (w && el) w.scrollTo({ top: Math.max(0, el.offsetTop - 12), behavior: smooth ? 'smooth' : 'auto' })
+  }
+  useEffect(() => { const t = setTimeout(() => scrollPreview(open), 250); return () => clearTimeout(t) }, [open, as, width]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const f = frame.current
@@ -79,6 +109,8 @@ export function CampaignEditor(p: Props) {
     const t = [setTimeout(fit, 150), setTimeout(fit, 900)]
     return () => { f.removeEventListener('load', onLoad); t.forEach(clearTimeout) }
   }, [rendered.html, width])
+  // After a change re-renders the preview, put the edited section back in view.
+  useEffect(() => { const t = setTimeout(() => scrollPreview(open, false), 200); return () => clearTimeout(t) }, [rendered.html]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const set = <K extends keyof Content>(k: K, v: Content[K]) => setContent((c) => ({ ...c, [k]: v }))
   const update = (id: string, patch: Partial<Block>) => setContent((c) => ({ ...c, blocks: c.blocks.map((b) => (b.id === id ? ({ ...b, ...patch } as Block) : b)) }))
@@ -139,7 +171,11 @@ export function CampaignEditor(p: Props) {
               </select>
             </div>
           </div>
-          <p className="card-sub" style={{ marginTop: 10 }}>Someone with two roles counts once. People who unsubscribed, archived contacts and anyone marked “Do not call back” are left out automatically.</p>
+          <p className="card-sub" style={{ marginTop: 10 }}>Only people on your <b>enquiries list</b> are included: anyone who has enquired about a home, asked for a valuation or registered with us. Someone with two roles counts once. People who unsubscribed, archived contacts and anyone marked “Do not call back” are always left out.</p>
+          <button type="button" className="btn btn-ghost btn-sm" style={{ marginTop: 12 }} onClick={() => setShowPeople(!showPeople)} aria-expanded={showPeople}>
+            {showPeople ? 'Hide the list' : `See who’s on the list (${summary.total.toLocaleString('en-GB')})`}
+          </button>
+          {showPeople ? <PeopleList campaignId={p.id} audience={audience} ro={p.readOnly} onExclude={(ids) => setAudience((a) => ({ ...a, exclude: ids }))} /> : null}
         </section>
 
         <section className="card card-pad">
@@ -148,7 +184,7 @@ export function CampaignEditor(p: Props) {
             {content.blocks.map((b, i) => (
               <li key={b.id} className={`cmp-block${open === b.id ? ' open' : ''}${shown(b) ? '' : ' hidden-for'}`}>
                 <div className="cmp-block-head">
-                  <button type="button" className="cmp-block-title" onClick={() => setOpen(open === b.id ? null : b.id)} aria-expanded={open === b.id}>
+                  <button type="button" className="cmp-block-title" onClick={() => openBlock(open === b.id ? null : b)} aria-expanded={open === b.id}>
                     <span className="cmp-kind">{kindLabel(b.kind)}</span>
                     <span className="cmp-sum">{summaryOf(b)}</span>
                   </button>
@@ -160,6 +196,8 @@ export function CampaignEditor(p: Props) {
                     </span>
                   ) : null}
                 </div>
+                {open === b.id && switched ? <p className="cmp-switch">Only {b.kind === 'article' ? b.show.map((r) => ROLES.find((x) => x.value === r)?.plural.toLowerCase()).join(', ') : ''} see this, so the preview is now showing it as {switched}.</p> : null}
+                {open === b.id ? <button type="button" className="cmp-jump" onClick={() => { document.querySelector('.cmp-preview')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); setTimeout(() => scrollPreview(b.id), 400) }}>See this in the preview ↓</button> : null}
                 {open === b.id ? <BlockFields b={b} update={(x) => update(b.id, x)} shared={p.shared} ro={p.readOnly} /> : null}
               </li>
             ))}
@@ -184,6 +222,7 @@ export function CampaignEditor(p: Props) {
               <label htmlFor="c-as">See it as</label>
               <select id="c-as" className="select" value={as} onChange={(e) => setAs(e.target.value)}>
                 {p.samples.map((s) => <option key={s.contactId!} value={s.contactId!}>{s.name} · {s.roles.map((r) => ROLES.find((x) => x.value === r)?.label).join(', ')}{s.outward ? ` · ${s.outward}` : ''}{s.budget ? ` · up to £${s.budget.toLocaleString('en-GB')}` : ''}</option>)}
+                {ROLES.map((r) => <option key={r.value} value={`example-${r.value}`}>An example {r.label.toLowerCase()} (made up)</option>)}
                 <option value="generic">Someone we know nothing about</option>
               </select>
             </div>
@@ -193,7 +232,7 @@ export function CampaignEditor(p: Props) {
             </div>
           </div>
           <div className="cmp-inbox"><b>{rendered.subject}</b><span>{personal(content.preheader).replace(/\{first_name\}/g, '')}</span></div>
-          <div className="pmail-frame-wrap"><iframe ref={frame} title="Email preview" className={`pmail-frame ${width}`} srcDoc={rendered.html} sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" /></div>
+          <div className="pmail-frame-wrap cmp-scroll" ref={wrap}><iframe ref={frame} title="Email preview" className={`pmail-frame ${width}`} srcDoc={rendered.html} sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" /></div>
         </section>
         {!p.readOnly ? (
           <section className="card card-pad cmp-send">

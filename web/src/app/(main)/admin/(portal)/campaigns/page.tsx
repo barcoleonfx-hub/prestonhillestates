@@ -38,7 +38,7 @@ export default async function CampaignsPage() {
         <div className="today-head">
           <div>
             <h2>Start a new campaign</h2>
-            <p className="card-sub">{everyone.total.toLocaleString('en-GB')} contacts can be emailed: {[['buyer', 'buyers'], ['tenant', 'tenants'], ['landlord', 'landlords'], ['seller', 'sellers'], ['other', 'others']].map(([k, l]) => `${everyone.byRole[k as 'buyer'].toLocaleString('en-GB')} ${l}`).join(' · ')}. People who unsubscribed, are archived or marked “Do not call back” are always left out.</p>
+            <p className="card-sub">{everyone.total.toLocaleString('en-GB')} people on your enquiries list can be emailed: {[['buyer', 'buyers'], ['tenant', 'tenants'], ['landlord', 'landlords'], ['seller', 'sellers'], ['other', 'others']].map(([k, l]) => `${everyone.byRole[k as 'buyer'].toLocaleString('en-GB')} ${l}`).join(' · ')}. People who unsubscribed, are archived or marked “Do not call back” are always left out.</p>
           </div>
         </div>
         <div className="cmp-templates">

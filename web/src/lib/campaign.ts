@@ -11,7 +11,8 @@ export const ROLES: { value: Role; label: string; plural: string }[] = [
   { value: 'other', label: 'Other', plural: 'Everyone else' },
 ]
 
-export type Audience = { roles: Role[]; areas: string; activeMonths: number | null }
+// Only people who have made an enquiry with us are ever emailed; `exclude` holds anyone staff have taken off by hand.
+export type Audience = { roles: Role[]; areas: string; activeMonths: number | null; exclude?: string[] }
 
 export type Block =
   | { id: string; kind: 'letter'; title: string; body: string }
@@ -326,10 +327,11 @@ ${button(withUtm(c.url, campaign, 'newsletter'), c.btn)}
 
 export type CampaignSender = { email: string }
 
-export function renderCampaign(c: Content, r: Reader, s: Shared, opts: { campaign: string; sender: CampaignSender; month: string }): { subject: string; html: string; text: string } {
+export function renderCampaign(c: Content, r: Reader, s: Shared, opts: { campaign: string; sender: CampaignSender; month: string; markers?: boolean }): { subject: string; html: string; text: string } {
   const subject = personalise(c.subject || 'News from Preston Hill Estates', r).slice(0, 150)
   const pre = personalise(c.preheader, r)
-  const body = c.blocks.map((b, i) => renderBlock(b, r, s, opts.campaign, i === 0)).filter(Boolean)
+  // In the editor's preview each section is tagged, so the preview can scroll to the one being edited.
+  const body = c.blocks.map((b, i) => { const h = renderBlock(b, r, s, opts.campaign, i === 0); return h && opts.markers ? h.replace(/^<tr/, `<tr data-block="${b.id}"`) : h }).filter(Boolean)
   // A thin line between two white sections so they don't run together.
   const white = (h: string) => h.startsWith(`<tr><td bgcolor="${C.card}"`)
   const joined = body.map((h, i) => (i && white(h) && white(body[i - 1]) ? rule + h : h)).join('\n')
