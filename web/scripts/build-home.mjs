@@ -40,6 +40,21 @@ css += `
   footer.site address a { color: inherit; text-decoration: none; }
   footer.site address a:hover { text-decoration: underline; }
   .accredband img, footer.site .accred img { max-height: 30px; width: auto; display: block; }
+  /* ---------- menu on phones and tablets ---------- */
+  .mnav { display: none; position: relative; }
+  .mnav > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 10px; padding: 10px 16px; border-radius: 999px; border: 1.5px solid var(--line); background: var(--surface); font-size: 0.78rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink); }
+  .mnav > summary::-webkit-details-marker { display: none; }
+  .mnav-bars { width: 16px; height: 10px; border-top: 2px solid currentColor; border-bottom: 2px solid currentColor; position: relative; }
+  .mnav-bars::after { content: ''; position: absolute; left: 0; right: 0; top: 2px; border-top: 2px solid currentColor; }
+  .mnav .mnav-close, .mnav[open] .mnav-open { display: none; }
+  .mnav[open] .mnav-close { display: inline; }
+  .mnav-panel { position: absolute; right: 0; top: calc(100% + 10px); width: min(360px, calc(100vw - 32px)); max-height: calc(100vh - 110px); overflow-y: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 22px; box-shadow: var(--shadow-lg); padding: 18px 20px; display: grid; gap: 14px; z-index: 60; }
+  .mnav-group { display: grid; gap: 2px; }
+  .mnav-group b { font-size: 0.68rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--gold-deep); margin-bottom: 4px; }
+  .mnav-group a { color: var(--ink); text-decoration: none; font-size: 1rem; padding: 7px 0; border-bottom: 1px solid var(--line-soft); }
+  .mnav-cta { display: grid; gap: 8px; margin-top: 4px; }
+  @media (max-width: 1180px) { nav.primary a.wide-only { display: none; } }
+  @media (max-width: 1000px) { nav.primary { display: none; } .mnav { display: block; } }
 `
 
 // ---------- markup ----------
@@ -49,7 +64,22 @@ html = swap(html, 'data:image/jpeg;base64,__FOUNDER_B64__', '/img/founder.jpg')
 // Nav button and hero CTA open the full valuation page; the button inside the homepage form is replaced below.
 html = swap(html, 'https://claude.ai/code/artifact/76c93993-6277-4580-b173-93622a7443ae', '/valuation', 3)
 html = swap(html, '<a href="#listings">Sales</a>', '<a href="/properties?channel=sale">Sales</a>')
-html = swap(html, '<a href="#listings">Lettings</a>', '<a href="/properties?channel=let">To rent</a>\n      <a href="/landlords">Landlords</a>')
+html = swap(html, '<a href="#listings">Lettings</a>', '<a href="/properties?channel=let">To rent</a>\n      <a href="/renting">Tenants</a>\n      <a href="/landlords">Landlords</a>')
+html = swap(html, '      <a href="#services">Services</a>\n      <a href="#areas">Areas</a>', '      <a class="wide-only" href="#services">Services</a>\n      <a class="wide-only" href="#areas">Areas</a>')
+// Phones and tablets: the links fold into a Menu button (no script needed: it's a <details>).
+html = swap(html, '    </nav>\n  </div>\n</header>', `    </nav>
+    <details class="mnav">
+      <summary aria-label="Menu"><span class="mnav-bars" aria-hidden="true"></span><span class="mnav-open">Menu</span><span class="mnav-close">Close</span></summary>
+      <div class="mnav-panel">
+        <div class="mnav-group"><b>Buying</b><a href="/properties?channel=sale">Homes for sale</a><a href="/mortgage-calculator">How much can I borrow?</a><a href="/sold-prices">Sold prices</a></div>
+        <div class="mnav-group"><b>Renting</b><a href="/properties?channel=let">Homes to rent</a><a href="/renting">Register for new homes to rent</a></div>
+        <div class="mnav-group"><b>Landlords</b><a href="/landlords">Letting &amp; management</a><a href="/landlords#estimate">Rent estimate</a><a href="/fees">Fees &amp; legal</a></div>
+        <div class="mnav-group"><b>Selling</b><a href="/valuation">Free valuation</a><a href="/guides">Guides</a></div>
+        <div class="mnav-cta"><a class="btn gold" href="/valuation">Free valuation</a><a class="btn ghost" href="tel:+442081277001">Call 020 8127 7001</a></div>
+      </div>
+    </details>
+  </div>
+</header>`)
 html = swap(html, '<a class="btn dark" href="#">View all properties</a>', '<a class="btn dark" href="/properties">View all properties</a>')
 html = swap(html, /<div class="cardgrid">[\s\S]*?<p class="sample-note">[\s\S]*?<\/p>/, '<div class="cardgrid"><!--LISTINGS--></div>')
 html = swap(html, '<a class="link" href="#">Selling with us', '<a class="link" href="/valuation?intent=selling">Selling with us')
