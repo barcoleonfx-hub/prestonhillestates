@@ -189,7 +189,7 @@ export async function runLicenceScan(opts: { force?: boolean } = {}): Promise<{ 
 export async function matchDocs(rentalIds?: string[]): Promise<number> {
   await ready()
   const rs = rentalIds?.length ? await db.select().from(rentals).where(inArray(rentals.id, rentalIds)) : await db.select().from(rentals).where(eq(rentals.archived, false))
-  const keys = rs.map((r) => addressKey(r.id, r.address, r.postcode)).filter(Boolean) as AddressKey[]
+  const keys = rs.flatMap((r) => [addressKey(r.id, r.address, r.postcode), r.resolvedAddress ? addressKey(r.id, r.resolvedAddress, r.postcode) : null]).filter(Boolean) as AddressKey[]
   if (!keys.length) return 0
   let added = 0
   const docs = await db.select().from(emailDocs)

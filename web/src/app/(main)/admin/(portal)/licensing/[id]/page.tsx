@@ -3,7 +3,8 @@ import { notFound } from 'next/navigation'
 import { requireAdmin } from '@/lib/auth'
 import { rentalView } from '@/lib/licensing'
 import { COUNCILS, bucketOf, councilLabel, fmtDay, inWords, kindLabel, OCCUPANCY } from '@/lib/licensing-rules'
-import { archiveRental, lookUpArea, markChecked } from '../../../licensing-actions'
+import { archiveRental, confirmPostcode, lookUpArea, markChecked } from '../../../licensing-actions'
+import { hitsFor } from '@/lib/council-registers'
 import { LicenceList } from '../LicenceList'
 import { RentalForm } from '../RentalForm'
 import { bestOf, documentsFor, suggestionsFor } from '@/lib/licensing-scan'
@@ -19,7 +20,7 @@ export default async function RentalPage({ params, searchParams }: { params: Pro
   const v = await rentalView(id)
   if (!v) notFound()
   const { row: r } = v
-  const [found, docs] = await Promise.all([suggestionsFor([r.id]).then(bestOf), documentsFor(r.id)])
+  const [found, docs, hits] = await Promise.all([suggestionsFor([r.id]).then(bestOf), documentsFor(r.id), hitsFor([r.id])])
   const KIND: Record<string, string> = { licence: 'Licence', gas: 'Gas safety', eicr: 'EICR', epc: 'EPC' }
   const b = bucketOf(r.a.bucket)
   const council = COUNCILS.find((c) => c.value === r.council)
@@ -30,6 +31,7 @@ export default async function RentalPage({ params, searchParams }: { params: Pro
         <div>
           <Link href="/admin/licensing" style={{ fontSize: '0.84rem', color: 'var(--faint)', textDecoration: 'none' }}>← Licensing register</Link>
           <h1 style={{ marginTop: 6 }}>{r.address}</h1>
+          {r.resolvedAddress && r.resolvedAddress.toLowerCase() !== r.address.toLowerCase() ? <p className="sub" style={{ marginTop: 2 }}>Read as <b>{r.resolvedAddress}</b> (used to match council registers and emails)</p> : null}
           <p className="sub">{[r.postcode, r.council ? `${councilLabel(r.council)}${r.ward ? `, ${r.ward} ward` : ''}` : 'Council not known yet', OCCUPANCY.find((o) => o.value === r.occupancy)?.label].filter(Boolean).join(' · ')}{r.wardSource === 'manual' ? ' (chosen by hand)' : ''}</p>
         </div>
         <div className="actions">
@@ -37,6 +39,12 @@ export default async function RentalPage({ params, searchParams }: { params: Pro
         </div>
       </div>
       {sp.saved ? <div className="notice ok" style={{ marginBottom: 14 }}>Saved.</div> : null}
+      {r.postcode && (r.postcodeSource === 'land_registry' || r.postcodeSource === 'online') ? (
+        <div className="notice lic-pcnote">
+          <span><b>Postcode {r.postcode} was found automatically</b>{r.postcodeNote ? `: ${r.postcodeNote.replace(/^Found (from|by) /, 'from ')}` : ''}. Check it’s right; if not, correct it under Details.</span>
+          <form action={confirmPostcode}><input type="hidden" name="id" value={r.id} /><button className="btn btn-ghost btn-sm" type="submit">It’s right</button></form>
+        </div>
+      ) : !r.postcode ? <div className="notice err" style={{ marginBottom: 14 }}>No postcode yet{r.postcodeNote ? ` (${r.postcodeNote.toLowerCase()})` : ''}. Add it under Details so the council and ward can be checked.</div> : null}
 
       <section className={`card card-pad lic-status t-${b.tone}`}>
         <div className="today-head">
@@ -55,6 +63,17 @@ export default async function RentalPage({ params, searchParams }: { params: Pro
             {mail ? <a className="btn btn-ghost btn-sm" href={mail}>Email the landlord about renewing</a> : null}
           </div>
         </div>
+        {hits.length ? (
+          <div className="lic-reghits">
+            {hits.map(({ h, r: g }) => (
+              <div key={g.id} className={h.found ? 'on' : 'off'}>
+                <b>{h.found ? `On the ${g.name}` : `Not on the ${g.name}`}</b>
+                <span>{h.found ? [h.reference ? `Ref ${h.reference}` : null, h.kind ? kindLabel(h.kind) : null, h.startsOn ? `from ${fmtDay(h.startsOn)}` : null, h.expiresOn ? `until ${fmtDay(h.expiresOn)}` : null].filter(Boolean).join(' · ') || 'Listed' : 'Applications still being processed aren’t listed. If it should be licensed, check with the council.'}</span>
+                <small>Checked {fmtDay(h.checkedAt.slice(0, 10))}{g.asOf ? ` against the register dated ${g.asOf}` : ''}{h.found && h.line ? `: “${h.line.slice(0, 160)}”` : ''}</small>
+              </div>
+            ))}
+          </div>
+        ) : null}
         <div className="lic-certrow">
           {r.a.certs.map((c) => (
             <div key={c.key} className={`lic-certbox s-${c.state}`}>

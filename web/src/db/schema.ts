@@ -318,6 +318,10 @@ export const rentals = sqliteTable('rentals', {
   lastCheckedAt: text('last_checked_at'),
   lastCheckedBy: text('last_checked_by'),
   noLicenceNeeded: integer('no_licence_needed', { mode: 'boolean' }).notNull().default(false),
+  postcodeSource: text('postcode_source'),
+  postcodeNote: text('postcode_note'),
+  postcodeTriedAt: text('postcode_tried_at'),
+  resolvedAddress: text('resolved_address'),
   notes: text('notes'),
   archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
   createdBy: text('created_by'),
@@ -405,6 +409,37 @@ export const emailFiles = sqliteTable('email_files', {
   size: integer('size').notNull(),
   createdAt: text('created_at').notNull(),
 })
+
+export const councilRegisters = sqliteTable('council_registers', {
+  id: text('id').primaryKey(),
+  council: text('council').notNull(),
+  name: text('name').notNull(),
+  url: text('url').notNull(),
+  pageUrl: text('page_url'),
+  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+  lastFetchedAt: text('last_fetched_at'),
+  lastOkAt: text('last_ok_at'),
+  lastError: text('last_error'),
+  asOf: text('as_of'),
+  entries: integer('entries'),
+  fileKey: text('file_key'),
+  docId: text('doc_id'),
+  updatedAt: text('updated_at').notNull(),
+})
+export type CouncilRegister = typeof councilRegisters.$inferSelect
+
+export const registerHits = sqliteTable('register_hits', {
+  rentalId: text('rental_id').notNull().references(() => rentals.id, { onDelete: 'cascade' }),
+  registerId: text('register_id').notNull().references(() => councilRegisters.id, { onDelete: 'cascade' }),
+  found: integer('found', { mode: 'boolean' }).notNull(),
+  reference: text('reference'),
+  kind: text('kind'),
+  startsOn: text('starts_on'),
+  expiresOn: text('expires_on'),
+  line: text('line'),
+  checkedAt: text('checked_at').notNull(),
+}, (t) => [primaryKey({ columns: [t.rentalId, t.registerId] })])
+export type RegisterHit = typeof registerHits.$inferSelect
 
 export const licenceSuggestions = sqliteTable('licence_suggestions', {
   id: text('id').primaryKey(),

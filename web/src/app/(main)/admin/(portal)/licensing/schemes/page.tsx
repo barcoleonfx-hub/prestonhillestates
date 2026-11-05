@@ -2,7 +2,8 @@ import Link from 'next/link'
 import { requireAdmin } from '@/lib/auth'
 import { loadSchemes } from '@/lib/licensing'
 import { KINDS, WARDS, councilLabel, fmtDay, isoDay, type Scheme } from '@/lib/licensing-rules'
-import { saveScheme } from '../../../licensing-actions'
+import { saveRegister, saveScheme } from '../../../licensing-actions'
+import { registers } from '@/lib/council-registers'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Council licensing schemes' }
@@ -65,6 +66,21 @@ export default async function SchemesPage() {
         )
       })}
       <details className="card card-pad lic-scheme"><summary><b>Add a scheme</b></summary><SchemeForm /></details>
+
+      <h2 style={{ margin: '28px 0 6px' }}>Council registers the portal downloads</h2>
+      <p className="card-sub" style={{ marginBottom: 12 }}>Checked every week. If a council moves its register, paste the new link here (the file itself, or the page that links to it).</p>
+      {(await registers()).map((g) => (
+        <form key={g.id} action={saveRegister} className="card card-pad lic-form" style={{ marginBottom: 10 }}>
+          <input type="hidden" name="id" value={g.id} />
+          <div className="today-head"><b>{g.name}</b><label className="lic-whole" style={{ margin: 0 }}><input type="checkbox" name="enabled" value="1" defaultChecked={g.enabled} /> Check it</label></div>
+          <div className="lic-grid">
+            <div className="field wide"><label>Register file (or page)</label><input name="url" className="input" defaultValue={g.url} /></div>
+            <div className="field wide"><label>Council page that links to it (used if the file link stops working)</label><input name="pageUrl" className="input" defaultValue={g.pageUrl ?? ''} /></div>
+          </div>
+          <p className="card-sub">{g.lastOkAt ? `Last read ${fmtDay(g.lastOkAt.slice(0, 10))}${g.asOf ? `, register dated ${g.asOf}` : ''}.` : 'Not read yet.'}{g.lastError ? ` Last problem: ${g.lastError}` : ''}</p>
+          <div className="actions" style={{ marginTop: 8 }}><button className="btn btn-ghost btn-sm" type="submit">Save</button></div>
+        </form>
+      ))}
     </>
   )
 }

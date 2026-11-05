@@ -919,3 +919,18 @@ kbd { font: 600 0.68rem/1 var(--sans, inherit); padding: 3px 6px; border-radius:
 .lic-doc-files > span { display: flex; gap: 10px; align-items: center; }
 @media (max-width: 760px) { .lic-doc-files { align-items: flex-start; } }
 .lic-noneed { display: flex; gap: 8px; align-items: flex-start; font-size: 0.86rem; font-weight: 600; margin: 4px 0 14px; } .lic-noneed small { font-weight: 400; color: var(--faint); } .lic-noneed input { margin-top: 3px; accent-color: var(--gold-deep); }
+.lic-two { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 16px; margin-bottom: 16px; }
+.lic-reglist { list-style: none; margin: 12px 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.lic-reglist li { display: flex; flex-direction: column; gap: 2px; font-size: 0.88rem; }
+.lic-regerr { color: var(--danger); }
+.lic-notlisted { margin-top: 4px; font-size: 0.7rem; font-weight: 800; color: #B3412A; }
+.lic-listed { margin-top: 4px; font-size: 0.7rem; font-weight: 700; color: #2F6B4E; }
+.lic-pcnote { background: var(--gold-wash); color: var(--gold-deep); display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+.lic-reghits { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.lic-reghits > div { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 12px; font-size: 0.86rem; }
+.lic-reghits .on { background: #E6F2EB; color: #2F6B4E; } .lic-reghits .off { background: #FCF1DE; color: #8A5A12; }
+.lic-reghits small { color: var(--ink-soft); }
+@media (max-width: 900px) { .lic-two { grid-template-columns: minmax(0, 1fr); } }
+.lic-two > * { min-width: 0; }
+.lic-regerr, .lic-reglist .addr-sub { overflow-wrap: anywhere; }
+.lic-regs .btn, .lic-pcs .btn { white-space: normal; text-align: left; height: auto; max-width: 100%; }

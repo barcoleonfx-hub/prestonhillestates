@@ -8,6 +8,7 @@ import { refreshPostcodeGeo } from '@/lib/postcode-geo'
 import { runCampaigns } from '@/lib/campaign-data'
 import { runLicensingChecks } from '@/lib/licensing'
 import { runLicenceScan } from '@/lib/licensing-scan'
+import { checkRegisters } from '@/lib/council-registers'
 import { after } from 'next/server'
 
 export const dynamic = 'force-dynamic'
@@ -34,6 +35,8 @@ export async function GET(req: Request) {
     await runLicensingChecks().catch((e) => console.error('licensing check failed', e))
     // Reading the mailbox for licences and certificates, while a scan is running (about a minute per run).
     await runLicenceScan().catch((e) => console.error('licence email scan failed', e))
+    // Councils' published licence registers: downloaded and checked against our properties once a week.
+    await checkRegisters().catch((e) => console.error('council register check failed', e))
     // Email campaigns: the next few emails, within the daily limit.
     await runCampaigns().catch((e) => console.error('campaign sending failed', e))
     await refreshSoldPrices().catch((e) => console.error('sold prices refresh failed', e))

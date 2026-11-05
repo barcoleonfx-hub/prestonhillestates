@@ -3,27 +3,37 @@ import { requireAdmin } from '@/lib/auth'
 import { rentalRegister } from '@/lib/licensing'
 import { bestOf, scanState, suggestionsFor } from '@/lib/licensing-scan'
 import { mailboxStatus } from '@/lib/mailbox'
-import { startEmailScan } from '../../licensing-actions'
+import { checkRegistersNow, findPostcodesNow, startEmailScan } from '../../licensing-actions'
+import { hitsFor, registers } from '@/lib/council-registers'
 import { siteBase } from '@/lib/property-email-data'
 import { BUCKETS, KINDS, bucketOf, councilLabel, fmtDay, inWords, isoDay, kindLabel, type Bucket } from '@/lib/licensing-rules'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Licensing' }
 
-type SP = { b?: string; council?: string; ward?: string; kind?: string; landlord?: string; q?: string; cert?: string }
+type SP = { b?: string; council?: string; ward?: string; kind?: string; landlord?: string; q?: string; cert?: string; pc?: string; reg?: string }
 
 export default async function LicensingPage({ searchParams }: { searchParams: Promise<SP> }) {
   await requireAdmin()
   const sp = await searchParams
   const [{ rows, schemes }, scan, waiting, box] = await Promise.all([rentalRegister(), scanState(), suggestionsFor(), mailboxStatus(), siteBase()])
   const toCheck = new Set(bestOf(waiting).map((s) => s.rentalId)).size
+  const [regs, hits] = await Promise.all([registers(), hitsFor(rows.map((r) => r.id))])
+  const regCouncils = new Set(regs.filter((r) => r.lastOkAt).map((r) => r.council))
+  const onRegister = new Set(hits.filter((h) => h.h.found).map((h) => h.h.rentalId))
+  // Properties in a council whose register we've read, thought to be licensed, but not found on it.
+  const notListed = rows.filter((r) => regCouncils.has(r.council ?? '') && !onRegister.has(r.id) && ['ok', 'due30', 'due90', 'due180'].includes(r.a.bucket))
+  const notListedIds = new Set(notListed.map((r) => r.id))
+  const noPostcode = rows.filter((r) => !r.postcode).length
+  const autoPostcode = rows.filter((r) => r.postcode && (r.postcodeSource === 'land_registry' || r.postcodeSource === 'online')).length
   const today = isoDay(new Date())
   const certBad = (r: (typeof rows)[number]) => r.a.certs.some((c) => c.state === 'expired' || c.state === 'due30' || (c.state === 'missing' && c.key !== 'epc'))
   const q = (sp.q ?? '').trim().toLowerCase()
   const shown = rows.filter((r) =>
     (!sp.b || r.a.bucket === sp.b) && (!sp.council || r.council === sp.council) && (!sp.ward || r.ward === sp.ward) &&
     (!sp.kind || r.a.needed === sp.kind || r.a.upcoming?.kind === sp.kind) && (!sp.landlord || (r.landlordName ?? '') === sp.landlord) &&
-    (!sp.cert || certBad(r)) && (!q || `${r.address} ${r.postcode ?? ''} ${r.landlordName ?? ''} ${r.licences.map((l) => l.number).join(' ')}`.toLowerCase().includes(q)))
+    (!sp.cert || certBad(r)) && (!sp.reg || notListedIds.has(r.id)) &&
+    (!sp.pc || (sp.pc === 'none' ? !r.postcode : sp.pc === 'auto' ? !!r.postcode && (r.postcodeSource === 'land_registry' || r.postcodeSource === 'online') : true)) && (!q || `${r.address} ${r.postcode ?? ''} ${r.landlordName ?? ''} ${r.licences.map((l) => l.number).join(' ')}`.toLowerCase().includes(q)))
   const count = (b: Bucket) => rows.filter((r) => r.a.bucket === b).length
   const wards = [...new Set(rows.map((r) => r.ward).filter(Boolean))].sort() as string[]
   const councils = [...new Set(['brent', 'harrow', ...rows.map((r) => r.council).filter(Boolean)])] as string[]
@@ -84,6 +94,47 @@ export default async function LicensingPage({ searchParams }: { searchParams: Pr
         </section>
       ) : null}
 
+      {rows.length ? (
+        <div className="lic-two">
+          <section className="card card-pad lic-regs">
+            <div className="today-head">
+              <div>
+                <h2>Council registers</h2>
+                <p className="card-sub">Brent and Harrow publish their registers of licensed properties. The portal downloads them every week and looks for each of your properties. Applications still being processed aren’t listed.</p>
+              </div>
+              <form action={checkRegistersNow}><button className="btn btn-ghost btn-sm" type="submit">Check now</button></form>
+            </div>
+            <ul className="lic-reglist">
+              {regs.map((g) => {
+                const mine = hits.filter((h) => h.h.registerId === g.id)
+                return (
+                  <li key={g.id}>
+                    <b>{g.name}</b>
+                    <span className="addr-sub">
+                      {g.lastOkAt ? `Read ${fmtDay(g.lastOkAt.slice(0, 10))}${g.asOf ? ` (register dated ${g.asOf})` : ''} · ${mine.filter((h) => h.h.found).length} of ${mine.length} of your ${councilLabel(g.council)} properties listed` : g.lastError ? '' : 'Not read yet: it runs within the next few minutes, or press Check now.'}
+                      {g.lastError ? <span className="lic-regerr"> {g.lastError}</span> : null}
+                    </span>
+                    {g.docId ? <Link className="lic-linkish" href={`/api/admin/licensing/registers/${g.id}`} target="_blank" rel="noreferrer">Open the downloaded register</Link> : null}
+                  </li>
+                )
+              })}
+              <li><b>Ealing and other councils</b><span className="addr-sub">Only searchable on their websites: use “Check the council’s register” on each property.</span></li>
+            </ul>
+            {notListed.length ? <Link className="btn btn-dark btn-sm" href={link({ reg: '1' })}>{notListed.length} we think are licensed weren’t found on the register</Link> : null}
+          </section>
+          <section className="card card-pad lic-pcs">
+            <h2>Postcodes</h2>
+            <p className="card-sub">{noPostcode ? `${noPostcode} propert${noPostcode === 1 ? 'y has' : 'ies have'} no postcode, so the ward (and whether a licence is needed) can’t be worked out.` : 'Every property has a postcode.'} {autoPostcode ? `${autoPostcode} were found automatically: worth a quick check.` : ''}</p>
+            <div className="actions" style={{ marginTop: 10 }}>
+              {noPostcode ? <Link className="btn btn-ghost btn-sm" href={link({ pc: 'none' })}>Show the {noPostcode} without</Link> : null}
+              {autoPostcode ? <Link className="btn btn-ghost btn-sm" href={link({ pc: 'auto' })}>Check the {autoPostcode} found automatically</Link> : null}
+              {noPostcode ? <form action={findPostcodesNow}><button className="btn btn-gold btn-sm" type="submit">Find missing postcodes</button></form> : null}
+            </div>
+            <p className="card-sub" style={{ marginTop: 8 }}>Tries the Land Registry address list (reads shortened and misspelt streets), then a map look-up. Runs in the background.</p>
+          </section>
+        </div>
+      ) : null}
+
       {!rows.length ? (
         <section className="card card-pad lic-empty">
           <h2>Start your licensing register</h2>
@@ -128,7 +179,7 @@ export default async function LicensingPage({ searchParams }: { searchParams: Pr
                     const b = bucketOf(r.a.bucket)
                     return (
                       <tr key={r.id} className={`tone-${b.tone}`}>
-                        <td><Link className="addr-main" href={`/admin/licensing/${r.id}`}>{r.address}</Link><div className="addr-sub">{r.postcode ?? 'No postcode'}</div></td>
+                        <td><Link className="addr-main" href={`/admin/licensing/${r.id}`}>{r.address}</Link><div className="addr-sub">{r.postcode ?? 'No postcode'}{r.postcode && (r.postcodeSource === 'land_registry' || r.postcodeSource === 'online') ? ' · found automatically' : ''}</div>{notListedIds.has(r.id) ? <div className="lic-notlisted">Not found on the council register</div> : onRegister.has(r.id) ? <div className="lic-listed">On the council register</div> : null}</td>
                         <td className="addr-sub">{r.council ? councilLabel(r.council) : '—'}{r.ward ? <><br />{r.ward}</> : null}</td>
                         <td className="addr-sub">{r.a.needed ? kindLabel(r.a.needed) : r.a.upcoming ? `${kindLabel(r.a.upcoming.kind)} from ${fmtDay(r.a.upcoming.scheme.startsOn)}` : 'None now'}</td>
                         <td>
