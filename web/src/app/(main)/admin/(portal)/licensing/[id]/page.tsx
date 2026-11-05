@@ -6,6 +6,8 @@ import { COUNCILS, bucketOf, councilLabel, fmtDay, inWords, kindLabel, OCCUPANCY
 import { archiveRental, lookUpArea, markChecked } from '../../../licensing-actions'
 import { LicenceList } from '../LicenceList'
 import { RentalForm } from '../RentalForm'
+import { bestOf, suggestionsFor } from '@/lib/licensing-scan'
+import { SuggestionReview } from '../found/SuggestionReview'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Licensing' }
@@ -17,6 +19,7 @@ export default async function RentalPage({ params, searchParams }: { params: Pro
   const v = await rentalView(id)
   if (!v) notFound()
   const { row: r } = v
+  const found = bestOf(await suggestionsFor([r.id]))
   const b = bucketOf(r.a.bucket)
   const council = COUNCILS.find((c) => c.value === r.council)
   const mail = r.landlordEmail && r.a.licence?.expiresOn ? `mailto:${r.landlordEmail}?subject=${encodeURIComponent(`Licence renewal: ${r.address}`)}&body=${encodeURIComponent(`Dear ${r.landlordName ?? 'landlord'},\n\nThe ${kindLabel(r.a.licence.kind).toLowerCase()} for ${r.address}${r.a.licence.number ? ` (${r.a.licence.number})` : ''} runs out on ${fmtDay(r.a.validUntil)}. To keep letting it legally, a renewal needs to be made before then.\n\nCould you let us know how you'd like to proceed? We're happy to handle the application for you.\n\nKind regards,\nPreston Hill Estates\n020 8127 7001`)}` : null
@@ -61,6 +64,14 @@ export default async function RentalPage({ params, searchParams }: { params: Pro
           ))}
         </div>
       </section>
+
+      {found.length ? (
+        <section className="card card-pad lic-found" style={{ marginTop: 18 }}>
+          <h2>Found in our emails</h2>
+          <p className="card-sub" style={{ margin: '4px 0 12px' }}>Details read from emails that mention this address. Check them, then use or dismiss each one.</p>
+          <SuggestionReview compact groups={[{ rentalId: r.id, address: r.address, items: found, current: { licence: r.a.licence ? `${r.a.licence.number ?? 'licence'}${r.a.licence.expiresOn ? ` until ${fmtDay(r.a.licence.expiresOn)}` : ''}` : null, gas: r.gasExpires ? fmtDay(r.gasExpires) : null, eicr: r.eicrExpires ? fmtDay(r.eicrExpires) : null, epc: r.epcExpires ? fmtDay(r.epcExpires) : null } }]} />
+        </section>
+      ) : null}
 
       <section className="card card-pad" style={{ marginTop: 18 }}>
         <h2>Licences</h2>

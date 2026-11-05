@@ -1,6 +1,10 @@
 import Link from 'next/link'
 import { requireAdmin } from '@/lib/auth'
 import { rentalRegister } from '@/lib/licensing'
+import { bestOf, scanState, suggestionsFor } from '@/lib/licensing-scan'
+import { mailboxStatus } from '@/lib/mailbox'
+import { startEmailScan } from '../../licensing-actions'
+import { siteBase } from '@/lib/property-email-data'
 import { BUCKETS, KINDS, bucketOf, councilLabel, fmtDay, inWords, isoDay, kindLabel, type Bucket } from '@/lib/licensing-rules'
 
 export const dynamic = 'force-dynamic'
@@ -11,7 +15,8 @@ type SP = { b?: string; council?: string; ward?: string; kind?: string; landlord
 export default async function LicensingPage({ searchParams }: { searchParams: Promise<SP> }) {
   await requireAdmin()
   const sp = await searchParams
-  const { rows, schemes } = await rentalRegister()
+  const [{ rows, schemes }, scan, waiting, box] = await Promise.all([rentalRegister(), scanState(), suggestionsFor(), mailboxStatus(), siteBase()])
+  const toCheck = new Set(bestOf(waiting).map((s) => s.rentalId)).size
   const today = isoDay(new Date())
   const certBad = (r: (typeof rows)[number]) => r.a.certs.some((c) => c.state === 'expired' || c.state === 'due30' || (c.state === 'missing' && c.key !== 'epc'))
   const q = (sp.q ?? '').trim().toLowerCase()
@@ -50,6 +55,32 @@ export default async function LicensingPage({ searchParams }: { searchParams: Pr
           {starting.map((s) => <div key={s.id}><b>{s.name}</b> starts on {fmtDay(s.startsOn)} ({inWords(Math.round((Date.parse(s.startsOn) - Date.now()) / 86400000))}). Properties it covers are marked “Scheme starting soon”.</div>)}
           {ending.map((s) => <div key={s.id}><b>{s.name}</b> ends on {fmtDay(s.endsOn)}. Check whether {councilLabel(s.council)} is renewing it.</div>)}
         </div>
+      ) : null}
+
+      {rows.length ? (
+        <section className="card card-pad lic-scan">
+          <div className="today-head">
+            <div>
+              <h2>Fill in from our emails</h2>
+              <p className="card-sub">
+                {scan.status === 'searching' ? 'Searching every folder of the mailbox for council licence emails and safety certificates…'
+                  : scan.status === 'reading' ? `Reading ${scan.queued.toLocaleString('en-GB')} likely emails and their PDF attachments: ${scan.read.toLocaleString('en-GB')} done, ${scan.docs.toLocaleString('en-GB')} relevant so far. This carries on in the background; you can leave the page.`
+                    : scan.status === 'done' ? `Last scan ${fmtDay(scan.finishedAt?.slice(0, 10) ?? null)}: ${scan.read.toLocaleString('en-GB')} emails read, ${scan.docs.toLocaleString('en-GB')} licences and certificates found. New properties are matched against them automatically.`
+                      : scan.status === 'error' ? `The last scan stopped: ${scan.error}`
+                        : `Reads the whole mailbox (every folder, the last 6 years) for council licence emails, gas safety records, EICRs and EPCs, including PDF attachments, and matches them to these ${rows.length} properties by address. You check everything before it’s added.`}
+                {scan.error && scan.status !== 'error' ? ` ${scan.error}` : ''}
+              </p>
+            </div>
+            <div className="actions">
+              {toCheck ? <Link className="btn btn-gold btn-sm" href="/admin/licensing/found">Check {toCheck} propert{toCheck === 1 ? 'y' : 'ies'} with details found</Link> : null}
+              {scan.status !== 'searching' && scan.status !== 'reading' ? (
+                <form action={startEmailScan}><button className="btn btn-ghost btn-sm" type="submit" disabled={!box?.hasPassword}>{scan.status === 'idle' ? 'Search our emails' : 'Search again'}</button></form>
+              ) : null}
+            </div>
+          </div>
+          {scan.status === 'reading' && scan.queued ? <div className="cmp-bar"><span style={{ width: `${Math.round((scan.read / scan.queued) * 100)}%` }} /></div> : null}
+          {!box?.hasPassword ? <p className="card-sub">Connect the mailbox in <Link href="/admin/email-inbox">Email settings</Link> first.</p> : null}
+        </section>
       ) : null}
 
       {!rows.length ? (

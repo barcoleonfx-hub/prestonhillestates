@@ -882,3 +882,27 @@ kbd { font: 600 0.68rem/1 var(--sans, inherit); padding: 3px 6px; border-radius:
   .lic-grid .wide { grid-column: auto; }
   .lic-dash-list li { grid-template-columns: 1fr; gap: 2px; }
 }
+
+/* Details found in the mailbox */
+.lic-scan { margin-bottom: 16px; border-left: 5px solid var(--gold); }
+.lic-found { border-left: 5px solid #2B4C7E; }
+.sug { display: flex; flex-direction: column; gap: 14px; }
+.sug-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; position: sticky; top: 0; background: var(--surface); padding: 8px 0; z-index: 2; border-bottom: 1px solid var(--line-soft); }
+.sug-bar > span { font-size: 0.84rem; font-weight: 700; margin-right: 6px; }
+.sug-group h3 { font-size: 0.96rem; margin-bottom: 8px; }
+.sug-group h3 a { color: var(--ink); }
+.sug-item { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; margin-bottom: 6px; }
+.sug-item input { margin-top: 3px; accent-color: var(--gold-deep); width: 16px; height: 16px; }
+.sug-top { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; font-size: 0.9rem; }
+.sug-how { font-size: 0.8rem; color: var(--ink-soft); margin-top: 3px; }
+.sug-src { font-size: 0.74rem; color: var(--faint); margin-top: 3px; word-break: break-word; }
+.sug-conf { font-size: 0.68rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; }
+.sug-conf.c-high { background: #E6F2EB; color: #2F6B4E; } .sug-conf.c-medium { background: #FAF5D8; color: #9A8417; } .sug-conf.c-low { background: #FBEDE8; color: #B3412A; }
+.imp-map { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; margin-top: 12px; }
+.imp-map label { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; }
+.imp-map label.set { border-color: var(--gold); background: var(--gold-wash); }
+.imp-map label > span { font-size: 0.84rem; font-weight: 700; display: flex; flex-direction: column; }
+.imp-map small { font-size: 0.64rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); font-weight: 700; }
+.imp-map em { font-style: normal; font-size: 0.74rem; color: var(--faint); min-height: 1em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.imp-update { display: flex; gap: 8px; align-items: flex-start; font-size: 0.84rem; margin-top: 8px; max-width: 640px; }
+.imp-update input { margin-top: 3px; accent-color: var(--gold-deep); }

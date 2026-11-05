@@ -9,7 +9,7 @@ import { bulkSender } from './mailbox'
 import { PROPERTY_TYPES, FURNISHING, labelFor } from './options'
 import { displayAddressFor, headlineFor, listPublished, priceLabel, slugFor } from './properties'
 import { LR_CREDIT, PATCH, TYPE_LABEL } from './sold-prices'
-import { oneClickUrl, unsubscribeUrl } from './property-email-data'
+import { knownBase, oneClickUrl, unsubscribeUrl } from './property-email-data'
 import { now } from './util'
 
 // ---------- what goes in the emails ----------
@@ -225,7 +225,7 @@ export async function runCampaigns(): Promise<{ ran: boolean; sent?: number; err
   const live = await db.select().from(campaigns).where(eq(campaigns.status, 'sending')).orderBy(asc(campaigns.startedAt)).limit(1)
   if (!live.length || !(await claim())) return { ran: false }
   const c = live[0]
-  const base = (parseContent(c) as Content & { base?: string }).base ?? process.env.PORTAL_URL?.replace(/\/$/, '') ?? 'http://localhost:3000'
+  const base = (parseContent(c) as Content & { base?: string }).base ?? await knownBase()
   const { perDay } = await campaignLimits()
   const allowance = Math.min(PER_TICK, perDay - (await sentToday()))
   if (allowance <= 0) {

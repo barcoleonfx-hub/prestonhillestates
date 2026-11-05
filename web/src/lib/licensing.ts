@@ -4,7 +4,8 @@ import { db, getClient, ready } from '@/db/client'
 import { admins, licenceReminders, licences, licensingSchemes, notifications, postcodeWards, rentals, type LicenceRow, type Rental } from '@/db/schema'
 import { assess, councilLabel, dueReminders, fmtDay, isoDay, SEED_SCHEMES, type Assessment, type Council, type Licence, type Occupancy, type Scheme } from './licensing-rules'
 import { bulkSender } from './mailbox'
-import { portalUrl, sendMail } from './mailer'
+import { sendMail } from './mailer'
+import { knownBase } from './property-email-data'
 import { now, uid } from './util'
 
 // ---------- schemes ----------
@@ -169,9 +170,11 @@ export async function runLicensingChecks(opts: { force?: boolean } = {}): Promis
 
   // Pop-ups for everyone in the office.
   for (const f of fresh.slice(0, 40)) {
-    await db.insert(notifications).values({ id: uid(), kind: 'licence', appointmentId: null, taskId: null, targetAdminId: null, title: f.title, body: `${f.body}\n${portalUrl(`/admin/licensing/${f.rental.id}`)}`, createdBy: null, createdAt: now() })
+    await db.insert(notifications).values({ id: uid(), kind: 'licence', appointmentId: null, taskId: null, targetAdminId: null, title: f.title, body: `${f.body}\n/admin/licensing/${f.rental.id}`, createdBy: null, createdAt: now() })
   }
   // One summary email to the admins.
+  const base = await knownBase()
+  const portalUrl = (p: string) => `${base}${p}`
   const to = (await db.select({ email: admins.email }).from(admins).where(eq(admins.role, 'admin'))).map((a) => a.email).filter(Boolean)
   if (to.length) {
     const urgent = fresh.filter((f) => f.urgent)
