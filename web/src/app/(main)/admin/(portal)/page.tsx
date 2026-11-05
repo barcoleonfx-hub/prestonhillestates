@@ -8,8 +8,6 @@ import { listBetween } from '@/lib/appointments'
 import { kindLabel } from '@/lib/appointment-options'
 import { addDays, dayLabel, endIso, fmtTime, isoToLondon, londonToIso, todayLondon } from '@/lib/time'
 import { createProperty } from '../actions'
-import { rentalRegister } from '@/lib/licensing'
-import { bucketOf, fmtDay, inWords } from '@/lib/licensing-rules'
 import { ActivityFeed } from './ActivityFeed'
 import { LogCallButton } from './LogCallButton'
 
@@ -25,8 +23,7 @@ export default async function Dashboard() {
   const nowIso = new Date().toISOString()
 
   const n = async (where?: SQL) => (await db.select({ c: count() }).from(properties).where(where))[0].c
-  const [lic, open, activity, todays, [{ overdue }], [{ dueToday }], liveSale, liveLet, drafts, progressing] = await Promise.all([
-    rentalRegister().catch(() => ({ rows: [] as Awaited<ReturnType<typeof rentalRegister>>['rows'] })),
+  const [open, activity, todays, [{ overdue }], [{ dueToday }], liveSale, liveLet, drafts, progressing] = await Promise.all([
     openEnquiryItems(),
     activityBetween(startToday, endToday),
     listBetween(startToday, endToday),
@@ -53,37 +50,6 @@ export default async function Dashboard() {
           <Link className="btn btn-dark" href="/admin/diary/new">Book appointment</Link>
         </div>
       </div>
-
-      {lic.rows.length ? (() => {
-        const act = lic.rows.filter((r) => ['unlicensed', 'expired', 'due30', 'due90', 'upcoming'].includes(r.a.bucket) || r.a.certs.some((c) => c.state === 'expired' || c.state === 'due30'))
-        return (
-          <section className={`card card-pad lic-dash${act.some((r) => ['unlicensed', 'expired', 'due30'].includes(r.a.bucket)) ? ' urgent' : ''}`} style={{ marginBottom: 18 }}>
-            <div className="today-head">
-              <div>
-                <h2>Licensing{act.length ? ` · ${act.length} need attention` : ''}</h2>
-                <p className="card-sub">{act.length ? 'Licences and certificates expired, due within 90 days, or a scheme starting soon.' : `All ${lic.rows.length} rented properties are licensed or don’t need one, with nothing due in the next 90 days.`}</p>
-              </div>
-              <Link className="btn btn-ghost btn-sm" href="/admin/licensing">Licensing register</Link>
-            </div>
-            {act.length ? (
-              <ul className="lic-dash-list">
-                {act.slice(0, 6).map((r) => {
-                  const b = bucketOf(r.a.bucket), cert = r.a.certs.find((c) => c.state === 'expired' || c.state === 'due30')
-                  const showCert = !['unlicensed', 'expired', 'due30', 'due90', 'upcoming'].includes(r.a.bucket) && cert
-                  return (
-                    <li key={r.id}>
-                      <Link href={`/admin/licensing/${r.id}`}>{r.address}</Link>
-                      <span className={`lic-pill t-${showCert ? 'amber' : b.tone}`}>{showCert ? `${cert.label} ${cert.days! < 0 ? 'expired' : 'due'}` : b.label}</span>
-                      <span className="addr-sub">{showCert ? fmtDay(cert.date) : r.a.validUntil && r.a.days != null ? `${fmtDay(r.a.validUntil)} · ${inWords(r.a.days)}` : r.a.upcoming ? `from ${fmtDay(r.a.upcoming.scheme.startsOn)}` : ''}</span>
-                    </li>
-                  )
-                })}
-              </ul>
-            ) : null}
-            {act.length > 6 ? <Link className="btn btn-ghost btn-sm" style={{ marginTop: 10 }} href="/admin/licensing">See all {act.length}</Link> : null}
-          </section>
-        )
-      })() : null}
 
       <section className={`card card-pad inbox${open.length ? ' has-items' : ''}`} aria-labelledby="inbox-h">
         <div className="today-head">

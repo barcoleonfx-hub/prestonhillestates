@@ -6,10 +6,7 @@ import { checkMailbox } from '@/lib/mailbox'
 import { backfillAddresses, refreshSoldPrices } from '@/lib/sold-prices'
 import { refreshPostcodeGeo } from '@/lib/postcode-geo'
 import { runCampaigns } from '@/lib/campaign-data'
-import { runLicensingChecks } from '@/lib/licensing'
-import { runLicenceScan } from '@/lib/licensing-scan'
-import { checkRegisters } from '@/lib/council-registers'
-import { runEpcChecks } from '@/lib/epc'
+import { removeLicensingFiles } from '@/lib/cleanup'
 import { after } from 'next/server'
 
 export const dynamic = 'force-dynamic'
@@ -36,11 +33,8 @@ export async function GET(req: Request) {
     // so the server never does two memory-hungry things back to back.
     // Campaign emails are light (a dozen per run): always send them.
     await runCampaigns().catch((e) => console.error('campaign sending failed', e))
+    await removeLicensingFiles().catch((e) => console.error('removing old licensing files failed', e))
     const heavy = [
-      () => runLicensingChecks(), // every few hours: postcodes, wards, licence reminders
-      () => runEpcChecks(), // every few hours: EPCs from GOV.UK for any missing, due or unchecked
-      () => checkRegisters(), // weekly: download and read the councils' registers
-      () => runLicenceScan(), // while a mailbox scan is running
       () => refreshSoldPrices(), // daily check, monthly reload
       () => backfillAddresses(), // once: the address archive back to 1995
       () => refreshPostcodeGeo(), // every few months

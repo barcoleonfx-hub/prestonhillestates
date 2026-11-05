@@ -25,7 +25,7 @@ function Icon({ name }: { name: string }) {
   )
 }
 
-export function NavLinks({ newEnquiries, today, outcomes, callbacks, licensing, isAdmin }: { newEnquiries: number; today: number; outcomes: number; callbacks: number; licensing: number; isAdmin: boolean }) {
+export function NavLinks({ newEnquiries, today, outcomes, callbacks, isAdmin }: { newEnquiries: number; today: number; outcomes: number; callbacks: number; isAdmin: boolean }) {
   const path = usePathname()
   const on = (href: string) => (href === '/admin' ? path === '/admin' : path.startsWith(href)) ? 'on' : undefined
   return (
@@ -42,9 +42,6 @@ export function NavLinks({ newEnquiries, today, outcomes, callbacks, licensing, 
         {outcomes > 0 ? <span className="count warn" title="Outcomes waiting">{outcomes}</span> : today > 0 ? <span className="count" title="Today">{today}</span> : null}
       </Link>
       <Link href="/admin/properties" className={on('/admin/properties')}><Icon name="homes" />Properties</Link>
-      <Link href="/admin/licensing" className={on('/admin/licensing')}>
-        <Icon name="shield" />Licensing{licensing > 0 ? <span className="count warn" title="Need action now">{licensing}</span> : null}
-      </Link>
       <Link href="/admin/enquiries" className={on('/admin/enquiries')}>
         <Icon name="mail" />Enquiries{newEnquiries > 0 ? <span className="count">{newEnquiries}</span> : null}
       </Link>
