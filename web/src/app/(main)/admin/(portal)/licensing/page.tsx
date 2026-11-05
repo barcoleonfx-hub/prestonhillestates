@@ -3,10 +3,10 @@ import { requireAdmin } from '@/lib/auth'
 import { rentalRegister } from '@/lib/licensing'
 import { bestOf, scanState, suggestionsFor } from '@/lib/licensing-scan'
 import { mailboxStatus } from '@/lib/mailbox'
-import { checkRegistersNow, findPostcodesNow, setAutofill, startEmailScan } from '../../licensing-actions'
+import { checkRegistersNow, findPostcodesNow, lastImport, setAutofill, startEmailScan } from '../../licensing-actions'
 import { db } from '@/db/client'
-import { licenceSuggestions, settings } from '@/db/schema'
-import { eq } from 'drizzle-orm'
+import { licenceSuggestions, rentals, settings } from '@/db/schema'
+import { count as countOf, eq } from 'drizzle-orm'
 import { hitsFor, registers } from '@/lib/council-registers'
 import { siteBase } from '@/lib/property-email-data'
 import { LicTabs } from './LicTabs'
@@ -33,6 +33,9 @@ export default async function LicensingPage({ searchParams }: { searchParams: Pr
     db.query.settings.findFirst({ where: eq(settings.key, 'licensing_autofill') }),
   ])
   const autofillOn = autoSetting?.value !== 'off'
+  const [li, [{ n: archivedN }]] = await Promise.all([lastImport(), db.select({ n: countOf() }).from(rentals).where(eq(rentals.archived, true))])
+  const liAge = li ? Date.now() - Date.parse(li.at) : Infinity
+  const liStuck = li?.status === 'running' && liAge > 10 * 60_000
   const withEpc = rows.filter((r) => r.epcRef).length, epcChecked = rows.filter((r) => r.epcCheckedAt).length
   const noPostcode = rows.filter((r) => !r.postcode).length
   const autoPostcode = rows.filter((r) => r.postcode && (r.postcodeSource === 'land_registry' || r.postcodeSource === 'online')).length
@@ -71,6 +74,20 @@ export default async function LicensingPage({ searchParams }: { searchParams: Pr
         </div>
       </div>
       <LicTabs on="licensing" tracked={rows.length} />
+      {li && liAge < 3 * 86400_000 ? (
+        <div className={`notice ${li.status === 'done' ? 'ok' : li.status === 'running' && !liStuck ? '' : 'err'}`} style={{ marginBottom: 14 }}>
+          <b>Last import: {li.label}</b> ({new Date(li.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' })}, {li.by}).{' '}
+          {li.status === 'done' ? `${li.added ?? 0} added, ${li.updated ?? 0} updated${li.skipped ? `, ${li.skipped} left out` : ''}. ${li.tracked ?? rows.length} properties tracked.`
+            : li.status === 'failed' ? <>It stopped with an error: {li.error}. <Link href="/admin/licensing/import">Import it again</Link>.</>
+              : liStuck ? <>It didn’t finish: the portal restarted while it ran. <Link href="/admin/licensing/import">Import it again</Link>; nothing is duplicated.</>
+                : 'Still running…'}
+        </div>
+      ) : null}
+      {archivedN > rows.length ? (
+        <div className="notice" style={{ marginBottom: 14 }}>
+          <b>{archivedN.toLocaleString('en-GB')} properties are archived on Rentman</b> and kept for records only. The properties on your licensing spreadsheet are the ones tracked here: <Link href="/admin/licensing/import">import the spreadsheet</Link> (Main tab first, then Brent, Harrow and the rest) and each one it matches is tracked again.
+        </div>
+      ) : null}
 
       {starting.length || ending.length ? (
         <div className="notice lic-schemes-note">
