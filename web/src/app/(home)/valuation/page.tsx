@@ -42,7 +42,7 @@ export default async function ValuationPage({ searchParams }: { searchParams: Pr
   }
 
   return (
-    <PageChrome>
+    <PageChrome reviews={false}>
       <main className="vx" id="top">
         <section className="vx-hero">
           <div className="wide vx-hero-grid">

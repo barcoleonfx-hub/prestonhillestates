@@ -1,3 +1,4 @@
+import { Reviews } from '@/app/(home)/Reviews'
 import Link from 'next/link'
 import type { Metadata } from 'next'
 import { PROPERTY_TYPES } from '@/lib/options'
@@ -142,6 +143,7 @@ export default async function PropertySearch({ searchParams }: { searchParams: S
           ))}
         </div>
       )}
+      <Reviews site category={channel === 'let' ? 'lettings' : channel === 'sale' ? 'sales' : 'any'} />
     </div>
   )
 }

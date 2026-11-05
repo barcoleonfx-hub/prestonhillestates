@@ -35,7 +35,7 @@ export default async function RentingPage() {
   const lets = (await listPublished({ channel: 'let' }).catch(() => [])).filter((p) => p.status === 'available').slice(0, 6)
   const faqLd = { '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: FAQS.map(([q, a]) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } })) }
   return (
-    <PageChrome>
+    <PageChrome reviews={false}>
       <main className="vx lx tx" id="top">
         <section className="vx-hero">
           <div className="wide vx-hero-grid">

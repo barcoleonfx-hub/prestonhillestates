@@ -4,7 +4,7 @@ import { labelFor, PROPERTY_TYPES } from '@/lib/options'
 import { MARKUP, SCRIPT } from './home-content'
 import { LR_CREDIT, patchSummary } from '@/lib/sold-prices'
 import { googleSummary, reviewsFor } from '@/lib/reviews-data'
-import './home-reviews.css'
+import './reviews.css'
 
 export const dynamic = 'force-dynamic'
 
@@ -78,7 +78,7 @@ async function reviewsBand(): Promise<string | null> {
       <blockquote>${esc(r.text)}</blockquote>
       <figcaption>Google review</figcaption>
     </figure>`).join('\n')
-  return `<section class="rx rx-home" aria-labelledby="rx-h">
+  return `<section class="rx" aria-labelledby="rx-h">
     <div class="wide">
       <div class="label rv"><b>Reviews</b> · from Google</div>
       <h2 class="sect rv d1" id="rx-h">What our clients <em>say</em></h2>
