@@ -814,3 +814,11 @@ kbd { font: 600 0.68rem/1 var(--sans, inherit); padding: 3px 6px; border-radius:
 .rv-form .field, .rv-grid .field { display: grid; gap: 6px; margin: 0; }
 .rv-form .field > span, .rv-grid .field > span { font-size: 0.78rem; font-weight: 600; color: var(--ink-soft); }
 .rv-grid .field.wide { grid-column: 1 / -1; }
+.rv-shots-pick { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+.rv-found { display: grid; gap: 10px; margin-top: 10px; }
+.rv-found-row { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; opacity: 0.7; }
+.rv-found-row.on { opacity: 1; border-color: var(--gold); background: var(--gold-wash); }
+.rv-inc { display: flex; gap: 6px; align-items: center; font-weight: 600; font-size: 0.86rem; }
+.rv-found-main { display: grid; gap: 8px; min-width: 0; }
+.rv-found-top { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.8fr) minmax(0, 0.9fr) minmax(0, 1fr); gap: 8px; }
+@media (max-width: 760px) { .rv-found-top { grid-template-columns: 1fr 1fr; } .rv-found-row { grid-template-columns: 1fr; } }
