@@ -934,3 +934,10 @@ kbd { font: 600 0.68rem/1 var(--sans, inherit); padding: 3px 6px; border-radius:
 .lic-two > * { min-width: 0; }
 .lic-regerr, .lic-reglist .addr-sub { overflow-wrap: anywhere; }
 .lic-regs .btn, .lic-pcs .btn { white-space: normal; text-align: left; height: auto; max-width: 100%; }
+.lic-auto { margin-bottom: 16px; border-left: 5px solid #2F6B4E; }
+.lic-autolist { list-style: none; margin: 10px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; font-size: 0.86rem; }
+.lic-autolist li { padding: 10px 12px; border: 1px solid var(--line-soft); border-radius: 12px; }
+.lic-autolist b { font-family: var(--serif); font-size: 1.2rem; font-weight: 500; margin-right: 4px; }
+.lic-autoitems { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.lic-autoitems li { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; }
+.lic-autoitems li > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 0.86rem; }

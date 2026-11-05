@@ -5,6 +5,7 @@ import { rentalView } from '@/lib/licensing'
 import { COUNCILS, bucketOf, councilLabel, fmtDay, inWords, kindLabel, OCCUPANCY } from '@/lib/licensing-rules'
 import { archiveRental, confirmPostcode, lookUpArea, markChecked } from '../../../licensing-actions'
 import { hitsFor } from '@/lib/council-registers'
+import { epcUrl } from '@/lib/epc'
 import { LicenceList } from '../LicenceList'
 import { RentalForm } from '../RentalForm'
 import { bestOf, documentsFor, suggestionsFor } from '@/lib/licensing-scan'
@@ -80,6 +81,7 @@ export default async function RentalPage({ params, searchParams }: { params: Pro
               <b>{c.label}</b>
               <span>{c.date ? `${c.days! < 0 ? 'Expired' : 'Until'} ${fmtDay(c.date)}` : 'Not on file'}{c.days != null && c.days >= 0 ? ` · ${inWords(c.days)}` : ''}</span>
               {c.note ? <small>{c.note}</small> : null}
+              {c.key === 'epc' && r.epcRef ? <a className="lic-linkish" href={epcUrl(r.epcRef)!} target="_blank" rel="noreferrer">View the EPC on GOV.UK{r.epcRating ? ` (rated ${r.epcRating})` : ''}</a> : c.key === 'epc' && r.epcCheckedAt ? <small>None found on GOV.UK for this address ({fmtDay(r.epcCheckedAt.slice(0, 10))})</small> : null}
             </div>
           ))}
         </div>

@@ -229,3 +229,25 @@ ${[...urgent, ...fresh.filter((f) => !f.urgent)].map(line).join('')}
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
 export { councilLabel }
+
+/**
+ * Everything that happens on its own after properties are imported or added: postcodes, council and ward,
+ * EPCs from GOV.UK, matching emails already read (and a first full mailbox search if there hasn't been one),
+ * then the councils' registers. Clear results fill the gaps automatically; the rest wait for review.
+ */
+export async function fillInEverything(by: string | null, opts: { registers?: boolean } = {}) {
+  const step = async (name: string, f: () => Promise<unknown>) => { try { await f() } catch (e) { console.error(`after import: ${name} failed`, e) } }
+  await step('postcodes', () => fillPostcodes({ seconds: 600 }))
+  await step('wards', () => fillAreas(1000))
+  await step('EPCs', async () => { const { runEpcChecks } = await import('./epc'); await runEpcChecks({ force: true, seconds: 900 }) })
+  await step('emails', async () => {
+    const { matchDocs, autoApply, scanState, startScan } = await import('./licensing-scan')
+    await matchDocs()
+    await autoApply()
+    const st = await scanState()
+    const { mailboxStatus } = await import('./mailbox')
+    // The first time, search the whole mailbox; the scheduler then works through it in the background.
+    if ((st.status === 'idle' || st.status === 'error') && (await mailboxStatus())?.hasPassword) await startScan(by ?? 'system')
+  })
+  if (opts.registers !== false) await step('registers', async () => { const { checkRegisters } = await import('./council-registers'); await checkRegisters({ force: true }) })
+}

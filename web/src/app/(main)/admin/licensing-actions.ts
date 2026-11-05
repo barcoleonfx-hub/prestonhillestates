@@ -80,7 +80,8 @@ export async function saveRental(_prev: { error?: string } | undefined, f: FormD
   else { rid = uid(); await db.insert(rentals).values({ id: rid, ...values, createdBy: me.id, createdAt: now() }) }
   const r = await db.query.rentals.findFirst({ where: eq(rentals.id, rid) })
   if (r && r.wardSource === 'auto') await refreshArea(r).catch(() => false)
-  after(async () => { const { matchDocs } = await import('@/lib/licensing-scan'); await matchDocs([rid]).catch(() => 0) })
+  if (!id) after(async () => { const { fillInEverything } = await import('@/lib/licensing'); await fillInEverything(me.id, { registers: false }) })
+  else after(async () => { const { matchDocs, autoApply } = await import('@/lib/licensing-scan'); await matchDocs([rid]).catch(() => 0); await autoApply([rid]).catch(() => 0) })
   await audit(me.id, id ? 'rental_update' : 'rental_create', 'rental', rid, i.address.slice(0, 80))
   done(rid)
   redirect(`/admin/licensing/${rid}${id ? '?saved=1' : ''}`)
@@ -421,14 +422,8 @@ export async function commitImport(rows: string[][], map: Mapping, update: boole
     }
   }
   await audit(me.id, 'rental_import', 'rental', 'import', `${added} added, ${updated} updated`)
-  // Look up every new council and ward straight away (100 postcodes per request), then match stored emails.
-  after(async () => {
-    const { fillPostcodes } = await import('@/lib/licensing')
-    await fillPostcodes({ seconds: 600 }).catch((e) => console.error('postcode finding after import failed', e))
-    await fillAreas(1000).catch((e) => console.error('ward look-up after import failed', e))
-    const { matchDocs } = await import('@/lib/licensing-scan')
-    await matchDocs().catch((e) => console.error('matching emails after import failed', e))
-  })
+  // Then everything else happens on its own: postcodes, wards, EPCs, emails, council registers.
+  after(async () => { const { fillInEverything } = await import('@/lib/licensing'); await fillInEverything(me.id) })
   done()
   return { added, updated, skipped }
 }
@@ -500,4 +495,22 @@ export async function confirmPostcode(f: FormData) {
   const id = str(f, 'id', 64)
   await db.update(rentals).set({ postcodeSource: 'manual', postcodeNote: 'Checked by staff' }).where(eq(rentals.id, id))
   done(id)
+}
+
+export async function undoFound(id: string) {
+  const me = await requireAdmin()
+  const { undoSuggestion } = await import('@/lib/licensing-scan')
+  await undoSuggestion(id, me.id)
+  await audit(me.id, 'licence_suggestion_undo', 'rental', id)
+  done()
+}
+
+export async function setAutofill(f: FormData) {
+  await requireAdmin()
+  await ready()
+  const { settings } = await import('@/db/schema')
+  const value = str(f, 'on') === '1' ? 'on' : 'off'
+  await db.insert(settings).values({ key: 'licensing_autofill', value, updatedAt: now() }).onConflictDoUpdate({ target: settings.key, set: { value, updatedAt: now() } })
+  if (value === 'on') after(async () => { const { autoApply } = await import('@/lib/licensing-scan'); await autoApply().catch(() => 0) })
+  done()
 }

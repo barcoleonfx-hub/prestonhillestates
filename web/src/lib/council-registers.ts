@@ -185,6 +185,8 @@ export async function checkRegisters(opts: { force?: boolean } = {}): Promise<{ 
       }
       await db.update(councilRegisters).set({ lastFetchedAt: now(), lastOkAt: now(), lastError: null, asOf, entries: lines.length, fileKey: key, docId, url: reg.url, updatedAt: now() }).where(eq(councilRegisters.id, reg.id))
       results.push({ name: reg.name, ok: true, found, of: rs.length })
+      const { autoApply } = await import('./licensing-scan')
+      await autoApply(rs.map((r) => r.id)).catch((e) => console.error('auto-fill failed', e))
     } catch (e) {
       const error = (e as Error).message.slice(0, 300)
       await db.update(councilRegisters).set({ lastFetchedAt: now(), lastError: error, updatedAt: now() }).where(eq(councilRegisters.id, reg.id))

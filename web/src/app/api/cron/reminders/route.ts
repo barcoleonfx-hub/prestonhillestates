@@ -9,6 +9,7 @@ import { runCampaigns } from '@/lib/campaign-data'
 import { runLicensingChecks } from '@/lib/licensing'
 import { runLicenceScan } from '@/lib/licensing-scan'
 import { checkRegisters } from '@/lib/council-registers'
+import { runEpcChecks } from '@/lib/epc'
 import { after } from 'next/server'
 
 export const dynamic = 'force-dynamic'
@@ -37,6 +38,7 @@ export async function GET(req: Request) {
     await runCampaigns().catch((e) => console.error('campaign sending failed', e))
     const heavy = [
       () => runLicensingChecks(), // every few hours: postcodes, wards, licence reminders
+      () => runEpcChecks(), // every few hours: EPCs from GOV.UK for any missing, due or unchecked
       () => checkRegisters(), // weekly: download and read the councils' registers
       () => runLicenceScan(), // while a mailbox scan is running
       () => refreshSoldPrices(), // daily check, monthly reload
