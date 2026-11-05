@@ -320,7 +320,7 @@ ${gs.map((g) => `<table role="presentation" width="100%" cellpadding="0" cellspa
 <p style="margin:0 0 14px; font-family:${SERIF}; font-size:28px; line-height:34px; color:#FFFDF6;">${c.h}</p>
 <p style="margin:0 0 22px; font-family:${SANS}; font-size:14px; line-height:22px; color:#B9B4A0;">${esc(c.p)}</p>
 ${button(withUtm(c.url, campaign, 'newsletter'), c.btn)}
-<p style="margin:16px 0 0; font-family:${SANS}; font-size:13px; color:#98937F;">Or call the branch: <a href="tel:+442081277001" style="color:${C.goldBtn}; text-decoration:none;">020 8127 7001</a></p></td></tr>`
+<p style="margin:16px 0 0; font-family:${SANS}; font-size:13px; color:#98937F;">Or call the branch: <a href="tel:+442089049005" style="color:${C.goldBtn}; text-decoration:none;">020 8904 9005</a></p></td></tr>`
     }
   }
 }
@@ -335,7 +335,7 @@ export function renderCampaign(c: Content, r: Reader, s: Shared, opts: { campaig
   // A thin line between two white sections so they don't run together.
   const white = (h: string) => h.startsWith(`<tr><td bgcolor="${C.card}"`)
   const joined = body.map((h, i) => (i && white(h) && white(body[i - 1]) ? rule + h : h)).join('\n')
-  const sign = c.signedBy.trim() ? section(`<p style="margin:0; font-family:${SANS}; font-size:15px; color:${C.ink};">With best wishes,</p><p style="margin:4px 0 0; font-family:${SERIF}; font-size:20px; color:${C.ink};">${esc(c.signedBy)}</p><p style="margin:2px 0 0; font-family:${SANS}; font-size:13px; color:${C.faint};">Preston Hill Estates &middot; 020 8127 7001</p>`, C.card, '24px 40px 34px') : ''
+  const sign = c.signedBy.trim() ? section(`<p style="margin:0; font-family:${SANS}; font-size:15px; color:${C.ink};">With best wishes,</p><p style="margin:4px 0 0; font-family:${SERIF}; font-size:20px; color:${C.ink};">${esc(c.signedBy)}</p><p style="margin:2px 0 0; font-family:${SANS}; font-size:13px; color:${C.faint};">Preston Hill Estates &middot; 020 8904 9005</p>`, C.card, '24px 40px 34px') : ''
   const html = `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -363,7 +363,7 @@ ${sign}
 <p style="margin:0 0 6px; font-family:${SANS}; font-size:13px; line-height:20px; color:${C.body};"><b>Preston Hill Estates</b> &middot; Est. 2004</p>
 <p style="margin:0 0 6px; font-family:${SANS}; font-size:13px; line-height:20px; color:${C.faint};">271 Preston Road, Harrow HA3 0PS</p>
 <p style="margin:0 0 6px; font-family:${SANS}; font-size:13px; line-height:20px; color:${C.faint};">Monday to Friday 9.00 to 17.30 &middot; Saturday 10.00 to 13.00</p>
-<p style="margin:0 0 18px; font-family:${SANS}; font-size:13px; line-height:20px;"><a href="tel:+442081277001" style="color:${C.gold}; text-decoration:none;">020 8127 7001</a> &middot; <a href="mailto:${esc(opts.sender.email)}" style="color:${C.gold}; text-decoration:none;">${esc(opts.sender.email)}</a></p>
+<p style="margin:0 0 18px; font-family:${SANS}; font-size:13px; line-height:20px;"><a href="tel:+442089049005" style="color:${C.gold}; text-decoration:none;">020 8904 9005</a> &middot; <a href="mailto:${esc(opts.sender.email)}" style="color:${C.gold}; text-decoration:none;">${esc(opts.sender.email)}</a></p>
 <p style="margin:0 0 18px; font-family:${SANS}; font-size:10px; letter-spacing:2px; color:#B8B4A2;">THE PROPERTY OMBUDSMAN &middot; SAFEAGENT &middot; PRS &middot; MYDEPOSITS</p>
 <p style="margin:0 0 6px; font-family:${SANS}; font-size:12px; line-height:18px; color:${C.faint};">You’re getting this because you’ve been in touch with Preston Hill Estates about buying, selling, renting or letting a home.</p>
 <p style="margin:0 0 8px; font-family:${SANS}; font-size:12px; line-height:18px;"><a href="${esc(r.unsubscribeUrl)}" style="color:${C.faint};">Unsubscribe from our emails</a></p>
@@ -386,10 +386,10 @@ function textVersion(c: Content, r: Reader, s: Shared, campaign: string) {
     else if (b.kind === 'guides') {
       const gs = (b.slugs.length ? s.guides.filter((g) => b.slugs.includes(g.slug)) : s.guides).slice(0, 3)
       if (gs.length) out.push('FROM OUR GUIDES', ...gs.map((g) => `- ${g.title}: ${g.url}`))
-    } else if (b.kind === 'cta') out.push(`Call the branch on 020 8127 7001, or visit ${s.base}/valuation for a free valuation.`)
+    } else if (b.kind === 'cta') out.push(`Call the branch on 020 8904 9005, or visit ${s.base}/valuation for a free valuation.`)
     out.push('')
   }
-  if (c.signedBy.trim()) out.push('With best wishes,', c.signedBy, 'Preston Hill Estates · 271 Preston Road, Harrow HA3 0PS · 020 8127 7001', '')
+  if (c.signedBy.trim()) out.push('With best wishes,', c.signedBy, 'Preston Hill Estates · 271 Preston Road, Harrow HA3 0PS · 020 8904 9005', '')
   out.push('You’re getting this because you’ve been in touch with Preston Hill Estates about buying, selling, renting or letting a home.', `Unsubscribe: ${r.unsubscribeUrl}`)
   return out.join('\n')
 }

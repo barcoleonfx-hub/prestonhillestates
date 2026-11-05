@@ -52,7 +52,7 @@ export default async function RentingPage() {
                 <li>Every home shown by the branch, not a call centre</li>
                 <li>Unsubscribe from the emails any time</li>
               </ul>
-              <p className="vx-call">Rather talk? <a href="tel:+442081277001">020 8127 7001</a></p>
+              <p className="vx-call">Rather talk? <a href="tel:+442089049005">020 8904 9005</a></p>
             </div>
           </div>
         </section>
@@ -115,7 +115,7 @@ export default async function RentingPage() {
           <div className="rv">
             <div className="label"><b>Questions</b></div>
             <h2 className="sect" id="faq-h">Renting <em>questions</em></h2>
-            <p className="vx-faq-sub">Can’t see your question? Call the branch on <a href="tel:+442081277001">020 8127 7001</a>.</p>
+            <p className="vx-faq-sub">Can’t see your question? Call the branch on <a href="tel:+442089049005">020 8904 9005</a>.</p>
           </div>
           <div className="vx-faq-list">
             {FAQS.map(([q, a]) => (
@@ -132,7 +132,7 @@ export default async function RentingPage() {
           <div className="wide vx-final-inner">
             <div>
               <h2>Don’t miss the next one. <em>Register now.</em></h2>
-              <p>It takes a minute, or call the branch on <a href="tel:+442081277001">020 8127 7001</a>.</p>
+              <p>It takes a minute, or call the branch on <a href="tel:+442089049005">020 8904 9005</a>.</p>
             </div>
             <a className="btn gold" href="#register">Send me matching homes</a>
           </div>

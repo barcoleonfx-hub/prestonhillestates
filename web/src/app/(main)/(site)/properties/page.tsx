@@ -116,7 +116,7 @@ export default async function PropertySearch({ searchParams }: { searchParams: S
       {rows.length === 0 ? (
         <div className="none">
           <p className="serif" style={{ fontSize: '1.4rem', color: 'var(--ink)' }}>Nothing matches right now.</p>
-          <p style={{ marginTop: 8 }}>Try widening your search, or call the branch on 020 8127 7001. New homes often come in before they reach the portals.{channel === 'let' ? <> <a href="/renting#register">Register and we’ll email you the next one that fits.</a></> : null}</p>
+          <p style={{ marginTop: 8 }}>Try widening your search, or call the branch on 020 8904 9005. New homes often come in before they reach the portals.{channel === 'let' ? <> <a href="/renting#register">Register and we’ll email you the next one that fits.</a></> : null}</p>
         </div>
       ) : (
         <div className="pgrid">

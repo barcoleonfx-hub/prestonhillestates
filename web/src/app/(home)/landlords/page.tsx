@@ -60,7 +60,7 @@ export default async function LandlordsPage() {
               <ul className="vx-ticks">
                 {LETTINGS.includes.slice(0, 4).map(([t]) => <li key={t}>{t}</li>)}
               </ul>
-              <p className="vx-call">Prefer to talk? <a href="tel:+442081277001">020 8127 7001</a></p>
+              <p className="vx-call">Prefer to talk? <a href="tel:+442089049005">020 8904 9005</a></p>
             </div>
           </div>
         </section>
@@ -180,7 +180,7 @@ export default async function LandlordsPage() {
           <div className="rv">
             <div className="label"><b>Questions</b></div>
             <h2 className="sect" id="faq-h">Letting <em>questions</em></h2>
-            <p className="vx-faq-sub">Can’t see your question? Call the branch on <a href="tel:+442081277001">020 8127 7001</a>.</p>
+            <p className="vx-faq-sub">Can’t see your question? Call the branch on <a href="tel:+442089049005">020 8904 9005</a>.</p>
           </div>
           <div className="vx-faq-list">
             {FAQS.map(([q, a]) => (
@@ -197,7 +197,7 @@ export default async function LandlordsPage() {
           <div className="wide vx-final-inner">
             <div>
               <h2>Ready to let? <em>Start with a free valuation.</em></h2>
-              <p>Two minutes online, or call the branch on <a href="tel:+442081277001">020 8127 7001</a>.</p>
+              <p>Two minutes online, or call the branch on <a href="tel:+442089049005">020 8904 9005</a>.</p>
             </div>
             <a className="btn gold" href="#estimate">Value my rental</a>
           </div>
@@ -206,7 +206,7 @@ export default async function LandlordsPage() {
 
       <nav className="vx-mobilebar" aria-label="Quick actions">
         <a className="btn gold" href="#estimate">Rent estimate</a>
-        <a className="btn ghost" href="tel:+442081277001">Call us</a>
+        <a className="btn ghost" href="tel:+442089049005">Call us</a>
       </nav>
     </PageChrome>
   )

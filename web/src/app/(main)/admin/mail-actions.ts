@@ -33,7 +33,7 @@ export async function replyToThread(_prev: ReplyState, form: FormData): Promise<
   const subject = /^\s*re:/i.test(t.subject) ? t.subject : `Re: ${t.subject}`
   const references = last ? [...(last.refs ? last.refs.split(/\s+/) : []), last.messageId].slice(-20) : []
   const quoted = last?.body ? `\n\nOn ${new Date(last.sentAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/London' })}, ${last.fromName || last.fromAddr} wrote:\n${last.body.split('\n').slice(0, 60).map((l) => `> ${l}`).join('\n')}` : ''
-  const r = await sendFromMailbox({ to, cc, subject, text: `${body}\n\n${me.name}\nPreston Hill Estates · 271 Preston Road, Harrow HA3 0PS · 020 8127 7001${quoted}`, inReplyTo: last?.messageId, references, by: me.id })
+  const r = await sendFromMailbox({ to, cc, subject, text: `${body}\n\n${me.name}\nPreston Hill Estates · 271 Preston Road, Harrow HA3 0PS · 020 8904 9005${quoted}`, inReplyTo: last?.messageId, references, by: me.id })
   if (!r.ok) return { error: r.error }
   await audit(me.id, 'mail_reply', 'mail_thread', id, subject.slice(0, 80))
   revalidatePath('/admin/mail', 'layout')

@@ -21,7 +21,7 @@ export default async function Unsubscribe({ searchParams }: { searchParams: Prom
         <>
           <h1 style={{ fontSize: "2rem", marginBottom: 14 }}>You won’t get property emails from us again</h1>
           <p>We’ve updated our records. If you call or email us about a home, we’ll still reply as normal.</p>
-          <p>Changed your mind? Call the branch on <a href="tel:+442081277001">020 8127 7001</a>.</p>
+          <p>Changed your mind? Call the branch on <a href="tel:+442089049005">020 8904 9005</a>.</p>
         </>
       ) : valid ? (
         <>
@@ -36,7 +36,7 @@ export default async function Unsubscribe({ searchParams }: { searchParams: Prom
       ) : (
         <>
           <h1 style={{ fontSize: "2rem", marginBottom: 14 }}>That link didn’t work</h1>
-          <p>It may have been cut short. Reply to any of our emails with “unsubscribe”, or call <a href="tel:+442081277001">020 8127 7001</a>, and we’ll take you off the list.</p>
+          <p>It may have been cut short. Reply to any of our emails with “unsubscribe”, or call <a href="tel:+442089049005">020 8904 9005</a>, and we’ll take you off the list.</p>
         </>
       )}
     </div>

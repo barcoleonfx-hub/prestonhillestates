@@ -75,7 +75,7 @@ html = swap(html, '    </nav>\n  </div>\n</header>', `    </nav>
         <div class="mnav-group"><b>Renting</b><a href="/properties?channel=let">Homes to rent</a><a href="/renting">Register for new homes to rent</a></div>
         <div class="mnav-group"><b>Landlords</b><a href="/landlords">Letting &amp; management</a><a href="/landlords#estimate">Rent estimate</a><a href="/fees">Fees &amp; legal</a></div>
         <div class="mnav-group"><b>Selling</b><a href="/valuation">Free valuation</a><a href="/guides">Guides</a></div>
-        <div class="mnav-cta"><a class="btn gold" href="/valuation">Free valuation</a><a class="btn ghost" href="tel:+442081277001">Call 020 8127 7001</a></div>
+        <div class="mnav-cta"><a class="btn gold" href="/valuation">Free valuation</a><a class="btn ghost" href="tel:+442089049005">Call 020 8904 9005</a></div>
       </div>
     </details>
   </div>
@@ -91,7 +91,7 @@ html = swap(html, /<a class="area-chip" href="#"><span class="nm">([^<]+)<\/span
 html = swap(html, '<li><a href="#listings">Properties for sale</a></li>', '<li><a href="/properties?channel=sale">Properties for sale</a></li>')
 html = swap(html, '<li><a href="#listings">Properties to let</a></li>', '<li><a href="/properties?channel=let">Properties to let</a></li>\n        <li><a href="/renting">Register as a tenant</a></li>')
 html = swap(html, '<span>Design concept · sample data, not the live site</span>', '<span>Independent estate agents in Harrow since 2004</span>')
-html = swap(html, '+44 20 8127 7001<br/>', '<a href="tel:+442081277001">020 8127 7001</a><br/>')
+html = swap(html, '+44 20 8904 9005<br/>', '<a href="tel:+442089049005">020 8904 9005</a><br/>')
 html = swap(html, 'info@prestonhillestates.com\n', '<a href="mailto:info@prestonhillestates.com">info@prestonhillestates.com</a>\n')
 html = swap(html, 'Client review · from the current site', 'Client review')
 
@@ -174,7 +174,7 @@ js = swap(js, "      err.hidden = true; form.hidden = true; done.hidden = false;
       window.pheSendValuation({ name: name, phone: tel, email: mail, postcode: pc, intent: (form.querySelector('input[name=intent]:checked') || {}).value, hp_check: form.hp_check.value })
         .then(function (r) {
           btn.disabled = false; btn.textContent = 'Request my free valuation';
-          if (!r.ok) { var map = { name: 'vp-name', phone: 'vp-phone', email: 'vp-email', postcode: 'vp-postcode' }; return fail(map[r.field] || 'vp-name', r.error || 'Something went wrong. Please call us on 020 8127 7001.'); }
+          if (!r.ok) { var map = { name: 'vp-name', phone: 'vp-phone', email: 'vp-email', postcode: 'vp-postcode' }; return fail(map[r.field] || 'vp-name', r.error || 'Something went wrong. Please call us on 020 8904 9005.'); }
           try { localStorage.setItem(KEY, String(Date.now() + 365 * 864e5)); } catch (e) {}
           err.hidden = true; form.hidden = true; done.hidden = false;
           done.querySelector('button').focus();
@@ -185,7 +185,7 @@ const extra = `
 window.pheSendValuation = function (data) {
   return fetch('/api/public/valuation', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
     .then(function (r) { return r.json(); })
-    .catch(function () { return { ok: false, error: 'We couldn’t send that. Please check your connection or call us on 020 8127 7001.' }; });
+    .catch(function () { return { ok: false, error: 'We couldn’t send that. Please check your connection or call us on 020 8904 9005.' }; });
 };
 (function () {
   var channel = document.getElementById('q-channel'), price = document.getElementById('q-price');
@@ -210,7 +210,7 @@ window.pheSendValuation = function (data) {
     var btn = form.querySelector('button[type=submit]'); btn.disabled = true; btn.textContent = 'Sending…';
     window.pheSendValuation({ name: name, phone: tel, postcode: pc, intent: 'unsure', hp_check: form.hp_check.value }).then(function (r) {
       btn.disabled = false; btn.textContent = 'Request my valuation';
-      if (!r.ok) { var map = { name: 'v-name', phone: 'v-phone', postcode: 'v-postcode' }; return fail(map[r.field] || 'v-name', r.error || 'Something went wrong. Please call us on 020 8127 7001.'); }
+      if (!r.ok) { var map = { name: 'v-name', phone: 'v-phone', postcode: 'v-postcode' }; return fail(map[r.field] || 'v-name', r.error || 'Something went wrong. Please call us on 020 8904 9005.'); }
       try { localStorage.setItem('phe_valuation_popup', String(Date.now() + 365 * 864e5)); } catch (e) {}
       form.querySelector('.val-fields').hidden = true; form.querySelector('.val-done').hidden = false;
     });

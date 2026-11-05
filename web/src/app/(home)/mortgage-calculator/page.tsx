@@ -50,7 +50,7 @@ export default function MortgageCalculatorPage() {
           <div className="wide vx-final-inner">
             <div>
               <h2>Selling to buy? Find out what yours is <em>worth.</em></h2>
-              <p>Your equity is your next deposit. Book a free valuation, or call the branch on <a href="tel:+442081277001">020 8127 7001</a>.</p>
+              <p>Your equity is your next deposit. Book a free valuation, or call the branch on <a href="tel:+442089049005">020 8904 9005</a>.</p>
             </div>
             <a className="btn gold" href="/valuation">Book my free valuation</a>
           </div>

@@ -96,7 +96,7 @@ export async function runTenantAlerts(): Promise<{ ran: boolean; sent?: number; 
   const box = await mailboxStatus()
   if (!box?.hasPassword) return { ran: true, sent: 0, error: 'Mailbox not connected' }
   const base = await knownBase()
-  const sender: Sender = { name: 'The lettings team', phone: '020 8127 7001', email: box.user }
+  const sender: Sender = { name: 'The lettings team', phone: '020 8904 9005', email: box.user }
   const full = new Map<string, Awaited<ReturnType<typeof getProperty>>>()
   let sent = 0
   for (const { a, c, p } of plan.slice(0, 15)) {
@@ -115,7 +115,7 @@ export async function runTenantAlerts(): Promise<{ ran: boolean; sent?: number; 
     const message = [
       `Hello ${firstName(c.name)},`,
       `You registered with us for homes to rent${areas.length ? ` in ${areas.join(', ')}` : ''}${a.maxRent ? ` up to ${gbp(a.maxRent)} a month` : ''}. A ${prop.beds ? `${prop.beds} bedroom ` : ''}${prop.type ?? 'home'} on ${where} has just come on at ${prop.priceText.toLowerCase().startsWith('£') ? prop.priceText : prop.priceText.charAt(0).toLowerCase() + prop.priceText.slice(1)}${prop.availableFrom ? `, available from ${prop.availableFrom}` : ''}.`,
-      'Good homes to rent here tend to go quickly. If you’d like to see it, reply to this email or call us on 020 8127 7001 and we’ll book you in.',
+      'Good homes to rent here tend to go quickly. If you’d like to see it, reply to this email or call us on 020 8904 9005 and we’ll book you in.',
     ].join('\n\n')
     const subject = `New to rent in ${prop.place ?? prop.outward ?? 'your area'}: ${prop.beds ? `${prop.beds} bed ` : ''}${prop.type ?? 'home'}, ${prop.priceText}`.slice(0, 90)
     const { html, text } = renderEmail(prop, r, { ...d, subject, message }, sender)

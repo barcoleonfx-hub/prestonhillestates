@@ -55,7 +55,7 @@ export function normPhone(raw: string | null | undefined): string {
 
 export const normEmail = (raw: string | null | undefined) => (raw ?? '').trim().toLowerCase()
 
-/** "07700900123" → "07700 900123", London "02081277001" → "020 8127 7001". Leaves anything unusual alone. */
+/** "07700900123" → "07700 900123", London "02089049005" → "020 8904 9005". Leaves anything unusual alone. */
 export function prettyPhone(raw: string | null | undefined): string {
   const d = normPhone(raw)
   if (/^02\d{9}$/.test(d)) return `${d.slice(0, 3)} ${d.slice(3, 7)} ${d.slice(7)}`
