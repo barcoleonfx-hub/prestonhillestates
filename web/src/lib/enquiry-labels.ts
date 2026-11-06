@@ -34,20 +34,22 @@ export const SIDE_LABEL: Record<EnquirySide, string> = { sales: 'Sales', letting
 // Every enquiry is sorted from what it actually says, strongest evidence first. Each answer carries the reason,
 // shown on the enquiry, so a wrong one is easy to spot and move.
 
-type SideInput = { side?: string | null; kind: string; intent?: string | null; message?: string | null }
+type SideInput = { side?: string | null; kind: string; intent?: string | null; message?: string | null; autoSide?: string | null; sideWhy?: string | null }
 export type SideResult = { side: EnquirySide | null; why: string }
 
 const LET = /\b(to rent|to let|for rent|rental|rentals|renter|renters|renting|tenant|tenants|tenancy|letting|lettings|let agreed|landlord|landlords|pcm|p\.c\.m\.?|per calendar month|per month|per week|pw|p\/w|holding deposit|housing benefit|universal credit|dss|house share|flat share|room to rent)\b/i
-const SALE = /\b(for sale|to buy|buying|buyer|buyers|purchase|purchasing|mortgage|mortgages|mortgage in principle|offer|offers|asking price|guide price|selling|sell|sold|vendor|vendors|freehold|leasehold|share of freehold|chain|chain[- ]free|first[- ]time buyer|cash buyer|stamp duty|conveyancing|valuation|valuations|value my|market appraisal|appraisal)\b/i
+const SALE = /\b(sale|sales|for sale|to buy|buying|buyer|buyers|purchase|purchasing|mortgage|mortgages|mortgage in principle|offer|offers|asking price|guide price|selling|sell|sold|vendor|vendors|freehold|leasehold|share of freehold|chain|chain[- ]free|first[- ]time buyer|cash buyer|stamp duty|conveyancing|valuation|valuations|value my|market appraisal|appraisal)\b/i
 const RENTAL_VALUATION = /\b(rental valuation|rent(al)? (estimate|appraisal|valuation)|how much rent|what rent|letting valuation|let(ting)? my|rent (it|my|out)|to let out|landlord)\b/i
 // The person's own circumstances, not what they want from us ("I'm currently renting" is often a buyer).
 const SELF = /\b(currently renting|i('m| am) (currently )?renting|we('re| are) (currently )?renting|renting at the moment|my (current )?landlord|our (current )?landlord|currently (a )?tenants?|in rented accommodation)\b/gi
 
 /** "Buyer", "renter", "valuation"… as a portal or form names the enquiry. */
 function typeWord(t: string): EnquirySide | null {
-  if (/\b(renter|tenant|rental|to rent|letting|lettings|landlord)\b/i.test(t)) return 'lettings'
-  if (/\b(buyer|purchase|buy|for sale|vendor|seller|valuation|appraisal|valu)\b/i.test(t)) return 'sales'
-  return null
+  const l = /\b(renter|renters|tenant|tenants|rental|rent|renting|to let|letting|lettings|landlord|landlords)\b/i.test(t)
+  const s = /\b(buyer|buyers|purchase|buy|buying|sale|sales|for sale|vendor|seller|selling|sell|valuation|appraisal)\b/i.test(t)
+  // "Landlord valuation" or "rental valuation" is lettings; any other valuation is sales. Both sides named: can't tell.
+  if (l && s) return /\b(valuation|appraisal)\b/i.test(t) && !/\b(buyer|buy|purchase|sale|sales|for sale)\b/i.test(t) ? 'lettings' : null
+  return l ? 'lettings' : s ? 'sales' : null
 }
 
 /** A price: "£1,750 pcm" or "£350 pw" is a rent; "£718,000" is a sale price. */
@@ -105,9 +107,13 @@ export function sortEnquiry(e: SideInput, channel?: string | null, roles?: strin
     const sd = v ? typeWord(v) : null
     if (sd && v) return sd === 'lettings' ? L(`${name}: ${v}`) : S(`${name}: ${v}`)
   }
-  // 3. Any price in the message.
+  // 3. The email subject ("Sales enquiry for 111 Sudbury Avenue").
+  const subject = labelled(lines, /^(email )?subject\s*:/i)
+  const subjectSide = subject ? typeWord(subject.replace(/\b(new submission from contact form|re|fw|fwd)\b/gi, '')) : null
+  if (subjectSide && subject) return subjectSide === 'lettings' ? L(`Subject: ${subject}`) : S(`Subject: ${subject}`)
+  // 4. Any price in the message.
   const anyPrice = priceSide(text)
-  // 4. The words: what they want, leaving out their own circumstances ("I'm currently renting").
+  // 5. The words: what they want, leaving out their own circumstances ("I'm currently renting").
   const body = lines.filter((l) => !/^(situation|my situation|their address)\s*:/i.test(l)).join('\n').replace(SELF, ' ')
   const lets = new Set([...body.matchAll(new RegExp(LET.source, 'gi'))].map((m) => m[0].toLowerCase()))
   const sales = new Set([...body.matchAll(new RegExp(SALE.source, 'gi'))].map((m) => m[0].toLowerCase()))
@@ -115,14 +121,50 @@ export function sortEnquiry(e: SideInput, channel?: string | null, roles?: strin
   if (anyPrice) return anyPrice.side === 'lettings' ? L(`Mentions ${anyPrice.price}`) : S(`Mentions ${anyPrice.price}`)
   if (lets.size > sales.size) return L(`Mentions ${[...lets].slice(0, 3).join(', ')}`)
   if (sales.size > lets.size) return S(`Mentions ${[...sales].slice(0, 3).join(', ')}`)
-  // 5. Their situation, then what we already know about them.
+  // 6. Their situation, then what we already know about them.
   const situation = labelled(lines, /^(my )?situation\s*:/i)
   if (situation && /renter|looking to rent/i.test(situation) && !/buy|sell/i.test(situation)) return L(`Situation: ${situation}`)
   if (situation && /buyer|to sell|mortgage|investor|chain/i.test(situation)) return S(`Situation: ${situation}`)
   const r = (roles ?? '').split(',').filter(Boolean)
   if (r.length && r.every((x) => x === 'tenant' || x === 'landlord')) return L(`Known ${r.join(' and ')}`)
   if (r.length && r.every((x) => x === 'seller')) return S('Known seller')
+  // 7. Read from the original email (the subject and full text), worked out in the background.
+  if (e.autoSide === 'sales' || e.autoSide === 'lettings') return { side: e.autoSide, why: e.sideWhy ?? 'From the original email' }
   return { side: null, why: 'Nothing in the enquiry says' }
 }
+
+/**
+ * For the background check of an enquiry's original email: the subject and full text, which carry what the
+ * saved summary may not (the listing price, "Sales enquiry", "to rent"). Strict, because emails carry
+ * boilerplate ("homes for sale and to rent").
+ */
+export function sortEmailText(subject: string, body: string): SideResult {
+  const L = (why: string): SideResult => ({ side: 'lettings', why }), S = (why: string): SideResult => ({ side: 'sales', why })
+  const sub = typeWord(subject.replace(/\b(re|fw|fwd)\b/gi, ''))
+  if (sub) return sub === 'lettings' ? L(`Email subject: ${subject}`) : S(`Email subject: ${subject}`)
+  const phrase = /\b(sales|lettings|letting|rental|buyer|renter|tenant|vendor|landlord|valuation) (enquiry|request|lead)\b/i.exec(body)
+  const ps = phrase ? typeWord(phrase[0]) : null
+  if (ps && phrase) return ps === 'lettings' ? L(`Email says “${phrase[0]}”`) : S(`Email says “${phrase[0]}”`)
+  const p = priceSide(body)
+  if (p) return p.side === 'lettings' ? L(`Price in the email: ${p.price}`) : S(`Price in the email: ${p.price}`)
+  const clean = body
+    .replace(/(homes?|propert(y|ies)) (for sale|to rent)( (and|or|&) (to rent|for sale))?|buy(ing)?,? (or|and|&) rent(ing)?|rent(ing)?,? (or|and|&) buy(ing)?|sales (and|&) lettings|lettings (and|&) sales/gi, ' ')
+    .replace(SELF, ' ')
+  const lets = new Set([...clean.matchAll(new RegExp(LET.source, 'gi'))].map((m) => m[0].toLowerCase()))
+  const sales = new Set([...clean.matchAll(new RegExp(SALE.source, 'gi'))].map((m) => m[0].toLowerCase()))
+  if (lets.size >= sales.size + 2) return L(`Email mentions ${[...lets].slice(0, 3).join(', ')}`)
+  if (sales.size >= lets.size + 2) return S(`Email mentions ${[...sales].slice(0, 3).join(', ')}`)
+  return { side: null, why: 'Nothing in the email says' }
+}
+
+/** A request for a valuation (sales or rental): the website form, a portal, or an email asking for one. */
+export function isValuation(e: { kind: string; message?: string | null }): boolean {
+  if (e.kind === 'valuation') return true
+  if (e.kind !== 'email') return false
+  // Leave out the buyer's own situation ("Has a home to sell: offer a valuation" is a buyer, not a valuation request).
+  const t = (e.message ?? '').split('\n').filter((l) => !/^has a home to sell/i.test(l) && !/^(my )?situation\s*:/i.test(l)).join('\n')
+  return /\b(valuation|valuations|value my|valued|market appraisal|appraisal|vendor (enquiry|lead)|seller (enquiry|lead)|landlord (enquiry|lead)|how much (is|could|would) my|what (is|would) my .{0,30} (be )?worth)\b/i.test(t)
+}
+
 
 export const enquirySide = (e: SideInput, channel?: string | null, roles?: string | null) => sortEnquiry(e, channel, roles).side

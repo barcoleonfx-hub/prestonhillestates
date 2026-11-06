@@ -66,6 +66,9 @@ const tidyPhone = (p: string | null) => {
   return d.replace(/\D/g, '').length >= 10 ? p.replace(/\s+/g, ' ').trim() : null
 }
 
+/** Subjects of portal account and system emails, never enquiries. */
+const SYSTEM_MAIL = /verification code|one[- ]time|passcode|password|sign[- ]?in|log[- ]?in|security alert|verify your|confirm your|invoice|receipt|statement|payment|subscription|your (listing|account|advert|branch)|listings? (is|are) (now )?live|performance|report|newsletter|webinar|welcome to|survey|feedback|terms (of|and)|privacy/i
+
 function intentOf(text: string): ImportRow['intent'] {
   const t = text.toLowerCase()
   if (/valuation|value my|sell my|selling my|market appraisal/.test(t)) return 'valuation'
@@ -269,5 +272,7 @@ export async function analyse(raw: string, nowMs = Date.now()): Promise<ImportRo
   if (bulk && !lead && !labelledName) return skip('Newsletter or mailing list')
   if (row.category === 'person' && from?.address && NO_REPLY.test(from.address)) return skip('Automated email')
   if (!email && !phone) return skip('No name, email or phone to link it to')
+  // Zoopla, OnTheMarket and website-form account emails (sign-in codes, invoices, reports) aren't enquiries.
+  if (!lead && source !== 'email' && (!labelledName || SYSTEM_MAIL.test(subject))) return skip(`${source === 'zoopla' ? 'Zoopla' : source === 'onthemarket' ? 'OnTheMarket' : 'Website'} account email, not an enquiry`)
   return row
 }
