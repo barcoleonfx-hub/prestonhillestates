@@ -1,6 +1,7 @@
 import 'server-only'
 import { rentEstimate } from './lettings'
 import { displayAddressFor, listPublished, priceLabel, slugFor } from './properties'
+import { otmAskingPrices } from './otm-check'
 import { salesNear } from './sold-prices'
 
 /**
@@ -40,13 +41,25 @@ export async function instantEstimate(i: { postcode: string; intent: string; pro
 
   if (rent) {
     const r = await rentEstimate(pc, beds ?? 2).catch(() => null)
-    if (!r?.range) return null
+    if (!r?.range) return fromOtm(pc, true, beds, listings)
     return { kind: 'rent', low: r.range[0], high: r.range[1], basis: r.basis === 'nearby' ? `${beds ?? 2} bedroom homes we’ve let nearby` : `official figures for ${beds ?? 2} bedroom homes in ${r.ons?.name ?? 'the borough'}`, onMarket: listings }
   }
   const street = (i.address.split(',').map((x) => x.trim()).reverse().find((x) => /[a-z]{3,}/i.test(x) && !/^(flat|apartment|unit)\b/i.test(x)) ?? '').replace(/^\d+[a-z]?\s+/i, '') || null
   const near = await salesNear(pc, { type: flat ? 'F' : house ? 'H' : null, limit: 16, street }).catch(() => null)
   const prices = (near?.recent ?? []).map((s) => s.price).sort((a, b) => a - b)
-  if (prices.length < 4) return null
+  if (prices.length < 4) return fromOtm(pc, false, beds, listings)
   const what = near!.typed ? (flat ? 'flats and maisonettes' : 'houses') : 'homes'
   return { kind: 'sale', low: r5k(quart(prices, 0.25)), high: r5k(quart(prices, 0.75)), basis: `${prices.length} ${what} sold ${near!.where} in the last two years`, onMarket: listings }
+}
+
+/** The backup: asking prices of similar homes on OnTheMarket within half a mile (sales: less 3%, as homes
+ *  usually sell a little under the asking price). Needs at least 3 to say anything. */
+async function fromOtm(pc: string, rent: boolean, beds: number | null, onMarket: InstantEstimate['onMarket']): Promise<InstantEstimate | null> {
+  const o = await otmAskingPrices(pc, { rent, beds })
+  if (o.prices.length < 3) return null
+  const s = [...o.prices].sort((a, b) => a - b)
+  const k = rent ? 1 : 0.97
+  const round = (n: number) => (rent ? Math.round(n / 25) * 25 : r5k(n))
+  const what = `${beds != null ? `${beds === 0 ? 'studio' : `${beds} bedroom`} ` : ''}homes`
+  return { kind: rent ? 'rent' : 'sale', low: round(quart(s, 0.25) * k), high: round(quart(s, 0.75) * k), basis: `the ${rent ? 'rents' : 'asking prices'} of ${s.length} similar ${what} ${rent ? 'to rent' : 'for sale'} within half a mile on OnTheMarket${rent ? '' : ', less a little as homes usually sell just under the asking price'}`, onMarket }
 }
