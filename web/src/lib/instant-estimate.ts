@@ -45,10 +45,12 @@ export async function instantEstimate(i: { postcode: string; intent: string; pro
     return { kind: 'rent', low: r.range[0], high: r.range[1], basis: r.basis === 'nearby' ? `${beds ?? 2} bedroom homes we’ve let nearby` : `official figures for ${beds ?? 2} bedroom homes in ${r.ons?.name ?? 'the borough'}`, onMarket: listings }
   }
   const street = (i.address.split(',').map((x) => x.trim()).reverse().find((x) => /[a-z]{3,}/i.test(x) && !/^(flat|apartment|unit)\b/i.test(x)) ?? '').replace(/^\d+[a-z]?\s+/i, '') || null
-  const near = await salesNear(pc, { type: flat ? 'F' : house ? 'H' : null, limit: 16, street }).catch(() => null)
+  // The exact kind of house when they told us (semi, detached, terraced), otherwise all houses.
+  const lr = flat ? 'F' : /semi/i.test(i.propertyType) ? 'S' : /terrace/i.test(i.propertyType) ? 'T' : /detached/i.test(i.propertyType) ? 'D' : house ? 'H' : null
+  const near = await salesNear(pc, { type: lr, limit: 16, street }).catch(() => null)
   const prices = (near?.recent ?? []).map((s) => s.price).sort((a, b) => a - b)
   if (prices.length < 4) return fromOtm(pc, false, beds, listings)
-  const what = near!.typed ? (flat ? 'flats and maisonettes' : 'houses') : 'homes'
+  const what = !near!.typed ? 'homes' : lr === 'F' ? 'flats and maisonettes' : lr === 'S' ? 'semi-detached houses' : lr === 'T' ? 'terraced houses' : lr === 'D' ? 'detached houses' : 'houses'
   return { kind: 'sale', low: r5k(quart(prices, 0.25)), high: r5k(quart(prices, 0.75)), basis: `${prices.length} ${what} sold ${near!.where} in the last two years`, onMarket: listings }
 }
 
