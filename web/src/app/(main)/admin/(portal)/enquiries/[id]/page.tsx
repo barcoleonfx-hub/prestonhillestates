@@ -108,7 +108,7 @@ export default async function EnquiryPage({ params, searchParams }: { params: Pr
           </section>
         </div>
 
-        <section className="card card-pad ew-email">
+        <section className="card card-pad ew-email" id="email">
           <h2>Email {e.name.split(/\s+/)[0]}</h2>
           <p className="card-sub">Choose an email, check the wording, and send it. It goes from the office mailbox and is noted here.</p>
           <EmailComposer id={e.id} ctx={ctx} to={e.email} canSend={!blocked} blocked={blocked} chooseKind={!sorted.side} />
