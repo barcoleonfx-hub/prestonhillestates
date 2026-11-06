@@ -7,7 +7,9 @@ import { ENQUIRY_OUTCOMES, ENQUIRY_SOURCES, RECENT_DAYS, enquiryLabel, enquirySi
 import { detailLines } from '@/lib/enquiry-workspace'
 import { displayAddressFor, priceLabel } from '@/lib/properties'
 import type { EnquiryRow as Row } from '../EnquiryItem'
-import { removeNotEnquiry, setEnquirySide } from '../../actions'
+import { removeNotEnquiry, setEnquiryHandled, setEnquirySide } from '../../actions'
+import { EnquiryOutcome } from '../EnquiryOutcome'
+import { LogCallButton } from '../LogCallButton'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Enquiries' }
@@ -108,14 +110,28 @@ export default async function EnquiriesPage({ searchParams }: { searchParams: Pr
               <span className="enq-src">{enquiryLabel(r.e).replace(/ (enquiry|request|registration|viewing request|valuation request)$/i, '')}<small>{ago(r.e.createdAt)}</small></span>
               <span className="enq-go" aria-hidden="true">›</span>
             </Link>
-            {sideOf.get(r.e.id) === 'unsorted' ? (
-              <div className="enq-sort" aria-label="Sales or lettings?">
-                {(['sales', 'lettings'] as const).map((x) => (
-                  <form key={x} action={setEnquirySide}><input type="hidden" name="id" value={r.e.id} /><input type="hidden" name="side" value={x} /><button className="btn btn-ghost btn-sm" type="submit">{x === 'sales' ? 'Sales' : 'Lettings'}</button></form>
-                ))}
-                <form action={removeNotEnquiry}><input type="hidden" name="id" value={r.e.id} /><button className="btn btn-ghost btn-sm enq-junk" type="submit" title="Remove it: an account email, newsletter or similar">Not an enquiry</button></form>
-              </div>
-            ) : null}
+            <div className="enq-acts">
+              {!r.dnc && r.e.phone ? <LogCallButton label="Call" className="btn btn-dark btn-sm" prefill={{ name: r.e.name, phone: r.e.phone ?? undefined, email: r.e.email ?? undefined, enquiryId: r.e.id, direction: 'out', propertyId: r.e.propertyId ?? undefined, callerType: valOf.get(r.e.id) ? (sideOf.get(r.e.id) === 'lettings' ? 'landlord' : 'seller') : sideOf.get(r.e.id) === 'lettings' ? 'tenant' : 'buyer', ...(r.e.contactId ? { contactId: r.e.contactId } : {}) }} /> : null}
+              {!r.dnc && r.e.email ? <Link className="btn btn-ghost btn-sm" href={`/admin/enquiries/${r.e.id}?back=${encodeURIComponent(here)}#email`}>Email</Link> : null}
+              {!r.dnc ? <Link className="btn btn-ghost btn-sm" href={`/admin/diary/new?enquiry=${r.e.id}${valOf.get(r.e.id) ? '&kind=valuation' : ''}`}>{valOf.get(r.e.id) ? 'Book valuation' : 'Book viewing'}</Link> : null}
+              <span className="enq-acts-sep" aria-hidden="true" />
+              <EnquiryOutcome id={r.e.id} outcome={r.e.outcome} channel={r.p?.channel ?? (sideOf.get(r.e.id) === 'lettings' ? 'let' : 'sale')} />
+              <span className="enq-acts-sep" aria-hidden="true" />
+              <form action={setEnquiryHandled}>
+                <input type="hidden" name="id" value={r.e.id} />
+                <input type="hidden" name="handled" value={r.e.handled ? '0' : '1'} />
+                <button className="btn btn-ghost btn-sm" type="submit">{r.e.handled ? 'Mark as new' : 'Dealt with'}</button>
+              </form>
+              {sideOf.get(r.e.id) === 'unsorted' ? (
+                <>
+                  <span className="enq-acts-sep" aria-hidden="true" />
+                  {(['sales', 'lettings'] as const).map((x) => (
+                    <form key={x} action={setEnquirySide}><input type="hidden" name="id" value={r.e.id} /><input type="hidden" name="side" value={x} /><button className="btn btn-ghost btn-sm" type="submit">{x === 'sales' ? 'It’s sales' : 'It’s lettings'}</button></form>
+                  ))}
+                  <form action={removeNotEnquiry}><input type="hidden" name="id" value={r.e.id} /><button className="btn btn-ghost btn-sm enq-junk" type="submit" title="Remove it: an account email, newsletter or similar">Not an enquiry</button></form>
+                </>
+              ) : null}
+            </div>
           </div>
         )) : <p className="enq-empty">Nothing waiting. Nice work.</p>}
         {list.length > PAGE ? <p className="enq-more"><Link className="btn btn-ghost btn-sm" href={`${href({ show: all ? '' : id })}#${id}`}>{all ? `Show the newest ${PAGE} only` : `Show all ${list.length}`}</Link></p> : null}
