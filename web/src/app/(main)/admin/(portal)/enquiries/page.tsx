@@ -7,6 +7,7 @@ import { ENQUIRY_OUTCOMES, ENQUIRY_SOURCES, RECENT_DAYS, enquiryLabel, enquirySi
 import { detailLines } from '@/lib/enquiry-workspace'
 import { displayAddressFor, priceLabel } from '@/lib/properties'
 import type { EnquiryRow as Row } from '../EnquiryItem'
+import { setEnquirySide } from '../../actions'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Enquiries' }
@@ -28,7 +29,7 @@ export default async function EnquiriesPage({ searchParams }: { searchParams: Pr
   const imported = sp.imported === '1'
   const side: EnquirySide | 'unsorted' | '' = sp.side === 'sales' || sp.side === 'lettings' || sp.side === 'unsorted' ? sp.side : ''
   // Within sales or lettings, one list at a time: valuations first.
-  const type = sp.type === 'valuations' || sp.type === 'enquiries' ? sp.type : side ? 'valuations' : ''
+  let type: 'valuations' | 'enquiries' | '' = sp.type === 'valuations' || sp.type === 'enquiries' ? sp.type : ''
   const props = await db.select().from(properties).orderBy(asc(properties.ref))
   const linkTo = props.map((p) => ({ id: p.id, label: `${p.ref} · ${displayAddressFor(p)}` }))
   const property = sp.property === 'none' || props.some((p) => p.id === sp.property) ? sp.property! : ''
@@ -60,6 +61,8 @@ export default async function EnquiriesPage({ searchParams }: { searchParams: Pr
     const list = found.filter((r) => sideOf.get(r.e.id) === x && (!t || (t === 'valuations') === valOf.get(r.e.id)))
     return { all: list.length, fresh: list.filter((r) => !r.e.handled).length }
   }
+  // Sales and Lettings show one list at a time: valuations, unless only buyer/tenant enquiries are waiting.
+  if (!type && (side === 'sales' || side === 'lettings')) type = count(side, 'valuations').fresh || !count(side, 'enquiries').fresh ? 'valuations' : 'enquiries'
   const rows = found.filter((r) => (!side || sideOf.get(r.e.id) === side) && (!type || (type === 'valuations') === valOf.get(r.e.id)))
 
   const recentFrom = new Date(Date.now() - RECENT_DAYS * 86400000).toISOString()
@@ -95,15 +98,24 @@ export default async function EnquiriesPage({ searchParams }: { searchParams: Pr
       <section className="card enq-list" id={id}>
         <div className="enq-list-head"><h2>{title} <span>{list.length}</span></h2><p>{sub}</p></div>
         {list.length ? visible.map((r) => (
-          <Link key={r.e.id} href={`/admin/enquiries/${r.e.id}?back=${encodeURIComponent(here)}`} className={`enq-row${r.e.handled ? '' : ' fresh'}${r.dnc ? ' dnc' : ''}`}>
-            <span className="enq-av" aria-hidden="true">{r.e.name.trim()[0]?.toUpperCase() ?? '?'}</span>
-            <span className="enq-main">
-              <span className="enq-name">{r.e.name}{!r.e.handled ? <span className="pill gold">New</span> : null}{r.e.outcome ? <span className="pill">{outcomeText(r.e.outcome)}</span> : null}{r.dnc ? <span className="pill warn">Do not contact</span> : null}</span>
-              <span className="enq-what">{whatOf(r)}</span>
-            </span>
-            <span className="enq-src">{enquiryLabel(r.e).replace(/ (enquiry|request|registration|viewing request|valuation request)$/i, '')}<small>{ago(r.e.createdAt)}</small></span>
-            <span className="enq-go" aria-hidden="true">›</span>
-          </Link>
+          <div key={r.e.id} className={`enq-row${r.e.handled ? '' : ' fresh'}${r.dnc ? ' dnc' : ''}`}>
+            <Link href={`/admin/enquiries/${r.e.id}?back=${encodeURIComponent(here)}`} className="enq-link">
+              <span className="enq-av" aria-hidden="true">{r.e.name.trim()[0]?.toUpperCase() ?? '?'}</span>
+              <span className="enq-main">
+                <span className="enq-name">{r.e.name}{!r.e.handled ? <span className="pill gold">New</span> : null}{r.e.outcome ? <span className="pill">{outcomeText(r.e.outcome)}</span> : null}{r.dnc ? <span className="pill warn">Do not contact</span> : null}</span>
+                <span className="enq-what">{whatOf(r)}</span>
+              </span>
+              <span className="enq-src">{enquiryLabel(r.e).replace(/ (enquiry|request|registration|viewing request|valuation request)$/i, '')}<small>{ago(r.e.createdAt)}</small></span>
+              <span className="enq-go" aria-hidden="true">›</span>
+            </Link>
+            {sideOf.get(r.e.id) === 'unsorted' ? (
+              <div className="enq-sort" aria-label="Sales or lettings?">
+                {(['sales', 'lettings'] as const).map((x) => (
+                  <form key={x} action={setEnquirySide}><input type="hidden" name="id" value={r.e.id} /><input type="hidden" name="side" value={x} /><button className="btn btn-ghost btn-sm" type="submit">{x === 'sales' ? 'Sales' : 'Lettings'}</button></form>
+                ))}
+              </div>
+            ) : null}
+          </div>
         )) : <p className="enq-empty">Nothing waiting. Nice work.</p>}
         {list.length > PAGE ? <p className="enq-more"><Link className="btn btn-ghost btn-sm" href={`${href({ show: all ? '' : id })}#${id}`}>{all ? `Show the newest ${PAGE} only` : `Show all ${list.length}`}</Link></p> : null}
       </section>
@@ -129,6 +141,12 @@ export default async function EnquiriesPage({ searchParams }: { searchParams: Pr
         </div>
       </div>
 
+      {side === 'unsorted' ? (
+        <div className="notice enq-why-box">
+          <b>Why these aren’t sorted:</b> each one has been checked against its wording, the listing price, the email subject, the original email (where the portal has it), the address against every listing we’ve had, and the person’s other enquiries. None of those say sales or lettings: usually it’s just an address that isn’t one of our listings, or a message like “please call me”. Press <b>Sales</b> or <b>Lettings</b> on each one (it takes a second), or open it to see everything it says.{' '}
+          <a href="/admin/enquiries/export?side=unsorted">Download them as a spreadsheet</a>
+        </div>
+      ) : null}
       <div className="enq-choices">
         {side ? (
           <>

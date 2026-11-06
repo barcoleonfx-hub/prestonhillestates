@@ -730,4 +730,11 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
         AND (phone IS NULL OR replace(phone, ' ', '') LIKE '%35441000')`,
     ],
   },
+  {
+    id: '033_enquiry_sorting_more',
+    sql: [
+      // Look again at enquiries still unsorted: now also by address (our listings) and the person's other enquiries.
+      `UPDATE enquiries SET side_checked_at = NULL WHERE side IS NULL AND auto_side IS NULL`,
+    ],
+  },
 ]
