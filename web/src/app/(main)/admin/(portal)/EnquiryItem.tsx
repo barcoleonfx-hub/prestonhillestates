@@ -54,7 +54,7 @@ export function EnquiryItem({ e, p, dnc, roles, trail, linkTo, onProperty = fals
             <p className="msg pre">{e.message}</p>
           </details>
         ) : null}
-        {!p && e.kind !== 'valuation' && linkTo?.length ? (
+        {!p && !valuation && linkTo?.length ? (
           <form action={linkEnquiry} className="enq-link">
             <input type="hidden" name="id" value={e.id} />
             <label htmlFor={`lk-${e.id}`}>Not linked to a property</label>
