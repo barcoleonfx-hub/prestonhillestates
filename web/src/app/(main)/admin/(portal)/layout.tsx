@@ -8,6 +8,7 @@ import { requireAdmin } from '@/lib/auth'
 import { listBetween, needingOutcome, toPending } from '@/lib/appointments'
 import { addDays, londonToIso, todayLondon } from '@/lib/time'
 import { LogoMark } from '@/components/Logo'
+import { enquirySide } from '@/lib/enquiry-labels'
 import { logout } from '../actions'
 import { NavLinks } from './NavLinks'
 import { AlertCenter } from './AlertCenter'
@@ -20,8 +21,9 @@ export default async function PortalLayout({ children }: { children: React.React
   await ready()
   const today = todayLondon()
   const endOfToday = londonToIso(addDays(today, 1), '00:00')!
-  const [[{ n }], todays, mine, overdueAll, [{ due }], staff, props] = await Promise.all([
-    db.select({ n: count() }).from(enquiries).where(eq(enquiries.handled, false)),
+  const [fresh, todays, mine, overdueAll, [{ due }], staff, props] = await Promise.all([
+    db.select({ side: enquiries.side, kind: enquiries.kind, intent: enquiries.intent, message: enquiries.message, channel: properties.channel })
+      .from(enquiries).leftJoin(properties, eq(enquiries.propertyId, properties.id)).where(eq(enquiries.handled, false)),
     listBetween(londonToIso(today, '00:00')!, londonToIso(addDays(today, 1), '00:00')!),
     needingOutcome(admin.id),
     admin.role === 'admin' ? needingOutcome() : Promise.resolve([]),
@@ -30,6 +32,9 @@ export default async function PortalLayout({ children }: { children: React.React
     db.select({ id: properties.id, ref: properties.ref, channel: properties.channel, displayAddress: properties.displayAddress, street: properties.street, town: properties.town, postcode: properties.postcode })
       .from(properties).where(ne(properties.status, 'withdrawn')).orderBy(desc(properties.updatedAt)).limit(400),
   ])
+  // New enquiries per list; ones that can't be sorted count on both, so nobody misses them.
+  const sides = fresh.map((e) => enquirySide(e, e.channel))
+  const newSales = sides.filter((x) => x !== 'lettings').length, newLettings = sides.filter((x) => x !== 'sales').length
   const upcomingToday = todays.filter((a) => a.status === 'scheduled').length
   return (
     <div className="admin-shell">
@@ -47,7 +52,7 @@ export default async function PortalLayout({ children }: { children: React.React
           staff={staff.map((s) => ({ id: s.id, name: s.name }))}
           props={props.map((p) => ({ id: p.id, ref: p.ref, channel: p.channel, label: displayAddressFor(p) || 'Untitled' }))}
         />
-        <NavLinks newEnquiries={n} today={upcomingToday} outcomes={Math.max(mine.length, overdueAll.length)} callbacks={due} isAdmin={admin.role === 'admin'} />
+        <NavLinks newSales={newSales} newLettings={newLettings} today={upcomingToday} outcomes={Math.max(mine.length, overdueAll.length)} callbacks={due} isAdmin={admin.role === 'admin'} />
         <AlertCenter me={{ id: admin.id, name: admin.name }} initialPending={mine.map(toPending)} />
         <div className="admin-me">
           <div className="who">{admin.name}</div>
