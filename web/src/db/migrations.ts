@@ -706,4 +706,11 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       ['Henna Hanif', 5, '2024-12-01', 'sales', 'Great service we used Preston Hill Estates to sell our property from start to finish they were very professional, worked to a timely manner and kept us feeling reassured at all times. Definitely recommend 👌'],
     ]),
   },
+  {
+    id: '031_enquiry_side',
+    sql: [
+      // Sales or lettings, when staff have set it by hand (otherwise it's worked out from the property and the message).
+      `ALTER TABLE enquiries ADD COLUMN side TEXT`,
+    ],
+  },
 ]

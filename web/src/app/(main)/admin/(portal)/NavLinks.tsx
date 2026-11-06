@@ -1,6 +1,6 @@
 'use client'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 
 const ICONS: Record<string, React.ReactNode> = {
   dash: <path d="M3 13h7V3H3zM14 21h7V11h-7zM3 21h7v-5H3zM14 7h7V3h-7z" />,
@@ -26,8 +26,10 @@ function Icon({ name }: { name: string }) {
   )
 }
 
-export function NavLinks({ newEnquiries, today, outcomes, callbacks, isAdmin }: { newEnquiries: number; today: number; outcomes: number; callbacks: number; isAdmin: boolean }) {
+export function NavLinks({ newSales, newLettings, today, outcomes, callbacks, isAdmin }: { newSales: number; newLettings: number; today: number; outcomes: number; callbacks: number; isAdmin: boolean }) {
   const path = usePathname()
+  const side = useSearchParams().get('side')
+  const onSide = (x: string) => (path === '/admin/enquiries' && side === x ? 'on' : undefined)
   const on = (href: string) => (href === '/admin' ? path === '/admin' : path.startsWith(href)) ? 'on' : undefined
   return (
     <nav className="admin-nav" aria-label="Admin">
@@ -45,8 +47,11 @@ export function NavLinks({ newEnquiries, today, outcomes, callbacks, isAdmin }: 
       <Link href="/admin/properties" className={on('/admin/properties')}><Icon name="homes" />Properties</Link>
       <Link href="/admin/tenants" className={on('/admin/tenants')}><Icon name="people" />Tenants</Link>
       <Link href="/admin/reviews" className={on('/admin/reviews')}><Icon name="star" />Reviews</Link>
-      <Link href="/admin/enquiries" className={on('/admin/enquiries')}>
-        <Icon name="mail" />Enquiries{newEnquiries > 0 ? <span className="count">{newEnquiries}</span> : null}
+      <Link href="/admin/enquiries?side=sales" className={onSide('sales')}>
+        <Icon name="mail" />Sales enquiries{newSales > 0 ? <span className="count">{newSales}</span> : null}
+      </Link>
+      <Link href="/admin/enquiries?side=lettings" className={onSide('lettings')}>
+        <Icon name="mail" />Lettings enquiries{newLettings > 0 ? <span className="count">{newLettings}</span> : null}
       </Link>
       <Link href="/admin/mail" className={on('/admin/mail')}><Icon name="mail" />Inbox</Link>
       <Link href="/admin/campaigns" className={on('/admin/campaigns')}><Icon name="mail" />Email campaigns</Link>

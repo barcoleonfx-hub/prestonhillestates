@@ -26,3 +26,26 @@ export const outcomeText = (v: string | null | undefined) => ENQUIRY_OUTCOMES.fi
 
 /** Enquiries from the last 90 days are "recent": the people most likely to say yes. */
 export const RECENT_DAYS = 90
+
+export type EnquirySide = 'sales' | 'lettings'
+export const SIDE_LABEL: Record<EnquirySide, string> = { sales: 'Sales', lettings: 'Lettings' }
+
+const LET_WORDS = /\b(to rent|to let|for rent|rental|renting|rent it|pcm|p\.c\.m|per calendar month|tenant|tenants|tenancy|landlord|landlords|letting|lettings|let agreed|holding deposit|furnished)\b/i
+const SALE_WORDS = /\b(for sale|to buy|buying|buyer|purchase|purchasing|mortgage|offer|asking price|selling|sell|sold|freehold|leasehold|share of freehold|chain|first[- ]time buyer|cash buyer)\b/i
+
+/**
+ * Sales or lettings? Set by hand if staff have moved it; otherwise from the property it's about, what kind of
+ * enquiry it is, what the person said they wanted, and finally the words of their message. Null if it can't tell.
+ */
+export function enquirySide(e: { side?: string | null; kind: string; intent?: string | null; message?: string | null }, channel?: string | null): EnquirySide | null {
+  if (e.side === 'sales' || e.side === 'lettings') return e.side
+  if (channel === 'let') return 'lettings'
+  if (channel === 'sale') return 'sales'
+  if (e.kind === 'tenant') return 'lettings'
+  if (e.kind === 'buyer') return 'sales'
+  if (e.intent === 'rent' || e.intent === 'letting') return 'lettings'
+  if (e.intent === 'buy' || e.intent === 'selling' || e.intent === 'sell') return 'sales'
+  const t = e.message ?? ''
+  const isLet = LET_WORDS.test(t), isSale = SALE_WORDS.test(t)
+  return isLet && !isSale ? 'lettings' : isSale && !isLet ? 'sales' : null
+}

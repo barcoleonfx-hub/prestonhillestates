@@ -262,6 +262,17 @@ export async function deleteMedia(id: string) {
 
 // ---------------- enquiries ----------------
 
+/** Moves an enquiry to the sales or lettings list (for ones that were sorted wrongly, or couldn't be sorted). */
+export async function setEnquirySide(form: FormData) {
+  await requireAdmin()
+  await ready()
+  const id = String(form.get('id') || '')
+  const side = String(form.get('side') || '')
+  if (side !== 'sales' && side !== 'lettings') return
+  await db.update(enquiries).set({ side }).where(eq(enquiries.id, id))
+  revalidatePath('/admin', 'layout')
+}
+
 export async function setEnquiryHandled(form: FormData) {
   await requireAdmin()
   await ready()

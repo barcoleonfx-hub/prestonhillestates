@@ -141,6 +141,8 @@ export const enquiries = sqliteTable('enquiries', {
   outcome: text('outcome'),
   outcomeAt: text('outcome_at'),
   outcomeBy: text('outcome_by'),
+  /** 'sales' or 'lettings' when set by hand; otherwise see enquirySide(). */
+  side: text('side'),
   createdAt: text('created_at').notNull(),
 })
 

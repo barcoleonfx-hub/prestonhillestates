@@ -822,3 +822,12 @@ kbd { font: 600 0.68rem/1 var(--sans, inherit); padding: 3px 6px; border-radius:
 .rv-found-main { display: grid; gap: 8px; min-width: 0; }
 .rv-found-top { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.8fr) minmax(0, 0.9fr) minmax(0, 1fr); gap: 8px; }
 @media (max-width: 760px) { .rv-found-top { grid-template-columns: 1fr 1fr; } .rv-found-row { grid-template-columns: 1fr; } }
+
+/* Sales and lettings enquiries */
+.pill.side-sales { background: #EAF0FB; color: #2A4F8F; }
+.pill.side-lettings { background: #E6F2EB; color: #2F6B4E; }
+.enq-side { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: var(--gold-tint); font-size: 0.84rem; }
+.enq-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.enq-tabs a { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-decoration: none; font-weight: 600; }
+.enq-tabs a.on { background: var(--charcoal); border-color: var(--charcoal); color: #fff; }
+.enq-tabs a .count { font-size: 0.72rem; background: var(--gold); color: #fff; border-radius: 999px; padding: 1px 8px; }

@@ -1,9 +1,9 @@
 import Link from 'next/link'
 import type { enquiries, properties } from '@/db/schema'
-import { enquiryLabel, outcomeText } from '@/lib/enquiry-labels'
+import { SIDE_LABEL, enquiryLabel, enquirySide, outcomeText } from '@/lib/enquiry-labels'
 import { displayAddressFor } from '@/lib/properties'
 import type { TrailItem } from '@/lib/enquiry-trail'
-import { setEnquiryHandled } from '../actions'
+import { setEnquiryHandled, setEnquirySide } from '../actions'
 import { linkEnquiry } from '../crm-actions'
 import { EnquiryNotes } from './EnquiryNotes'
 import { EnquiryOutcome } from './EnquiryOutcome'
@@ -16,7 +16,15 @@ export type EnquiryRow = { e: typeof enquiries.$inferSelect; p: typeof propertie
  * `linkTo` lists our properties so an enquiry the import couldn't place can be linked by hand.
  */
 export function EnquiryItem({ e, p, dnc, trail, linkTo, onProperty = false, times = 1 }: EnquiryRow & { trail: TrailItem[]; linkTo?: { id: string; label: string }[]; onProperty?: boolean; times?: number }) {
-  const callerType = e.kind === 'valuation' ? (e.intent === 'letting' ? 'landlord' : 'seller') : p?.channel === 'let' || /renter|to rent|pcm/i.test(e.message ?? '') ? 'tenant' : 'buyer'
+  const side = enquirySide(e, p?.channel)
+  const callerType = e.kind === 'valuation' ? (side === 'lettings' ? 'landlord' : 'seller') : side === 'lettings' ? 'tenant' : 'buyer'
+  const moveTo = (to: 'sales' | 'lettings', label: string, cls = 'btn btn-ghost btn-sm') => (
+    <form action={setEnquirySide}>
+      <input type="hidden" name="id" value={e.id} />
+      <input type="hidden" name="side" value={to} />
+      <button className={cls} type="submit">{label}</button>
+    </form>
+  )
   return (
     <div className={`enq-item${dnc ? ' dnc' : ''}`} id={`enq-${e.id}`}>
       <div style={{ minWidth: 0, flex: 1 }}>
@@ -24,6 +32,7 @@ export function EnquiryItem({ e, p, dnc, trail, linkTo, onProperty = false, time
           {e.contactId ? <Link href={`/admin/contacts/${e.contactId}`} className="enq-name">{e.name}</Link> : e.name}{' '}
           {!e.handled ? <span className="pill gold">New</span> : null}{' '}
           <span className="pill">{enquiryLabel(e)}</span>{' '}
+          {side ? <span className={`pill side-${side}`}>{SIDE_LABEL[side]}</span> : <span className="pill warn">Sales or lettings?</span>}{' '}
           {times > 1 ? <span className="pill gold">Enquired {times} times</span> : null}{' '}
           {e.outcome ? <span className={`pill${e.outcome === 'do_not_call' ? ' warn' : ''}`}>{outcomeText(e.outcome)}</span> : null}{' '}
           {dnc && e.outcome !== 'do_not_call' ? <span className="pill warn">Do not call</span> : null}
@@ -53,6 +62,13 @@ export function EnquiryItem({ e, p, dnc, trail, linkTo, onProperty = false, time
             <button className="btn btn-ghost btn-sm" type="submit">Link</button>
           </form>
         ) : null}
+        {!side ? (
+          <div className="enq-side">
+            <span>Couldn’t tell if this is sales or lettings:</span>
+            {moveTo('sales', 'It’s sales', 'btn btn-dark btn-sm')}
+            {moveTo('lettings', 'It’s lettings', 'btn btn-dark btn-sm')}
+          </div>
+        ) : null}
         <EnquiryOutcome id={e.id} outcome={e.outcome} channel={p?.channel ?? (callerType === 'tenant' ? 'let' : 'sale')} />
         <EnquiryNotes id={e.id} trail={trail} />
       </div>
@@ -73,6 +89,7 @@ export function EnquiryItem({ e, p, dnc, trail, linkTo, onProperty = false, time
           <input type="hidden" name="handled" value={e.handled ? '0' : '1'} />
           <button className="btn btn-ghost btn-sm" type="submit">{e.handled ? 'Mark as new' : 'Mark handled'}</button>
         </form>
+        {side ? moveTo(side === 'sales' ? 'lettings' : 'sales', side === 'sales' ? 'Move to lettings' : 'Move to sales') : null}
       </div>
     </div>
   )
