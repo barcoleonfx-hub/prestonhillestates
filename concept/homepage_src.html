@@ -614,9 +614,9 @@
       <div class="hero-side h-stage s3">
         <figure class="hero-film">
           <!-- Preston Road station, 1960 to today, in one shot -->
-          <video id="heroFilm" muted playsinline autoplay preload="auto" poster="/video/preston-road-poster.jpg" aria-label="Preston Road station changing from 1960 to the present day">
-            <source src="/video/preston-road-854.mp4" type="video/mp4" media="(max-width: 700px)"/>
-            <source src="/video/preston-road-1280.mp4" type="video/mp4"/>
+          <video id="heroFilm" muted playsinline autoplay preload="auto" poster="/video/preston-road-poster.jpg" aria-label="Preston Road station changing from 1960 to the present day, then the Preston Hill Estates branch at 271 Preston Road">
+            <source src="/video/preston-road-854.mp4?v=2" type="video/mp4" media="(max-width: 700px)"/>
+            <source src="/video/preston-road-1280.mp4?v=2" type="video/mp4"/>
           </video>
           <figcaption class="hf-era"><span class="hf-dot" aria-hidden="true"></span><span id="heroEra">Preston Road · 1960</span></figcaption>
         </figure>
@@ -978,11 +978,13 @@
     var fig = v.parentNode, era = document.getElementById('heroEra');
     var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (still) { v.removeAttribute('autoplay'); v.pause(); return; }
-    // 0–4.8s: 1960 · 4.8–9.5s: today · then the Preston Road poster, with the label out of the way.
+    // 0–4.8s: 1960 · 4.8–8.6s: today · then our branch at 271 Preston Road (its own sign says who we are, so the label steps aside).
     v.addEventListener('timeupdate', function () {
-      var t = v.currentTime, now = t > 4.8, card = t > 9.5;
-      if (now !== fig.classList.contains('now')) { fig.classList.toggle('now', now); era.textContent = now ? 'Preston Road · today' : 'Preston Road · 1960'; }
-      if (card !== fig.classList.contains('card')) fig.classList.toggle('card', card);
+      var t = v.currentTime, now = t > 4.8, card = t > 8.6;
+      if (now !== fig.classList.contains('now') || card !== fig.classList.contains('card')) {
+        fig.classList.toggle('now', now); fig.classList.toggle('card', card);
+        era.textContent = card ? 'Our branch · 271 Preston Road' : now ? 'Preston Road · today' : 'Preston Road · 1960';
+      }
     });
     var hold;
     v.addEventListener('ended', function () { hold = setTimeout(function () { v.currentTime = 0; v.play().catch(function () {}); }, 1500); });
