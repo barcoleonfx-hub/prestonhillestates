@@ -50,6 +50,8 @@ export function ValuationWizard({ initialIntent, initialPostcode }: { initialInt
   const [error, setError] = useState<{ field?: Field; text: string } | null>(null)
   const [sending, setSending] = useState(false)
   const [done, setDone] = useState(false)
+  type Estimate = { kind: 'sale' | 'rent'; low: number; high: number; basis: string; onMarket: { address: string; price: string; beds: number | null; url: string }[] }
+  const [estimate, setEstimate] = useState<Estimate | null>(null)
   const card = useRef<HTMLDivElement>(null)
 
   useEffect(() => { if (done) card.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }) }, [done])
@@ -123,12 +125,13 @@ export function ValuationWizard({ initialIntent, initialPostcode }: { initialInt
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: name.trim(), phone: phone.trim(), email: email.trim(), postcode: pc, intent, address: address.trim(), propertyType: type, bedrooms: beds, timescale: when, contactTime: time, notes: notes.trim(), hp_check }),
       })
-      const r = (await res.json()) as { ok: boolean; error?: string; field?: Field }
+      const r = (await res.json()) as { ok: boolean; error?: string; field?: Field; estimate?: Estimate | null }
       if (!r.ok) {
         setSending(false)
         return r.field && r.field in STEP_OF ? fail(r.field, r.error ?? 'Please check this.') : setError({ text: r.error ?? 'Something went wrong. Please call us on 020 8904 9005.' })
       }
       try { localStorage.setItem(STORE_KEY, String(Date.now() + 365 * 864e5)) } catch { /* private mode */ }
+      setEstimate(r.estimate ?? null)
       setDone(true)
     } catch {
       setError({ text: 'We couldn’t send that. Please check your connection or call us on 020 8904 9005.' })
@@ -142,6 +145,20 @@ export function ValuationWizard({ initialIntent, initialPostcode }: { initialInt
         <div className="vx-tick" aria-hidden="true">✓</div>
         <h2>Thank you, {name.trim().split(/\s+/)[0]}.</h2>
         <p>Your request for {address.trim()}, {pc} is with the branch.</p>
+        {estimate ? (
+          <div className="vx-estimate">
+            <span className="vx-est-k">{estimate.kind === 'rent' ? 'Your instant rent estimate' : 'Your instant estimate'}</span>
+            <span className="vx-est-v">£{estimate.low.toLocaleString('en-GB')} – £{estimate.high.toLocaleString('en-GB')}{estimate.kind === 'rent' ? <small> a month</small> : null}</span>
+            <span className="vx-est-b">Based on {estimate.basis}.</span>
+            {estimate.onMarket.length ? (
+              <div className="vx-est-mkt">
+                <b>{estimate.kind === 'rent' ? 'Similar homes we’re letting nearby' : 'Similar homes we have for sale nearby'}</b>
+                {estimate.onMarket.map((m) => <a key={m.url} href={m.url}><span>{m.address}{m.beds != null ? ` · ${m.beds === 0 ? 'studio' : `${m.beds} bed`}` : ''}</span><b>{m.price}</b></a>)}
+              </div>
+            ) : null}
+            <span className="vx-est-fine">A guide from public records, not a valuation: size, condition, extensions and the exact street can move the figure a long way. Our free visit gives you an accurate one.</span>
+          </div>
+        ) : null}
         <ol className="vx-next">
           <li><b>We’ll call you</b> within one working day{time && time !== 'Any time' ? `, in the ${time.toLowerCase()} if we can` : ''}, to arrange a time.</li>
           <li><b>We visit</b> and walk round the property with you.</li>

@@ -219,3 +219,15 @@
 .vx-select[aria-invalid="true"] { border-color: #A8442E; }
 .vx-linkish { border: 0; background: none; padding: 0; margin-top: 6px; font: inherit; font-size: 0.82rem; color: var(--gold-deep); font-weight: 600; cursor: pointer; text-decoration: underline; justify-self: start; }
 
+
+/* The instant estimate shown once the request is in */
+.vx-estimate { display: flex; flex-direction: column; gap: 4px; margin-top: 18px; padding: 18px 20px; border-radius: 16px; background: var(--gold-wash, #FDF9EE); border: 1px solid var(--line, #EAE6DA); border-left: 4px solid var(--gold, #C4972F); }
+.vx-est-k { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--gold-deep, #A47B1D); }
+.vx-est-v { font-family: 'Fraunces', Georgia, serif; font-size: clamp(1.6rem, 4vw, 2.2rem); color: var(--ink, #23211A); line-height: 1.15; }
+.vx-est-v small { font-size: 0.5em; color: var(--ink-soft); }
+.vx-est-b { font-size: 0.86rem; color: var(--ink-soft, #59554A); }
+.vx-est-mkt { display: flex; flex-direction: column; margin-top: 10px; font-size: 0.86rem; }
+.vx-est-mkt > b { font-size: 0.8rem; margin-bottom: 4px; }
+.vx-est-mkt a { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line, #EAE6DA); color: var(--ink, #23211A); text-decoration: none; }
+.vx-est-mkt a span { min-width: 0; }
+.vx-est-fine { font-size: 0.76rem; color: var(--faint, #8E8975); margin-top: 8px; }

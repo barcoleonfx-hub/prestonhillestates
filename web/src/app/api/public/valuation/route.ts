@@ -9,5 +9,5 @@ export async function POST(req: Request) {
   const form = new FormData()
   for (const k of ['name', 'phone', 'email', 'postcode', 'intent', 'address', 'propertyType', 'bedrooms', 'timescale', 'contactTime', 'notes', 'hp_check']) form.set(k, typeof body[k] === 'string' ? (body[k] as string).slice(0, 1000) : '')
   const res = await sendValuationRequest({}, form)
-  return Response.json({ ok: !!res.ok, error: res.error, field: res.field }, { status: res.ok ? 200 : 422 })
+  return Response.json({ ok: !!res.ok, error: res.error, field: res.field, estimate: res.estimate ?? null }, { status: res.ok ? 200 : 422 })
 }
