@@ -5,7 +5,8 @@ import { SoldPanel } from './SoldPanel'
 type Intent = 'selling' | 'letting'
 type Field = 'postcode' | 'address' | 'name' | 'phone' | 'email'
 
-const TYPES = ['House', 'Flat', 'Maisonette', 'Bungalow', 'Other']
+// The kind of house matters most to the instant estimate (a detached house sells for far more than a terraced one).
+const TYPES = ['Detached house', 'Semi-detached house', 'Terraced house', 'Flat', 'Maisonette', 'Bungalow', 'Other']
 const BEDS = ['Studio', '1', '2', '3', '4', '5+']
 const WHEN: Record<Intent, string[]> = {
   selling: ['As soon as possible', 'Within 3 months', 'Within 6 months', 'Just finding out'],
@@ -52,6 +53,7 @@ export function ValuationWizard({ initialIntent, initialPostcode }: { initialInt
   const [done, setDone] = useState(false)
   type Estimate = { kind: 'sale' | 'rent'; low: number; high: number; basis: string; onMarket: { address: string; price: string; beds: number | null; url: string }[] }
   const [estimate, setEstimate] = useState<Estimate | null>(null)
+  const [estimating, setEstimating] = useState(false)
   const card = useRef<HTMLDivElement>(null)
 
   useEffect(() => { if (done) card.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }) }, [done])
@@ -133,6 +135,13 @@ export function ValuationWizard({ initialIntent, initialPostcode }: { initialInt
       try { localStorage.setItem(STORE_KEY, String(Date.now() + 365 * 864e5)) } catch { /* private mode */ }
       setEstimate(r.estimate ?? null)
       setDone(true)
+      // If the estimate didn't come back with the request, work it out separately (it isn't saved twice).
+      if (!r.estimate) {
+        setEstimating(true)
+        fetch('/api/public/estimate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ postcode: pc, intent, propertyType: type, bedrooms: beds, address: address.trim() }) })
+          .then((x) => (x.ok ? x.json() : null)).then((d: { estimate?: Estimate | null } | null) => setEstimate(d?.estimate ?? null))
+          .catch(() => {}).finally(() => setEstimating(false))
+      }
     } catch {
       setError({ text: 'We couldn’t send that. Please check your connection or call us on 020 8904 9005.' })
     }
@@ -145,6 +154,7 @@ export function ValuationWizard({ initialIntent, initialPostcode }: { initialInt
         <div className="vx-tick" aria-hidden="true">✓</div>
         <h2>Thank you, {name.trim().split(/\s+/)[0]}.</h2>
         <p>Your request for {address.trim()}, {pc} is with the branch.</p>
+        {estimating && !estimate ? <div className="vx-estimate"><span className="vx-est-k">Working out your instant estimate…</span></div> : null}
         {estimate ? (
           <div className="vx-estimate">
             <span className="vx-est-k">{estimate.kind === 'rent' ? 'Your instant rent estimate' : 'Your instant estimate'}</span>
@@ -156,7 +166,7 @@ export function ValuationWizard({ initialIntent, initialPostcode }: { initialInt
                 {estimate.onMarket.map((m) => <a key={m.url} href={m.url}><span>{m.address}{m.beds != null ? ` · ${m.beds === 0 ? 'studio' : `${m.beds} bed`}` : ''}</span><b>{m.price}</b></a>)}
               </div>
             ) : null}
-            <span className="vx-est-fine">A guide from public records, not a valuation: size, condition, extensions and the exact street can move the figure a long way. Our free visit gives you an accurate one.</span>
+            <span className="vx-est-fine">This price is an estimate only, based on public records. For a more accurate valuation we need to visit the property in person: size, condition, any extensions and the exact street can all make a difference.</span>
           </div>
         ) : null}
         <ol className="vx-next">
