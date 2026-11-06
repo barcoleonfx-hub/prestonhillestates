@@ -760,4 +760,11 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       `UPDATE contacts SET archived = 1 WHERE name = 'Unknown' AND NOT EXISTS (SELECT 1 FROM enquiries WHERE enquiries.contact_id = contacts.id)`,
     ],
   },
+  {
+    id: '035_valuation_check',
+    sql: [
+      // The valuation check on a valuation enquiry: comparables staff found and the figure they settled on (JSON).
+      `ALTER TABLE enquiries ADD COLUMN valuation TEXT`,
+    ],
+  },
 ]

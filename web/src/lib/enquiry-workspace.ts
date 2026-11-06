@@ -8,6 +8,7 @@ import { mailboxStatus } from './mailbox'
 import { getProperty, type FullProperty } from './properties'
 import { emailProperty, knownBase } from './property-email-data'
 import { salesNear } from './sold-prices'
+import { figureText, homeFrom, parseSaved } from './valuation-check'
 
 const PHONE = '020 8904 9005'
 const POSTCODE = /\b([A-Z]{1,2}\d[A-Z\d]?)\s*(\d[A-Z]{2})\b/i
@@ -52,7 +53,8 @@ export async function enquiryWorkspace(id: string, me: { name: string }) {
   const postcode = pcMatch ? `${pcMatch[1]} ${pcMatch[2]}`.toUpperCase() : null
   const kind = emailKindFor(sorted.side, valuation)
   const ep = p ? emailProperty(p, base) : null
-  const near = postcode && valuation && sorted.side !== 'lettings' ? await salesNear(postcode, { limit: 4 }).catch(() => null) : null
+  const home = homeFrom(e.message)
+  const near = postcode && valuation && sorted.side !== 'lettings' ? await salesNear(postcode, { limit: 4, type: home.type }).catch(() => null) : null
   const ctx: EnquiryEmailContext = {
     kind, name: e.name, address: address ?? (ep ? null : postcode), postcode,
     property: ep ? { url: ep.url, address: ep.address, priceText: ep.priceText, photo: ep.photos[0] ?? null, specs: ep.specs.slice(0, 3) } : null,
@@ -62,5 +64,15 @@ export async function enquiryWorkspace(id: string, me: { name: string }) {
     })),
     base, sender: { name: me.name, phone: PHONE, email: box?.user ?? 'info@prestonhillestates.com' },
   }
-  return { e, p, contact: contact ?? null, sorted, valuation, kind, ctx, lines, mailboxReady: !!box?.hasPassword }
+  // What staff settled on in the valuation check, for the "Your valuation" email.
+  const saved = parseSaved(e.valuation)
+  const rent = kind === 'lettings-valuation'
+  if (saved) {
+    ctx.figure = figureText(saved.low, saved.high, rent) || undefined
+    ctx.evidence = saved.comps.slice(0, 4).map((c) => ({
+      where: c.address || 'A similar home', price: `£${c.price.toLocaleString('en-GB')}${c.kind === 'rent' || rent ? ' pcm' : ''}`,
+      what: `${c.kind === 'sold' ? 'Sold' : c.kind === 'rent' ? 'Let' : rent ? 'Asking rent' : 'Asking price'}${c.beds ? ` · ${c.beds} bed` : ''}`,
+    }))
+  }
+  return { e, p, contact: contact ?? null, sorted, valuation, kind, ctx, lines, saved, mailboxReady: !!box?.hasPassword }
 }
