@@ -737,4 +737,27 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       `UPDATE enquiries SET side_checked_at = NULL WHERE side IS NULL AND auto_side IS NULL`,
     ],
   },
+  {
+    id: '034_remove_portal_account_emails',
+    sql: [
+      // Zoopla / OnTheMarket / website account emails saved as enquiries before the import learned to skip them:
+      // ZooplaPro "access from a new device" logins, password and security emails, and anything else with no
+      // person in it (no name, no email of theirs) and none of a real lead's details. Left alone if staff have
+      // recorded anything against it.
+      `DELETE FROM enquiries WHERE kind = 'email' AND source IN ('zoopla', 'onthemarket', 'website')
+        AND outcome IS NULL
+        AND NOT EXISTS (SELECT 1 FROM enquiry_notes n WHERE n.enquiry_id = enquiries.id)
+        AND NOT EXISTS (SELECT 1 FROM appointments a WHERE a.enquiry_id = enquiries.id)
+        AND coalesce(message, '') NOT LIKE '%Type of enquiry:%' AND coalesce(message, '') NOT LIKE '%Zoopla reference:%'
+        AND coalesce(message, '') NOT LIKE '%Wants:%' AND coalesce(message, '') NOT LIKE '%Listing:%' AND coalesce(message, '') NOT LIKE '%Situation:%'
+        AND (
+          (trim(name) IN ('Unknown', '') AND (email IS NULL OR email LIKE '%zoopla%' OR email LIKE '%onthemarket%' OR email LIKE '%wix%'))
+          OR lower(coalesce(message, '')) LIKE '%zooplapro%' OR lower(coalesce(message, '')) LIKE '%login attempt%'
+          OR lower(coalesce(message, '')) LIKE '%verify-device%' OR lower(coalesce(message, '')) LIKE '%new browser%'
+          OR lower(coalesce(message, '')) LIKE '%member services%' OR lower(coalesce(message, '')) LIKE '%reset your password%'
+        )`,
+      // The empty "Unknown" people those emails created.
+      `UPDATE contacts SET archived = 1 WHERE name = 'Unknown' AND NOT EXISTS (SELECT 1 FROM enquiries WHERE enquiries.contact_id = contacts.id)`,
+    ],
+  },
 ]

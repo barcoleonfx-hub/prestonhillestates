@@ -67,7 +67,7 @@ const tidyPhone = (p: string | null) => {
 }
 
 /** Subjects of portal account and system emails, never enquiries. */
-const SYSTEM_MAIL = /verification code|one[- ]time|passcode|password|sign[- ]?in|log[- ]?in|security alert|verify your|confirm your|invoice|receipt|statement|payment|subscription|your (listing|account|advert|branch)|listings? (is|are) (now )?live|performance|report|newsletter|webinar|welcome to|survey|feedback|terms (of|and)|privacy/i
+const SYSTEM_MAIL = /zooplapro|access from (a )?new|new (web|mobile|browser)|(web|mobile) device|login attempt|verify.device|member services|verification code|one[- ]time|passcode|password|sign[- ]?in|log[- ]?in|security alert|verify your|confirm your|invoice|receipt|statement|payment|subscription|your (listing|account|advert|branch)|listings? (is|are) (now )?live|performance|report|newsletter|webinar|welcome to|survey|feedback|terms (of|and)|privacy/i
 
 function intentOf(text: string): ImportRow['intent'] {
   const t = text.toLowerCase()
@@ -241,7 +241,7 @@ export async function analyse(raw: string, nowMs = Date.now()): Promise<ImportRo
   const labelledPhone = lead?.phone ?? tidyPhone(field(text, ['phone', 'telephone', 'tel', 'mobile', 'phone number', 'contact number', 'your phone']))
   const about = lead?.about ?? field(text, ['property', 'property address', 'address', 'listing', 'property reference', 'ref', 'regarding'])
   const bodyEmails = (text.match(EMAIL) ?? []).filter((e) => !OWN_DOMAIN.test(e) && !NO_REPLY.test(e) && !/zoopla|onthemarket|wix/i.test(e))
-  const bodyPhone = tidyPhone((text.match(PHONE) ?? []).find((p) => !p.replace(/\D/g, '').match(/20(81277001|89049005)$/)) ?? null)
+  const bodyPhone = tidyPhone((text.match(PHONE) ?? []).find((p) => !p.replace(/\D/g, '').match(/20(81277001|89049005|35441000)$/)) ?? null)
 
   const directSender = from?.address && !OWN_DOMAIN.test(from.address) && !NO_REPLY.test(from.address) && source === 'email' ? from : null
   const goodReplyTo = replyTo?.address && !OWN_DOMAIN.test(replyTo.address) && !NO_REPLY.test(replyTo.address) && !/zoopla|onthemarket|wix/i.test(replyTo.address) ? replyTo : null

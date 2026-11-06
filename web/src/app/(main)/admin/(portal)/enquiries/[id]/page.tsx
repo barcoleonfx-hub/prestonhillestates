@@ -5,7 +5,7 @@ import { SIDE_LABEL, enquiryLabel, outcomeText } from '@/lib/enquiry-labels'
 import { trailFor } from '@/lib/enquiry-trail'
 import { enquiryWorkspace } from '@/lib/enquiry-workspace'
 import { displayAddressFor, priceLabel } from '@/lib/properties'
-import { setEnquiryHandled, setEnquirySide } from '../../../actions'
+import { removeNotEnquiry, setEnquiryHandled, setEnquirySide } from '../../../actions'
 import { EnquiryNotes } from '../../EnquiryNotes'
 import { EnquiryOutcome } from '../../EnquiryOutcome'
 import { LogCallButton } from '../../LogCallButton'
@@ -96,6 +96,15 @@ export default async function EnquiryPage({ params, searchParams }: { params: Pr
               </form>
               {e.contactId ? <Link className="btn btn-ghost btn-sm" href={`/admin/contacts/${e.contactId}`}>Their record</Link> : null}
             </div>
+            <details className="ew-remove">
+              <summary>Not an enquiry?</summary>
+              <p>If this is an account email, a newsletter or anything else that isn’t someone asking about a property, remove it.</p>
+              <form action={removeNotEnquiry}>
+                <input type="hidden" name="id" value={e.id} />
+                <input type="hidden" name="back" value={back} />
+                <button className="btn btn-ghost btn-sm" type="submit">Remove it from enquiries</button>
+              </form>
+            </details>
           </section>
         </div>
 

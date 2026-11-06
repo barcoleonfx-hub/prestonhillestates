@@ -9,6 +9,7 @@ import { enquiries, media, properties, rooms } from '@/db/schema'
 import {
   clearLoginFailures, endSession, loginLocked, recordLoginFailure, requireAdmin, startSession, verifyLogin,
 } from '@/lib/auth'
+import { audit } from '@/lib/contacts'
 import { nextRef } from '@/lib/properties'
 import { storage } from '@/lib/storage'
 import { now, uid } from '@/lib/util'
@@ -271,6 +272,20 @@ export async function setEnquirySide(form: FormData) {
   if (side !== 'sales' && side !== 'lettings') return
   await db.update(enquiries).set({ side }).where(eq(enquiries.id, id))
   revalidatePath('/admin', 'layout')
+}
+
+/** Removes something that isn't an enquiry at all (an account email, a newsletter) that got in by mistake. */
+export async function removeNotEnquiry(form: FormData) {
+  const me = await requireAdmin()
+  await ready()
+  const id = String(form.get('id') || '')
+  const e = await db.query.enquiries.findFirst({ where: eq(enquiries.id, id) })
+  if (!e) return
+  await db.delete(enquiries).where(eq(enquiries.id, id))
+  await audit(me.id, 'remove_not_enquiry', 'enquiry', id, `${e.name}: ${(e.message ?? '').split('\n')[0]}`.slice(0, 120))
+  revalidatePath('/admin', 'layout')
+  const back = String(form.get('back') || '')
+  if (back.startsWith('/admin/enquiries')) redirect(back)
 }
 
 export async function setEnquiryHandled(form: FormData) {
