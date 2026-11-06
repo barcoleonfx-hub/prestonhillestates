@@ -927,3 +927,7 @@ kbd { font: 600 0.68rem/1 var(--sans, inherit); padding: 3px 6px; border-radius:
 .ew-preview-bar span { color: var(--faint); text-transform: uppercase; letter-spacing: 0.1em; font-size: 0.66rem; font-weight: 700; }
 .ew-preview-bar b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ew-preview iframe { display: block; width: 100%; height: 720px; border: 0; background: #F1EFE8; }
+.enq-junk { color: var(--faint); }
+.ew-remove { margin-top: 14px; font-size: 0.82rem; color: var(--faint); }
+.ew-remove summary { cursor: pointer; }
+.ew-remove p { margin: 6px 0; }

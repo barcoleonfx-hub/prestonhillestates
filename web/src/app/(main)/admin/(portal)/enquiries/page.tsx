@@ -7,7 +7,7 @@ import { ENQUIRY_OUTCOMES, ENQUIRY_SOURCES, RECENT_DAYS, enquiryLabel, enquirySi
 import { detailLines } from '@/lib/enquiry-workspace'
 import { displayAddressFor, priceLabel } from '@/lib/properties'
 import type { EnquiryRow as Row } from '../EnquiryItem'
-import { setEnquirySide } from '../../actions'
+import { removeNotEnquiry, setEnquirySide } from '../../actions'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Enquiries' }
@@ -113,6 +113,7 @@ export default async function EnquiriesPage({ searchParams }: { searchParams: Pr
                 {(['sales', 'lettings'] as const).map((x) => (
                   <form key={x} action={setEnquirySide}><input type="hidden" name="id" value={r.e.id} /><input type="hidden" name="side" value={x} /><button className="btn btn-ghost btn-sm" type="submit">{x === 'sales' ? 'Sales' : 'Lettings'}</button></form>
                 ))}
+                <form action={removeNotEnquiry}><input type="hidden" name="id" value={r.e.id} /><button className="btn btn-ghost btn-sm enq-junk" type="submit" title="Remove it: an account email, newsletter or similar">Not an enquiry</button></form>
               </div>
             ) : null}
           </div>
