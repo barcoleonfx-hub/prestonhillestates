@@ -18,19 +18,22 @@ export type EnquiryEmailContext = {
   sold: { where: string; type: string; price: string; when: string }[]
   base: string
   sender: Sender
+  /** Comparable homes staff noted in the valuation check, and the figure they settled on. */
+  evidence?: { where: string; price: string; what: string }[]
+  figure?: string
 }
-export type EnquiryEmailExtra = { when?: string; times?: string }
+export type EnquiryEmailExtra = { when?: string; times?: string; figure?: string }
 
 export type EnquiryTemplate = {
   key: string
   label: string
   hint: string
   /** A detail staff fill in: the booked time, or times to offer. */
-  needs?: 'when' | 'times'
+  needs?: 'when' | 'times' | 'figure'
   subject: (c: EnquiryEmailContext, x: EnquiryEmailExtra) => string
   message: (c: EnquiryEmailContext, x: EnquiryEmailExtra) => string
   kicker: string
-  extras?: ('property' | 'sold' | 'landlord' | 'tenant-docs' | 'seller-docs')[]
+  extras?: ('property' | 'sold' | 'evidence' | 'landlord' | 'tenant-docs' | 'seller-docs')[]
   cta?: (c: EnquiryEmailContext) => { href: string; label: string } | null
 }
 
@@ -40,6 +43,7 @@ const at = (c: EnquiryEmailContext) => (c.address ? ` at ${c.address}` : c.postc
 const about = (c: EnquiryEmailContext) => c.property?.address ?? c.address ?? 'the property'
 const WHEN = '[day and time]'
 const TIMES = '[the times you can offer]'
+const FIGURE = '[your valuation]'
 const area = (c: EnquiryEmailContext) => (c.postcode ? c.postcode.split(' ')[0] : 'your area')
 
 const confirmValuation = (letting: boolean): EnquiryTemplate => ({
@@ -103,6 +107,20 @@ export const ENQUIRY_TEMPLATES: Record<EnquiryEmailKind, EnquiryTemplate[]> = {
     },
     confirmValuation(false),
     {
+      key: 'result', label: 'Your valuation', hint: 'After the visit: the figure and the evidence.', needs: 'figure',
+      kicker: 'Your valuation',
+      subject: (c) => `Your valuation${c.address ? `: ${c.address}` : ''}`,
+      message: (c, x) => [
+        hello(c),
+        `Thank you for showing us round${at(c)}. It was good to meet you.`,
+        `Having looked at your home, at what’s sold nearby recently and at similar homes on the market now, we’d put its value at ${x.figure || FIGURE}.`,
+        'Some of the sales we looked at are below. We’d be glad to talk you through the asking price we’d suggest, and how we’d find the right buyer.',
+        `When you’re ready to go ahead, or if you have any questions, reply to this email or call us on ${PHONE}.`,
+      ].join('\n\n'),
+      extras: ['evidence'],
+      cta: (c) => (c.postcode ? { href: `${c.base}/sold-prices?postcode=${encodeURIComponent(c.postcode)}`, label: 'See what’s sold near you' } : null),
+    },
+    {
       key: 'follow', label: 'Follow up', hint: 'If you haven’t heard back.',
       kicker: 'Still thinking of selling?',
       subject: (c) => `Still thinking of selling${c.address ? ` ${c.address}` : ''}?`,
@@ -131,6 +149,19 @@ export const ENQUIRY_TEMPLATES: Record<EnquiryEmailKind, EnquiryTemplate[]> = {
       cta: (c) => ({ href: `${c.base}/landlords`, label: 'How we look after landlords' }),
     },
     confirmValuation(true),
+    {
+      key: 'result', label: 'Your rental valuation', hint: 'After the visit: the rent to expect.', needs: 'figure',
+      kicker: 'Your rental valuation',
+      subject: (c) => `Your rental valuation${c.address ? `: ${c.address}` : ''}`,
+      message: (c, x) => [
+        hello(c),
+        `Thank you for showing us round${at(c)}.`,
+        `Having looked at the property and at what similar homes nearby are letting for, we’d expect it to let for ${x.figure || FIGURE}.`,
+        `Our fully managed service would look after everything from there. If you’d like to go ahead, or have any questions, reply to this email or call us on ${PHONE}.`,
+      ].join('\n\n'),
+      extras: ['evidence', 'landlord'],
+      cta: (c) => ({ href: `${c.base}/landlords`, label: 'How we look after landlords' }),
+    },
     {
       key: 'follow', label: 'Follow up', hint: 'If you haven’t heard back.',
       kicker: 'Still thinking of letting?',
@@ -235,6 +266,14 @@ ${c.sold.map((s) => `<table role="presentation" width="100%" cellpadding="0" cel
 <td valign="top" style="padding:9px 0; font-family:${SANS}; font-size:14px; line-height:20px; color:${C.ink};">${esc(s.where)}<br/><span style="font-size:12px; color:${C.faint};">${esc(s.type)} &middot; ${esc(s.when)}</span></td>
 <td valign="top" align="right" style="padding:9px 0; font-family:${SERIF}; font-size:18px; line-height:22px; color:${C.ink}; white-space:nowrap;">${esc(s.price)}</td></tr></table>`).join('\n')}
 <p style="margin:8px 0 0; font-family:${SANS}; font-size:11px; line-height:16px; color:${C.faint};">Prices paid, from HM Land Registry. Your valuation takes in your home’s size, condition and what’s selling now.</p>`))
+    }
+    if (x === 'evidence') {
+      // The homes staff chose, if any; otherwise the Land Registry sales nearby (of the same type when known).
+      const rows = (c.evidence?.length ? c.evidence : c.sold.map((s) => ({ where: s.where, price: s.price, what: `Sold ${s.when} · ${s.type}` }))).slice(0, 6)
+      if (rows.length) out.push(box(`${label(c.kind === 'lettings-valuation' ? 'Similar homes nearby' : 'Homes we compared yours with')}
+${rows.map((s) => `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid ${C.line};"><tr>
+<td valign="top" style="padding:9px 0; font-family:${SANS}; font-size:14px; line-height:20px; color:${C.ink};">${esc(s.where)}<br/><span style="font-size:12px; color:${C.faint};">${esc(s.what)}</span></td>
+<td valign="top" align="right" style="padding:9px 0; font-family:${SERIF}; font-size:18px; line-height:22px; color:${C.ink}; white-space:nowrap;">${esc(s.price)}</td></tr></table>`).join('\n')}`))
     }
     if (x === 'landlord') {
       const fee = `${LETTINGS.percent}%${LETTINGS.vat === 'plus' ? ' + VAT' : ''}`

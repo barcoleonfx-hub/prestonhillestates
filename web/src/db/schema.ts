@@ -147,6 +147,8 @@ export const enquiries = sqliteTable('enquiries', {
   autoSide: text('auto_side'),
   sideWhy: text('side_why'),
   sideCheckedAt: text('side_checked_at'),
+  /** The valuation check: comparables staff found and the figure they settled on (JSON, see lib/valuation-check). */
+  valuation: text('valuation'),
   createdAt: text('created_at').notNull(),
 })
 
