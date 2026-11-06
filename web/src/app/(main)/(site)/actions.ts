@@ -88,7 +88,7 @@ export async function sendValuationRequest(_prev: ValuationState, form: FormData
   // The instant estimate they're shown, worked out now so the branch sees exactly the same figure.
   const estimate = await Promise.race([
     instantEstimate({ postcode, intent, propertyType: String(form.get('propertyType') || ''), bedrooms: String(form.get('bedrooms') || ''), address }),
-    new Promise<null>((ok) => setTimeout(() => ok(null), 4000)),
+    new Promise<null>((ok) => setTimeout(() => ok(null), 7000)),
   ]).catch(() => null)
   const shown = estimate ? `Website estimate shown: £${estimate.low.toLocaleString('en-GB')} to £${estimate.high.toLocaleString('en-GB')}${estimate.kind === 'rent' ? ' a month' : ''} (${estimate.basis})` : ''
   await db.insert(enquiries).values({
