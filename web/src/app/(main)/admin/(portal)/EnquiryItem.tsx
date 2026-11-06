@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import type { enquiries, properties } from '@/db/schema'
-import { SIDE_LABEL, enquiryLabel, enquirySide, outcomeText } from '@/lib/enquiry-labels'
+import { SIDE_LABEL, enquiryLabel, outcomeText, sortEnquiry } from '@/lib/enquiry-labels'
 import { displayAddressFor } from '@/lib/properties'
 import type { TrailItem } from '@/lib/enquiry-trail'
 import { setEnquiryHandled, setEnquirySide } from '../actions'
@@ -9,14 +9,15 @@ import { EnquiryNotes } from './EnquiryNotes'
 import { EnquiryOutcome } from './EnquiryOutcome'
 import { LogCallButton } from './LogCallButton'
 
-export type EnquiryRow = { e: typeof enquiries.$inferSelect; p: typeof properties.$inferSelect | null; dnc: boolean | null }
+export type EnquiryRow = { e: typeof enquiries.$inferSelect; p: typeof properties.$inferSelect | null; dnc: boolean | null; roles?: string | null }
 
 /**
  * One enquiry: who, when, what about, the quick outcome buttons, comments and calls, and the actions.
  * `linkTo` lists our properties so an enquiry the import couldn't place can be linked by hand.
  */
-export function EnquiryItem({ e, p, dnc, trail, linkTo, onProperty = false, times = 1 }: EnquiryRow & { trail: TrailItem[]; linkTo?: { id: string; label: string }[]; onProperty?: boolean; times?: number }) {
-  const side = enquirySide(e, p?.channel)
+export function EnquiryItem({ e, p, dnc, roles, trail, linkTo, onProperty = false, times = 1 }: EnquiryRow & { trail: TrailItem[]; linkTo?: { id: string; label: string }[]; onProperty?: boolean; times?: number }) {
+  const sorted = sortEnquiry(e, p?.channel, roles)
+  const side = sorted.side
   const callerType = e.kind === 'valuation' ? (side === 'lettings' ? 'landlord' : 'seller') : side === 'lettings' ? 'tenant' : 'buyer'
   const moveTo = (to: 'sales' | 'lettings', label: string, cls = 'btn btn-ghost btn-sm') => (
     <form action={setEnquirySide}>
@@ -32,7 +33,7 @@ export function EnquiryItem({ e, p, dnc, trail, linkTo, onProperty = false, time
           {e.contactId ? <Link href={`/admin/contacts/${e.contactId}`} className="enq-name">{e.name}</Link> : e.name}{' '}
           {!e.handled ? <span className="pill gold">New</span> : null}{' '}
           <span className="pill">{enquiryLabel(e)}</span>{' '}
-          {side ? <span className={`pill side-${side}`}>{SIDE_LABEL[side]}</span> : <span className="pill warn">Sales or lettings?</span>}{' '}
+          {side ? <span className={`pill side-${side}`} title={`Why: ${sorted.why}`}>{SIDE_LABEL[side]}</span> : <span className="pill warn">Sales or lettings?</span>}{' '}
           {times > 1 ? <span className="pill gold">Enquired {times} times</span> : null}{' '}
           {e.outcome ? <span className={`pill${e.outcome === 'do_not_call' ? ' warn' : ''}`}>{outcomeText(e.outcome)}</span> : null}{' '}
           {dnc && e.outcome !== 'do_not_call' ? <span className="pill warn">Do not call</span> : null}
@@ -42,6 +43,7 @@ export function EnquiryItem({ e, p, dnc, trail, linkTo, onProperty = false, time
           {' · '}{new Date(e.createdAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/London' })}
           {p && !onProperty ? <> · <Link href={`/admin/properties/${p.id}#enquiries`}>{p.ref} {displayAddressFor(p)}</Link></> : null}
         </div>
+        {side ? <div className="enq-why">{SIDE_LABEL[side]} because: {sorted.why}</div> : null}
         {e.kind === 'valuation' && e.postcode ? (
           <p className="msg">Property postcode <b>{e.postcode}</b> · {e.intent === 'selling' ? 'Thinking of selling' : e.intent === 'letting' ? 'Thinking of letting' : 'Not sure yet'}</p>
         ) : null}
