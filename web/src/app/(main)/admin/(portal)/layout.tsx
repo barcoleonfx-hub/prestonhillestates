@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { and, count, desc, eq, isNull, lte, ne } from 'drizzle-orm'
 import { db, ready } from '@/db/client'
-import { enquiries, properties, tasks } from '@/db/schema'
+import { contacts, enquiries, properties, tasks } from '@/db/schema'
 import { activeStaff } from '@/lib/appointments'
 import { displayAddressFor } from '@/lib/properties'
 import { requireAdmin } from '@/lib/auth'
@@ -22,8 +22,8 @@ export default async function PortalLayout({ children }: { children: React.React
   const today = todayLondon()
   const endOfToday = londonToIso(addDays(today, 1), '00:00')!
   const [fresh, todays, mine, overdueAll, [{ due }], staff, props] = await Promise.all([
-    db.select({ side: enquiries.side, kind: enquiries.kind, intent: enquiries.intent, message: enquiries.message, channel: properties.channel })
-      .from(enquiries).leftJoin(properties, eq(enquiries.propertyId, properties.id)).where(eq(enquiries.handled, false)),
+    db.select({ side: enquiries.side, kind: enquiries.kind, intent: enquiries.intent, message: enquiries.message, channel: properties.channel, roles: contacts.roles })
+      .from(enquiries).leftJoin(properties, eq(enquiries.propertyId, properties.id)).leftJoin(contacts, eq(enquiries.contactId, contacts.id)).where(eq(enquiries.handled, false)),
     listBetween(londonToIso(today, '00:00')!, londonToIso(addDays(today, 1), '00:00')!),
     needingOutcome(admin.id),
     admin.role === 'admin' ? needingOutcome() : Promise.resolve([]),
@@ -33,7 +33,7 @@ export default async function PortalLayout({ children }: { children: React.React
       .from(properties).where(ne(properties.status, 'withdrawn')).orderBy(desc(properties.updatedAt)).limit(400),
   ])
   // New enquiries per list; ones that can't be sorted count on both, so nobody misses them.
-  const sides = fresh.map((e) => enquirySide(e, e.channel))
+  const sides = fresh.map((e) => enquirySide(e, e.channel, e.roles))
   const newSales = sides.filter((x) => x !== 'lettings').length, newLettings = sides.filter((x) => x !== 'sales').length
   const upcomingToday = todays.filter((a) => a.status === 'scheduled').length
   return (

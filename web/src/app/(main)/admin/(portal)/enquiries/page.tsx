@@ -43,7 +43,7 @@ export default async function EnquiriesPage({ searchParams }: { searchParams: Pr
   if (outcome === 'none') where.push(sql`${enquiries.outcome} IS NULL`)
   else if (outcome) where.push(eq(enquiries.outcome, outcome))
   const found: Row[] = await db
-    .select({ e: enquiries, p: properties, dnc: contacts.doNotContact })
+    .select({ e: enquiries, p: properties, dnc: contacts.doNotContact, roles: contacts.roles })
     .from(enquiries)
     .leftJoin(properties, eq(enquiries.propertyId, properties.id))
     .leftJoin(contacts, eq(enquiries.contactId, contacts.id))
@@ -52,7 +52,7 @@ export default async function EnquiriesPage({ searchParams }: { searchParams: Pr
     .limit(5000)
 
   // Sales or lettings: worked out per enquiry. Ones it can't tell go at the top of both lists until someone sorts them.
-  const sideOf = new Map(found.map((r) => [r.e.id, enquirySide(r.e, r.p?.channel)]))
+  const sideOf = new Map(found.map((r) => [r.e.id, enquirySide(r.e, r.p?.channel, r.roles)]))
   const ofType = found.filter((r) => !type || (type === 'valuations') === (r.e.kind === 'valuation'))
   const newIn = (x: EnquirySide) => ofType.filter((r) => !r.e.handled && sideOf.get(r.e.id) !== (x === 'sales' ? 'lettings' : 'sales')).length
   const unsorted = side ? ofType.filter((r) => !sideOf.get(r.e.id)) : []

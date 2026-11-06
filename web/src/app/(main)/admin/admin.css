@@ -831,3 +831,4 @@ kbd { font: 600 0.68rem/1 var(--sans, inherit); padding: 3px 6px; border-radius:
 .enq-tabs a { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-decoration: none; font-weight: 600; }
 .enq-tabs a.on { background: var(--charcoal); border-color: var(--charcoal); color: #fff; }
 .enq-tabs a .count { font-size: 0.72rem; background: var(--gold); color: #fff; border-radius: 999px; padding: 1px 8px; }
+.enq-why { font-size: 0.76rem; color: var(--faint); margin-top: 2px; }
