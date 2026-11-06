@@ -713,4 +713,21 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       `ALTER TABLE enquiries ADD COLUMN side TEXT`,
     ],
   },
+  {
+    id: '032_enquiry_sorting',
+    sql: [
+      // Sales or lettings read from the original email in the background, with the reason, for enquiries whose
+      // saved summary doesn't say.
+      `ALTER TABLE enquiries ADD COLUMN auto_side TEXT`,
+      `ALTER TABLE enquiries ADD COLUMN side_why TEXT`,
+      `ALTER TABLE enquiries ADD COLUMN side_checked_at TEXT`,
+      // Zoopla and OnTheMarket account emails (one-time sign-in codes, password resets) were saved as enquiries.
+      `DELETE FROM enquiries WHERE kind = 'email' AND source IN ('zoopla', 'onthemarket') AND (
+        lower(message) LIKE '%verification code%' OR lower(message) LIKE '%one-time%code%' OR lower(message) LIKE '%one time%code%'
+        OR lower(message) LIKE '%passcode%' OR lower(message) LIKE '%reset your password%' OR lower(message) LIKE '%password reset%')`,
+      // The "Unknown" people those emails created (Zoopla's own phone number), now with nothing left: archived.
+      `UPDATE contacts SET archived = 1 WHERE name = 'Unknown' AND NOT EXISTS (SELECT 1 FROM enquiries WHERE enquiries.contact_id = contacts.id)
+        AND (phone IS NULL OR replace(phone, ' ', '') LIKE '%35441000')`,
+    ],
+  },
 ]

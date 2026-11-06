@@ -8,6 +8,7 @@ import { refreshPostcodeGeo } from '@/lib/postcode-geo'
 import { runCampaigns } from '@/lib/campaign-data'
 import { removeLicensingFiles } from '@/lib/cleanup'
 import { runTenantAlerts } from '@/lib/tenants'
+import { sortFromEmails } from '@/lib/enquiry-sort'
 import { after } from 'next/server'
 
 export const dynamic = 'force-dynamic'
@@ -37,6 +38,8 @@ export async function GET(req: Request) {
     await removeLicensingFiles().catch((e) => console.error('removing old licensing files failed', e))
     // New homes to rent emailed to registered tenants who'd want them (light: a few emails every 10 minutes).
     await runTenantAlerts().catch((e) => console.error('tenant alerts failed', e))
+    // Sales or lettings for enquiries whose summary doesn't say, read from the original email (light).
+    await sortFromEmails().catch((e) => console.error('sorting enquiries failed', e))
     const heavy = [
       () => refreshSoldPrices(), // daily check, monthly reload
       () => backfillAddresses(), // once: the address archive back to 1995

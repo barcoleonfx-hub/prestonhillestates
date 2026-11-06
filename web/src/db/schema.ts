@@ -143,6 +143,10 @@ export const enquiries = sqliteTable('enquiries', {
   outcomeBy: text('outcome_by'),
   /** 'sales' or 'lettings' when set by hand; otherwise see enquirySide(). */
   side: text('side'),
+  /** Sales or lettings read from the original email in the background (lib/enquiry-sort), and why. */
+  autoSide: text('auto_side'),
+  sideWhy: text('side_why'),
+  sideCheckedAt: text('side_checked_at'),
   createdAt: text('created_at').notNull(),
 })
 

@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import type { enquiries, properties } from '@/db/schema'
-import { SIDE_LABEL, enquiryLabel, outcomeText, sortEnquiry } from '@/lib/enquiry-labels'
+import { SIDE_LABEL, enquiryLabel, isValuation, outcomeText, sortEnquiry } from '@/lib/enquiry-labels'
 import { displayAddressFor } from '@/lib/properties'
 import type { TrailItem } from '@/lib/enquiry-trail'
 import { setEnquiryHandled, setEnquirySide } from '../actions'
@@ -18,7 +18,8 @@ export type EnquiryRow = { e: typeof enquiries.$inferSelect; p: typeof propertie
 export function EnquiryItem({ e, p, dnc, roles, trail, linkTo, onProperty = false, times = 1 }: EnquiryRow & { trail: TrailItem[]; linkTo?: { id: string; label: string }[]; onProperty?: boolean; times?: number }) {
   const sorted = sortEnquiry(e, p?.channel, roles)
   const side = sorted.side
-  const callerType = e.kind === 'valuation' ? (side === 'lettings' ? 'landlord' : 'seller') : side === 'lettings' ? 'tenant' : 'buyer'
+  const valuation = isValuation(e)
+  const callerType = valuation ? (side === 'lettings' ? 'landlord' : 'seller') : side === 'lettings' ? 'tenant' : 'buyer'
   const moveTo = (to: 'sales' | 'lettings', label: string, cls = 'btn btn-ghost btn-sm') => (
     <form action={setEnquirySide}>
       <input type="hidden" name="id" value={e.id} />
@@ -84,7 +85,7 @@ export function EnquiryItem({ e, p, dnc, roles, trail, linkTo, onProperty = fals
             }}
           />
         ) : null}
-        {!dnc ? <Link className="btn btn-gold btn-sm" href={`/admin/diary/new?enquiry=${e.id}`}>{e.kind === 'valuation' ? 'Book valuation' : 'Book viewing'}</Link> : null}
+        {!dnc ? <Link className="btn btn-gold btn-sm" href={`/admin/diary/new?enquiry=${e.id}`}>{valuation ? 'Book valuation' : 'Book viewing'}</Link> : null}
         {e.contactId ? <Link className="btn btn-ghost btn-sm" href={`/admin/contacts/${e.contactId}`}>Record</Link> : null}
         <form action={setEnquiryHandled}>
           <input type="hidden" name="id" value={e.id} />

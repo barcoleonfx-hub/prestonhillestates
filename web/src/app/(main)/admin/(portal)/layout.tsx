@@ -22,7 +22,7 @@ export default async function PortalLayout({ children }: { children: React.React
   const today = todayLondon()
   const endOfToday = londonToIso(addDays(today, 1), '00:00')!
   const [fresh, todays, mine, overdueAll, [{ due }], staff, props] = await Promise.all([
-    db.select({ side: enquiries.side, kind: enquiries.kind, intent: enquiries.intent, message: enquiries.message, channel: properties.channel, roles: contacts.roles })
+    db.select({ side: enquiries.side, autoSide: enquiries.autoSide, sideWhy: enquiries.sideWhy, kind: enquiries.kind, intent: enquiries.intent, message: enquiries.message, channel: properties.channel, roles: contacts.roles })
       .from(enquiries).leftJoin(properties, eq(enquiries.propertyId, properties.id)).leftJoin(contacts, eq(enquiries.contactId, contacts.id)).where(eq(enquiries.handled, false)),
     listBetween(londonToIso(today, '00:00')!, londonToIso(addDays(today, 1), '00:00')!),
     needingOutcome(admin.id),
@@ -32,7 +32,7 @@ export default async function PortalLayout({ children }: { children: React.React
     db.select({ id: properties.id, ref: properties.ref, channel: properties.channel, displayAddress: properties.displayAddress, street: properties.street, town: properties.town, postcode: properties.postcode })
       .from(properties).where(ne(properties.status, 'withdrawn')).orderBy(desc(properties.updatedAt)).limit(400),
   ])
-  // New enquiries per list; ones that can't be sorted count on both, so nobody misses them.
+  // New enquiries per list; ones that can't be sorted count on both, so nobody misses them (each list says so).
   const sides = fresh.map((e) => enquirySide(e, e.channel, e.roles))
   const newSales = sides.filter((x) => x !== 'lettings').length, newLettings = sides.filter((x) => x !== 'sales').length
   const upcomingToday = todays.filter((a) => a.status === 'scheduled').length
