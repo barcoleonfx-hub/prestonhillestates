@@ -1,5 +1,7 @@
 'use server'
 
+import { instantEstimate, type InstantEstimate } from '@/lib/instant-estimate'
+
 import { and, eq } from 'drizzle-orm'
 import { db, ready } from '@/db/client'
 import { contacts, enquiries, properties } from '@/db/schema'
@@ -44,7 +46,7 @@ export async function sendEnquiry(_prev: EnquiryState, form: FormData): Promise<
   return { ok: true }
 }
 
-export type ValuationState = { ok?: boolean; error?: string; field?: string }
+export type ValuationState = { ok?: boolean; error?: string; field?: string; estimate?: InstantEstimate | null }
 
 const INTENTS = ['selling', 'letting', 'unsure']
 
@@ -83,11 +85,17 @@ export async function sendValuationRequest(_prev: ValuationState, form: FormData
   const contactId = await upsertContact({
     name, phone, email, role: intent === 'letting' ? 'landlord' : 'seller', source: 'Our website', address: address ? `${address}, ${postcode}` : postcode,
   }).catch(() => null)
+  // The instant estimate they're shown, worked out now so the branch sees exactly the same figure.
+  const estimate = await Promise.race([
+    instantEstimate({ postcode, intent, propertyType: String(form.get('propertyType') || ''), bedrooms: String(form.get('bedrooms') || ''), address }),
+    new Promise<null>((ok) => setTimeout(() => ok(null), 4000)),
+  ]).catch(() => null)
+  const shown = estimate ? `Website estimate shown: £${estimate.low.toLocaleString('en-GB')} to £${estimate.high.toLocaleString('en-GB')}${estimate.kind === 'rent' ? ' a month' : ''} (${estimate.basis})` : ''
   await db.insert(enquiries).values({
     id: uid(), propertyId: null, kind: 'valuation', name, phone, email: email || null, contactId,
-    postcode, intent, message: details, createdAt: now(),
+    postcode, intent, message: [details, shown].filter(Boolean).join('\n') || null, createdAt: now(),
   })
-  return { ok: true }
+  return { ok: true, estimate }
 }
 
 export type BuyerState = { ok?: boolean; error?: string; field?: string }
