@@ -223,3 +223,7 @@
 
 .bk-story-quote { position: absolute; left: 0; right: 0; bottom: 12mm; border-top: 1px solid var(--line); padding-top: 6mm; font-family: var(--serif); font-style: italic; font-size: 17pt; line-height: 1.35; color: var(--ink); }
 .bk-story-quote small { display: block; margin-top: 2mm; font-family: var(--sans); font-style: normal; font-size: 8pt; letter-spacing: .14em; text-transform: uppercase; color: var(--gold); }
+
+.bk-status { margin: 10px 0 0; padding: 10px 12px; border-radius: 10px; background: #f6efd9; color: #6b5313; font-size: 13px; line-height: 1.45; }
+.bk-status.warn { background: #fbeaea; color: #8a2b22; }
+.bk-status .btn { margin-left: 4px; }

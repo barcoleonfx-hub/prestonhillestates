@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useMemo, useState, useTransition } from 'react'
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { changes, gbp, merge, type BookletFields, type BookletInput } from '@/lib/booklet'
 import { saveBooklet } from '../../booklet-actions'
 import { BookletPages } from './BookletPages'
@@ -20,11 +20,21 @@ export function BookletEditor({ data, back }: { data: BookletInput; back: { href
   const rent = f.kind === 'lettings'
   const set = <K extends keyof BookletFields>(k: K, v: BookletFields[K]) => { setF((x) => ({ ...x, [k]: v })); setMsg(null) }
 
+  const lookedUp = useRef(start.home)
+  // The first look-up of places near a postcode carries on in the background: check back every 15 seconds.
+  const tries = useRef(0)
+  useEffect(() => {
+    if (!data.area.pending || tries.current >= 12) return
+    const t = setTimeout(() => { tries.current++; router.refresh() }, 15_000)
+    return () => clearTimeout(t)
+  }, [data, router])
   const save = (next = f, then?: () => void) => go(async () => {
     const d = changes(data.defaults, next)
     const r = await saveBooklet(data.id, d)
     if (!r.ok) { setMsg(r.error ?? 'Couldn’t save.'); return }
     setSavedAs(JSON.stringify(d)); setMsg('Saved.')
+    // A new address means a new map, places, sales and story: fetch them for it.
+    if (next.home !== lookedUp.current) { lookedUp.current = next.home; router.refresh() }
     then?.()
   })
   // Sales or lettings changes the evidence and the pages, so it's saved and the booklet is filled in again.
@@ -48,6 +58,8 @@ export function BookletEditor({ data, back }: { data: BookletInput; back: { href
           <button className="btn btn-ghost" type="button" onClick={() => save()} disabled={pending || !dirty}>{pending ? 'Saving…' : dirty ? 'Save changes' : 'Saved'}</button>
         </div>
         {msg ? <p className="bk-msg">{msg}</p> : null}
+        {data.area.pending ? <p className="bk-status">Looking up schools, shops and parks near {data.area.postcode ?? 'this postcode'}… This page updates by itself (it’s only slow the first time).</p>
+          : data.area.source === 'stations only' && data.area.home ? <p className="bk-status warn">Only stations could be found near {data.area.postcode ?? 'this postcode'}: OpenStreetMap didn’t answer ({data.area.error}). <button type="button" className="btn btn-ghost btn-sm" onClick={() => router.refresh()}>Try again</button></p> : null}
         <p className="bk-help small">When printing, choose A4, and turn on “Background graphics”.</p>
 
         <div className="bk-kinds" role="group" aria-label="Sales or lettings">
@@ -56,7 +68,7 @@ export function BookletEditor({ data, back }: { data: BookletInput; back: { href
         </div>
 
         <div className="field"><label htmlFor="bk-for">Prepared for</label><input id="bk-for" className="input" value={f.forName} onChange={(e) => set('forName', e.target.value)} placeholder="e.g. Mr and Mrs Patel" /></div>
-        <div className="field"><label htmlFor="bk-home">{rent ? 'Their property' : 'Their home'}</label><input id="bk-home" className="input" value={f.home} onChange={(e) => set('home', e.target.value)} placeholder="e.g. 12 Carlton Avenue East, HA9 8PT (3-bed semi)" /></div>
+        <div className="field"><label htmlFor="bk-home">{rent ? 'Their property' : 'Their home'}</label><input id="bk-home" className="input" value={f.home} onChange={(e) => set('home', e.target.value)} placeholder="e.g. 12 Carlton Avenue East, HA9 8PT (3-bed semi)" />{f.home !== lookedUp.current ? <small className="bk-hint">Save changes to redo the map, nearby places and sale history for this address (include the postcode).</small> : data.area.postcode ? <small className="bk-hint">Map, places and history are for {data.area.postcode}.</small> : null}</div>
         <div className="field"><label htmlFor="bk-visit">Visit</label><input id="bk-visit" className="input" value={f.visit} onChange={(e) => set('visit', e.target.value)} placeholder="e.g. Saturday 15 November at 11:00 · Jamil Ahmed" />{!data.defaults.visit ? <small className="bk-hint">No valuation booked in the diary yet: book it and this fills itself in.</small> : null}</div>
         <div className="field"><label htmlFor="bk-greet">Letter starts</label><input id="bk-greet" className="input" value={f.greeting} onChange={(e) => set('greeting', e.target.value)} /></div>
         <div className="field"><label htmlFor="bk-letter">Letter from Jamil (page 2)</label><textarea id="bk-letter" className="input" rows={10} value={f.letter} onChange={(e) => set('letter', e.target.value)} /></div>
@@ -69,8 +81,7 @@ export function BookletEditor({ data, back }: { data: BookletInput; back: { href
           {data.area.places.length ? data.area.places.map((p) => (
             <label key={p.key} className="bk-comp"><input type="checkbox" checked={!f.hide.includes(p.key)} onChange={() => toggle(p.key)} /><span><b>{p.name}</b><small>{p.detail} · about {p.minutes} min walk</small></span></label>
           )) : <p className="bk-hint">{data.area.error ? `Couldn’t find places nearby just now (${data.area.error}).` : 'No places found nearby.'} This page shows the home’s key facts only.</p>}
-          {data.area.pending ? <p className="bk-msg">Still looking up schools, shops and parks near this postcode. <button type="button" className="btn btn-ghost btn-sm" onClick={() => router.refresh()}>Check again</button> in a minute (it’s only slow the first time).</p>
-            : data.area.source === 'stations only' && data.area.places.length ? <p className="bk-hint">Only stations are shown: OpenStreetMap didn’t answer ({data.area.error}). It’s tried again within the hour.</p> : null}
+          
 
           <h2>{rent ? 'Your property’s story' : 'Your home’s story'} <small>page 5</small></h2>
           <label className="bk-comp"><input type="checkbox" checked={f.showPaid} onChange={() => set('showPaid', !f.showPaid)} /><span><b>Show what it sold for</b><small>{data.story.sales.length ? `${data.story.sales.length} sale${data.story.sales.length === 1 ? '' : 's'} on record since 1995. Untick if the owner would rather not see the prices.` : 'No past sales found for this address.'}</small></span></label>
