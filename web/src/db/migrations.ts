@@ -815,4 +815,22 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       )`,
     ],
   },
+  {
+    id: '039_area_places',
+    sql: [
+      // Our own copy of schools, supermarkets, parks, GPs, pharmacies, gyms and stations across the patch (from
+      // OpenStreetMap), filled in the background square by square, so booklets don't wait on a public server.
+      `CREATE TABLE area_places (
+        id TEXT PRIMARY KEY,
+        square TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        name TEXT NOT NULL,
+        lat REAL NOT NULL,
+        lon REAL NOT NULL,
+        tags TEXT
+      )`,
+      `CREATE INDEX area_places_pos_idx ON area_places (lat, lon)`,
+      `CREATE INDEX area_places_square_idx ON area_places (square)`,
+    ],
+  },
 ]

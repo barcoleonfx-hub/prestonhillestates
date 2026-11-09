@@ -10,6 +10,7 @@ import { removeLicensingFiles } from '@/lib/cleanup'
 import { runTenantAlerts } from '@/lib/tenants'
 import { sortFromEmails } from '@/lib/enquiry-sort'
 import { repairZooplaValuations } from '@/lib/enquiry-repair'
+import { refreshAreaPlaces } from '@/lib/area-places'
 import { after } from 'next/server'
 
 export const dynamic = 'force-dynamic'
@@ -43,6 +44,8 @@ export async function GET(req: Request) {
     await sortFromEmails().catch((e) => console.error('sorting enquiries failed', e))
     // Zoopla valuations read before their address was picked up: read again from the original email (light).
     await repairZooplaValuations().catch((e) => console.error('repairing Zoopla valuations failed', e))
+    // Our own copy of places near homes (schools, shops, parks…) for the booklets: two small squares a run (light).
+    await refreshAreaPlaces().catch((e) => console.error('area places failed', e))
     const heavy = [
       () => refreshSoldPrices(), // daily check, monthly reload
       () => backfillAddresses(), // once: the address archive back to 1995

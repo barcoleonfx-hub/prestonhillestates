@@ -1,5 +1,6 @@
 import { currentAdmin } from '@/lib/auth'
 import { placesNear } from '@/lib/area-facts'
+import { areaPlacesStatus } from '@/lib/area-places'
 import { osgbToLatLon } from '@/lib/geo'
 import { epcConfigured, epcHistory, parseHomeAddress, saleHistory } from '@/lib/home-history'
 import { positionOf } from '@/lib/postcode-geo'
@@ -25,8 +26,9 @@ export async function GET(req: Request) {
     home ? saleHistory(postcode, home) : Promise.resolve(null),
     home ? epcHistory(postcode, home) : Promise.resolve(null),
   ])
+  const ourCopy = await areaPlacesStatus().catch((e) => String(e))
   return Response.json({
-    postcode, at, address: home,
+    postcode, at, address: home, ourCopy,
     places: places && { source: places.source, error: places.error, stillLooking: places.pending, found: places.places.map((p) => `${p.detail}: ${p.name}, about ${p.minutes} min walk`) },
     sales: sales ?? 'add &address=… (house number and street) to look up its sales',
     epc: epcConfigured() ? epc : 'no EPC key set (EPC_API_EMAIL and EPC_API_KEY)',

@@ -174,6 +174,17 @@ export const enquiryMessages = sqliteTable(
 )
 export type EnquiryMessage = typeof enquiryMessages.$inferSelect
 
+/** Our own copy of places buyers care about across the patch (OpenStreetMap), filled square by square. */
+export const areaPlaces = sqliteTable('area_places', {
+  id: text('id').primaryKey(),
+  square: text('square').notNull(),
+  kind: text('kind').notNull(),
+  name: text('name').notNull(),
+  lat: real('lat').notNull(),
+  lon: real('lon').notNull(),
+  tags: text('tags'),
+})
+
 /** Answers from outside services (places near a postcode, sale history, energy certificates), kept for a while. */
 export const lookupCache = sqliteTable('lookup_cache', {
   key: text('key').primaryKey(),
