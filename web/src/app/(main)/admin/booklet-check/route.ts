@@ -27,7 +27,7 @@ export async function GET(req: Request) {
   ])
   return Response.json({
     postcode, at, address: home,
-    places: places && { source: places.source, error: places.error, found: places.places.map((p) => `${p.detail}: ${p.name}, about ${p.minutes} min walk`) },
+    places: places && { source: places.source, error: places.error, stillLooking: places.pending, found: places.places.map((p) => `${p.detail}: ${p.name}, about ${p.minutes} min walk`) },
     sales: sales ?? 'add &address=… (house number and street) to look up its sales',
     epc: epcConfigured() ? epc : 'no EPC key set (EPC_API_EMAIL and EPC_API_KEY)',
   }, { headers: { 'Cache-Control': 'no-store' } })

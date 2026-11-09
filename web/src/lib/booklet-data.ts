@@ -62,12 +62,12 @@ const TYPE_WORD: Record<string, string> = { F: 'Flat or maisonette', T: 'Terrace
 /** Where the home is, what's around it, and its own story. Every part is optional: what can't be found is left out. */
 async function areaAndStory(postcode: string | null, address: string | null, rent: boolean, home: { type: string | null; typeLabel: string | null; beds: number | null }): Promise<{ area: BookletArea; story: BookletStory }> {
   const empty: BookletStory = { sales: [], epcs: [], epcKey: epcConfigured(), street: null, demand: null, ours: [], council: null, facts: [], errors: [] }
-  if (!postcode) return { area: { home: null, approx: true, places: [], source: 'none', error: 'no postcode' }, story: empty }
+  if (!postcode) return { area: { home: null, approx: true, places: [], source: 'none', error: 'no postcode', pending: false }, story: empty }
   const pos = await positionOf(postcode).catch(() => null)
   const at = pos ? osgbToLatLon(pos.e, pos.n) : null
   const addr = parseHomeAddress(address)
   const [places, sales, epcs, street, demand, ours, council] = await Promise.all([
-    at ? placesNear(postcode, at).catch((e) => ({ places: [], source: 'none', error: String(e) })) : Promise.resolve({ places: [], source: 'none', error: 'postcode not found on the map' }),
+    at ? placesNear(postcode, at).catch((e) => ({ places: [], source: 'none', error: String(e), pending: false })) : Promise.resolve({ places: [], source: 'none', error: 'postcode not found on the map', pending: false }),
     addr ? saleHistory(postcode, addr).catch((e) => ({ sales: [], error: String(e) })) : Promise.resolve({ sales: [], error: 'no house number in the address' }),
     addr ? epcHistory(postcode, addr).catch((e) => ({ certs: [], error: String(e) })) : Promise.resolve({ certs: [], error: epcConfigured() ? 'no house number in the address' : 'no EPC key set' }),
     streetRecord(postcode, addr?.street ?? null).catch(() => null),
@@ -86,7 +86,7 @@ async function areaAndStory(postcode: string | null, address: string | null, ren
     { label: 'Council', value: council?.name ?? '' },
   ].filter((f) => f.value)
   return {
-    area: { home: at, approx: true, places: places.places, source: places.source, error: places.error },
+    area: { home: at, approx: true, places: places.places, source: places.source, error: places.error, pending: places.pending },
     story: {
       sales: sales.sales, epcs: epcs.certs, epcKey: epcConfigured(),
       street: street && addr?.street ? { name: addr.street.toLowerCase().replace(/\b([a-z])/g, (c) => c.toUpperCase()), ...street } : null,
