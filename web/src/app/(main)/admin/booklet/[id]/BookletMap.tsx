@@ -5,7 +5,19 @@ import { fitZoom, tileXY, type LatLon } from '@/lib/geo'
 
 export type MapPin = { n: number; at: LatLon; kind: string }
 
-export function BookletMap({ home, pins, width = 658, height = 295 }: { home: LatLon; pins: MapPin[]; width?: number; height?: number }) {
+export function BookletMap({ home, pins, width = 658, height = 295, mapToken }: { home: LatLon; pins: MapPin[]; width?: number; height?: number; mapToken?: string | null }) {
+  // With a Mapbox token: Mapbox's own map picture, sharp in print, with the home and numbered places on it.
+  if (mapToken) {
+    const ll = (p: LatLon) => `${p.lon.toFixed(5)},${p.lat.toFixed(5)}`
+    const overlays = [...pins.slice(0, 20).map((p) => `pin-s-${p.n}+23211a(${ll(p.at)})`), `pin-l-home+c4972f(${ll(home)})`].join(',')
+    const src = `https://api.mapbox.com/styles/v1/mapbox/light-v11/static/${overlays}/auto/${width}x${height}@2x?padding=36&access_token=${encodeURIComponent(mapToken)}`
+    return (
+      <div className="bk-map bk-map-mapbox" style={{ width, height }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={src} alt="Map of the home and the places listed" width={width} height={height} />
+      </div>
+    )
+  }
   const z = fitZoom([home, ...pins.map((p) => p.at)], width, height, 34)
   // Centre on the middle of everything shown, so the pins use the space well.
   const all = [home, ...pins.map((p) => p.at)].map((p) => tileXY(p, z))
