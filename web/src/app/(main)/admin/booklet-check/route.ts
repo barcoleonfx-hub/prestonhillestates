@@ -5,6 +5,7 @@ import { drivingTimes, geocodeHome, mapboxStatus, mapboxToken, walkingTimes, wal
 import { osgbToLatLon } from '@/lib/geo'
 import { epcConfigured, epcHistory, parseHomeAddress, saleHistory } from '@/lib/home-history'
 import { positionOf } from '@/lib/postcode-geo'
+import { tubeTimes } from '@/lib/tfl'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,8 +37,9 @@ export async function GET(req: Request) {
   const zones = tok && from ? await walkingZones(from).then((z) => z?.map((x) => `${x.minutes}-minute walk: ${x.polyline.length} characters`)).catch((e) => `error: ${String((e as Error).message ?? e)}`) : null
   const drives = tok && from ? await drivingTimes(from).catch((e) => `error: ${String((e as Error).message ?? e)}`) : null
   const mapbox = tok ? { token: `${tok.slice(0, 6)}…`, exactHouse: exact ?? (address ? 'not found in this postcode (the postcode centre is used)' : 'add &address=… to test'), walkingSample: walk, walkingAreas: zones, drivingTimes: drives } : `not connected: ${mapboxStatus().why}`
+  const tfl = at ? await tubeTimes(at).catch((e) => `error: ${String((e as Error).message ?? e)}`) : null
   return Response.json({
-    postcode, at, address: home, mapbox, ourCopy,
+    postcode, at, address: home, mapbox, tfl, ourCopy,
     places: places && { source: places.source, error: places.error, stillLooking: places.pending, found: places.places.map((p) => `${p.detail}: ${p.name}, about ${p.minutes} min walk`) },
     sales: sales ?? 'add &address=… (house number and street) to look up its sales',
     epc: epcConfigured() ? epc : 'no EPC key set (EPC_API_EMAIL and EPC_API_KEY)',
