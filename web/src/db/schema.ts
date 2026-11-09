@@ -174,6 +174,14 @@ export const enquiryMessages = sqliteTable(
 )
 export type EnquiryMessage = typeof enquiryMessages.$inferSelect
 
+/** What staff changed on a valuation booklet (JSON of the changed fields only). */
+export const booklets = sqliteTable('booklets', {
+  id: text('id').primaryKey(),
+  data: text('data').notNull(),
+  updatedBy: text('updated_by'),
+  updatedAt: text('updated_at').notNull(),
+})
+
 export const enquiryNotes = sqliteTable(
   'enquiry_notes',
   {

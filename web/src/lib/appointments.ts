@@ -157,6 +157,9 @@ async function emailEveryone(kind: AlertKind, a: ApptRow, extra?: { changes?: st
     ['Reason', extra?.reason ?? ''],
   ]
   const link = portalUrl(`/admin/diary/${a.id}`)
+  // A valuation's booklet is filled in and ready to print as soon as it's booked.
+  const booklet = a.kind === 'valuation' && kind !== 'cancelled' ? portalUrl(`/admin/booklet/${a.enquiryId ?? `a-${a.id}`}`) : null
+  if (booklet) rows.push(['Valuation booklet', `Ready to print: ${booklet}`])
   const text = [heading[kind], '', ...rows.filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`), '', `Open in the portal: ${link}`].join('\n')
   const sequence = Math.floor(new Date(a.updatedAt).getTime() / 1000) % 2147483647
   const ics = kind === 'reminder' ? undefined : {

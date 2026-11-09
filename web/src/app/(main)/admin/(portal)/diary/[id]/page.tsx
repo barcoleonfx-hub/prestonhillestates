@@ -43,9 +43,10 @@ export default async function AppointmentPage({ params, searchParams }: { params
             {' '}Booked by {nameOf(a.createdBy)} on {stamp(a.createdAt)}
           </p>
         </div>
-        {a.status === 'scheduled' ? (
+        {a.status === 'scheduled' || a.kind === 'valuation' ? (
           <div className="actions">
-            <Link className="btn btn-ghost" href={`/admin/diary/${a.id}/edit`}>Change time or person</Link>
+            {a.kind === 'valuation' && a.status !== 'cancelled' ? <Link className="btn btn-gold" href={`/admin/booklet/${a.enquiryId ?? `a-${a.id}`}`}>Valuation booklet</Link> : null}
+            {a.status === 'scheduled' ? <Link className="btn btn-ghost" href={`/admin/diary/${a.id}/edit`}>Change time or person</Link> : null}
           </div>
         ) : null}
       </div>
