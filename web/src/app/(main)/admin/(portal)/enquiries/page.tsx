@@ -104,7 +104,7 @@ export default async function EnquiriesPage({ searchParams }: { searchParams: Pr
             <Link href={`/admin/enquiries/${r.e.id}?back=${encodeURIComponent(here)}`} className="enq-link">
               <span className="enq-av" aria-hidden="true">{r.e.name.trim()[0]?.toUpperCase() ?? '?'}</span>
               <span className="enq-main">
-                <span className="enq-name">{r.e.name}{!r.e.handled ? <span className="pill gold">New</span> : null}{!type && valOf.get(r.e.id) ? <span className="pill">{sideOf.get(r.e.id) === 'lettings' ? 'Rental valuation' : 'Valuation'}</span> : null}{r.e.outcome ? <span className="pill">{outcomeText(r.e.outcome)}</span> : null}{r.dnc ? <span className="pill warn">Do not contact</span> : null}</span>
+                <span className="enq-name">{r.e.name}{!r.e.handled ? <span className="pill gold">{r.e.lastReplyAt ? 'Replied' : 'New'}</span> : null}{!type && valOf.get(r.e.id) ? <span className="pill">{sideOf.get(r.e.id) === 'lettings' ? 'Rental valuation' : 'Valuation'}</span> : null}{r.e.outcome ? <span className="pill">{outcomeText(r.e.outcome)}</span> : null}{r.dnc ? <span className="pill warn">Do not contact</span> : null}</span>
                 <span className="enq-what">{whatOf(r)}</span>
               </span>
               <span className="enq-src">{enquiryLabel(r.e).replace(/ (enquiry|request|registration|viewing request|valuation request)$/i, '')}<small>{ago(r.e.createdAt)}</small></span>

@@ -149,8 +149,30 @@ export const enquiries = sqliteTable('enquiries', {
   sideCheckedAt: text('side_checked_at'),
   /** The valuation check: comparables staff found and the figure they settled on (JSON, see lib/valuation-check). */
   valuation: text('valuation'),
+  /** When they last replied to an email we sent (see enquiryMessages). */
+  lastReplyAt: text('last_reply_at'),
   createdAt: text('created_at').notNull(),
 })
+
+/** The email conversation on an enquiry: what we sent ('out') and what they replied ('in'). */
+export const enquiryMessages = sqliteTable(
+  'enquiry_messages',
+  {
+    id: text('id').primaryKey(),
+    enquiryId: text('enquiry_id').notNull().references(() => enquiries.id, { onDelete: 'cascade' }),
+    messageId: text('message_id'),
+    direction: text('direction').notNull(), // in | out
+    subject: text('subject'),
+    body: text('body'),
+    fromAddr: text('from_addr'),
+    via: text('via'), // portal | mailbox (sent from Apple Mail) | email
+    sentBy: text('sent_by'),
+    sentAt: text('sent_at').notNull(),
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [index('enquiry_messages_enquiry_idx').on(t.enquiryId, t.sentAt)],
+)
+export type EnquiryMessage = typeof enquiryMessages.$inferSelect
 
 export const enquiryNotes = sqliteTable(
   'enquiry_notes',

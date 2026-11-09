@@ -8,6 +8,8 @@ import { requireAdmin } from '@/lib/auth'
 import { audit } from '@/lib/contacts'
 import { ENQUIRY_TEMPLATES, renderEnquiryEmail, type EnquiryEmailKind } from '@/lib/enquiry-email'
 import { enquiryWorkspace } from '@/lib/enquiry-workspace'
+import { conversation, recordOutgoing } from '@/lib/enquiry-thread'
+import { renderReply } from '@/lib/enquiry-email'
 import { sendFromMailbox } from '@/lib/mailbox'
 import { now, uid } from '@/lib/util'
 import { figureText, type CheckComp, type SavedValuation } from '@/lib/valuation-check'
@@ -43,6 +45,8 @@ export async function sendEnquiryEmail(_prev: SendState, form: FormData): Promis
   const res = await sendFromMailbox({ to: [to], subject, text, html, by: me.id })
   if (!res.ok) return { error: res.error }
   const at = now()
+  // Recorded with its email ID, so their reply joins this enquiry.
+  await recordOutgoing(id, { messageId: res.messageId, subject, body: message, by: me.id, sentAt: at })
   await db.insert(enquiryNotes).values({ id: uid(), enquiryId: id, body: `Email sent: ${subject}`, createdBy: me.id, createdAt: at })
   // Sending a sales or lettings email settles which list an unsorted enquiry belongs on.
   const side = kind === 'lettings-valuation' || kind === 'tenant' ? 'lettings' : 'sales'
@@ -79,4 +83,35 @@ export async function saveValuationCheck(_prev: CheckState, form: FormData): Pro
   await audit(me.id, 'valuation_check', 'enquiry', id, figureText(saved.low, saved.high, rent) || 'comparables')
   revalidatePath(`/admin/enquiries/${id}`)
   return { ok: true, savedAt: Date.now() }
+}
+
+export type ReplyState = { ok?: boolean; error?: string; sentAt?: number }
+
+/** Replies in the enquiry's email conversation (same thread in their inbox), from the office mailbox. */
+export async function replyToEnquiry(_prev: ReplyState, form: FormData): Promise<ReplyState> {
+  const me = await requireAdmin()
+  await ready()
+  const id = String(form.get('id') ?? '')
+  const body = String(form.get('body') ?? '').trim().slice(0, 6000)
+  if (!body) return { error: 'Write your reply first.' }
+  const w = await enquiryWorkspace(id, me)
+  if (!w) return { error: 'That enquiry no longer exists.' }
+  const to = w.e.email?.trim()
+  if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return { error: 'There’s no email address for this person.' }
+  if (w.contact?.doNotContact) return { error: 'This person asked not to be contacted.' }
+  const thread = await conversation(id)
+  const lastIn = [...thread].reverse().find((m) => m.direction === 'in')
+  const last = thread[thread.length - 1]
+  const base = (lastIn ?? last)?.subject ?? 'Your enquiry with Preston Hill Estates'
+  const subject = /^re:/i.test(base) ? base : `Re: ${base}`
+  const refs = [w.e.externalId, ...thread.map((m) => m.messageId)].filter((x): x is string => !!x).slice(-15)
+  const { html, text } = renderReply(body, w.ctx.sender)
+  const res = await sendFromMailbox({ to: [to], subject, text, html, by: me.id, inReplyTo: (lastIn ?? last)?.messageId ?? w.e.externalId ?? null, references: refs })
+  if (!res.ok) return { error: res.error }
+  await recordOutgoing(id, { messageId: res.messageId, subject, body, by: me.id })
+  await db.update(enquiries).set({ handled: true }).where(eq(enquiries.id, id))
+  if (w.e.contactId) await db.update(contacts).set({ lastContactAt: now(), updatedAt: now() }).where(eq(contacts.id, w.e.contactId))
+  await audit(me.id, 'enquiry_reply', 'enquiry', id, subject.slice(0, 120))
+  revalidatePath('/admin', 'layout')
+  return { ok: true, sentAt: Date.now() }
 }

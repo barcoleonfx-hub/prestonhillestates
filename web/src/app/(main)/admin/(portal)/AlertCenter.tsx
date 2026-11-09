@@ -11,6 +11,8 @@ import { openCallLog } from './CallDrawer'
 const POLL_MS = 20_000
 const SOUND_KEY = 'phe_alert_sound'
 
+/** A reply to one of our emails is an enquiry alert too, titled "… replied". */
+const tagFor = (a: { kind: string; title: string }) => (a.kind === 'enquiry' && / replied$/.test(a.title) ? 'Reply' : TAG[a.kind] ?? 'Alert')
 const TAG: Record<string, string> = { booked: 'New booking', changed: 'Changed', cancelled: 'Cancelled', reminder: 'Reminder', callback: 'Callback due', callback_assigned: 'New callback for you', enquiry: 'New enquiry' }
 
 function readSound(): boolean {
@@ -87,7 +89,7 @@ export function AlertCenter({ me, initialPending }: { me: { id: string; name: st
           for (const a of fresh.slice(0, 3)) {
             const ap = a.appointment
             const body = a.task ? `${a.task.contactName ?? ''} ${a.task.contactPhone ?? ''}`.trim() : ap ? `${fmtWhen(ap.startsAt)} · ${durationLabel(ap.durationMin)}\n${ap.location}\n${ap.staffId === me.id ? 'You are' : `${ap.staffName} is`} going` : a.body ?? ''
-            const n = new Notification(`${TAG[a.kind] ?? 'Alert'}: ${a.title}`, { body, tag: a.id, requireInteraction: a.kind === 'reminder' || a.kind === 'callback' })
+            const n = new Notification(`${tagFor(a)}: ${a.title}`, { body, tag: a.id, requireInteraction: a.kind === 'reminder' || a.kind === 'callback' })
             n.onclick = () => { window.focus(); n.close() }
           }
         }
@@ -171,7 +173,7 @@ export function AlertCenter({ me, initialPending }: { me: { id: string; name: st
             return (
               <article key={a.id} className={`alert-card k-${a.kind}`}>
                 <div className="alert-top">
-                  <span className="alert-tag">{TAG[a.kind] ?? 'Alert'}</span>
+                  <span className="alert-tag">{tagFor(a)}</span>
                   {ap ? <span className="alert-time">{fmtTime(ap.startsAt)}</span> : tk ? <span className="alert-time">{fmtTime(tk.dueAt)}</span> : null}
                 </div>
                 <h3>{a.title}</h3>
