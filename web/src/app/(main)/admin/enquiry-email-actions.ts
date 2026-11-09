@@ -30,6 +30,7 @@ export async function sendEnquiryEmail(_prev: SendState, form: FormData): Promis
   const key = String(form.get('template') ?? '')
   const subject = String(form.get('subject') ?? '').trim().slice(0, 200)
   const message = String(form.get('message') ?? '').trim().slice(0, 6000)
+  const extra = { when: String(form.get('when') ?? '').trim().slice(0, 120), times: String(form.get('times') ?? '').trim().slice(0, 600), figure: String(form.get('figure') ?? '').trim().slice(0, 120) }
   if (!KINDS.includes(kind)) return { error: 'Choose which kind of email to send.' }
   const t = ENQUIRY_TEMPLATES[kind].find((x) => x.key === key)
   if (!t) return { error: 'Choose an email first.' }
@@ -41,7 +42,10 @@ export async function sendEnquiryEmail(_prev: SendState, form: FormData): Promis
   const to = w.e.email?.trim()
   if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return { error: 'There’s no email address for this person. Call them instead.' }
   if (w.contact?.doNotContact) return { error: 'This person asked not to be contacted.' }
-  const { html, text } = renderEnquiryEmail({ ...w.ctx, kind }, t, subject, message)
+  const { html, text } = renderEnquiryEmail({ ...w.ctx, kind }, t, subject, message, extra)
+  // The design around the message (headline, figure box) uses the boxes above it, so they must be filled in too.
+  if (/\[your valuation\]/i.test(html)) return { error: 'Type your valuation in the “Your valuation” box first.' }
+  if (/\[day and time\]/i.test(html)) return { error: 'Type the day and time in the box first.' }
   const res = await sendFromMailbox({ to: [to], subject, text, html, by: me.id })
   if (!res.ok) return { error: res.error }
   const at = now()

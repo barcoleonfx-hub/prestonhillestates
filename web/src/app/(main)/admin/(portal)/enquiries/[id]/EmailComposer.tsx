@@ -36,7 +36,7 @@ export function EmailComposer({ id, ctx, to, canSend, blocked, chooseKind, start
   }, [t, c, when, times, figure, edited])
 
   const pick = (k: string) => { setKey(k); setEdited(false) }
-  const html = useMemo(() => renderEnquiryEmail(c, t, subject, message).html, [c, t, subject, message])
+  const html = useMemo(() => renderEnquiryEmail(c, t, subject, message, { when, times, figure }).html, [c, t, subject, message, when, times, figure])
 
   return (
     <div className="ew-compose">
@@ -62,6 +62,9 @@ export function EmailComposer({ id, ctx, to, canSend, blocked, chooseKind, start
         <input type="hidden" name="id" value={id} />
         <input type="hidden" name="kind" value={kind} />
         <input type="hidden" name="template" value={t.key} />
+        <input type="hidden" name="when" value={when} />
+        <input type="hidden" name="times" value={times} />
+        <input type="hidden" name="figure" value={figure} />
         {t.needs === 'when' ? (
           <div className="field"><label htmlFor="ew-when">Day and time</label><input id="ew-when" className="input" value={when} onChange={(e) => setWhen(e.target.value)} placeholder="e.g. Saturday 15 November at 11am" /></div>
         ) : null}

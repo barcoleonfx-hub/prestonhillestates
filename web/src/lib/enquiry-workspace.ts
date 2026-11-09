@@ -7,6 +7,8 @@ import type { EnquiryEmailContext, EnquiryEmailKind } from './enquiry-email'
 import { mailboxStatus } from './mailbox'
 import { getProperty, type FullProperty } from './properties'
 import { emailProperty, knownBase } from './property-email-data'
+import { googleSummary, reviewsFor } from './reviews-data'
+import type { Review } from './reviews'
 import { salesNear } from './sold-prices'
 import { figureText, homeFrom, parseSaved } from './valuation-check'
 
@@ -31,16 +33,30 @@ export function detailLines(message: string | null): { label: string | null; val
     .filter((l) => !l.label || !/^(name|full name|your name|e-?mail|email address|your email|phone|telephone|tel|mobile|phone number|contact number)$/i.test(l.label))
 }
 
+/** The first real 5-star Google review that reads well in an email: not too short to say anything, not too long. */
+function quote(list: Review[]) {
+  const ok = list.filter((r) => r.source === 'Google review' && (r.rating ?? 0) >= 5 && r.text.length >= 80)
+  // Reviews copied from a screenshot can be cut off ("…more"): an unfinished sentence reads badly in an email.
+  ok.sort((a, b) => Number(/(…|\.\.\.)\s*$/.test(a.text)) - Number(/(…|\.\.\.)\s*$/.test(b.text)))
+  const r = ok.find((x) => x.text.length <= 420) ?? ok[0]
+  if (!r) return null
+  const text = r.text.length > 420 ? `${r.text.slice(0, r.text.lastIndexOf(' ', 400))}…` : r.text
+  return { text, name: r.name, date: r.date }
+}
+
 /** Everything the enquiry page needs: the enquiry, its property, how it was sorted, and the email context. */
 export async function enquiryWorkspace(id: string, me: { name: string }) {
   await ready()
   const e = await db.query.enquiries.findFirst({ where: eq(enquiries.id, id) })
   if (!e) return null
-  const [p, contact, box, base] = await Promise.all([
+  const [p, contact, box, base, google, salesReviews, lettingsReviews] = await Promise.all([
     e.propertyId ? getProperty(e.propertyId) : Promise.resolve(null as FullProperty | null),
     e.contactId ? db.query.contacts.findFirst({ where: eq(contacts.id, e.contactId) }) : Promise.resolve(undefined),
     mailboxStatus().catch(() => null),
     knownBase(),
+    googleSummary().catch(() => ({ rating: null, count: null, url: null })),
+    reviewsFor('sales', 12).catch(() => [] as Review[]),
+    reviewsFor('lettings', 12).catch(() => [] as Review[]),
   ])
   const sorted = sortEnquiry(e, p?.channel, contact?.roles)
   const valuation = isValuation(e)
@@ -63,6 +79,8 @@ export async function enquiryWorkspace(id: string, me: { name: string }) {
       when: new Date(`${s.soldOn}T12:00:00Z`).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }),
     })),
     base, sender: { name: me.name, phone: PHONE, email: box?.user ?? 'info@prestonhillestates.com' },
+    // A real five-star Google review (short enough to read in an email), with the honest overall rating.
+    brand: { rating: google.rating, count: google.count, reviewsUrl: google.url, sales: quote(salesReviews), lettings: quote(lettingsReviews) },
   }
   // What staff settled on in the valuation check, for the "Your valuation" email.
   const saved = parseSaved(e.valuation)
