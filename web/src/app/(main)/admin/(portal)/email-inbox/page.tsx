@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { requireRole } from '@/lib/auth'
-import { FASTHOSTS_IMAP, mailboxStatus, skippedEmails } from '@/lib/mailbox'
-import { mailboxAddSkipped, mailboxCheckNow, mailboxDismissSkipped, mailboxForget, mailboxLookBack, mailboxOnOff } from '../../mailbox-actions'
+import { FASTHOSTS_IMAP, LEAD_FOLDER, mailboxStatus, skippedEmails } from '@/lib/mailbox'
+import { mailboxAddSkipped, mailboxCheckNow, mailboxDismissSkipped, mailboxForget, mailboxLookBack, mailboxOnOff, mailboxSetFolders } from '../../mailbox-actions'
 import { ConnectForm } from './ConnectForm'
 
 export const dynamic = 'force-dynamic'
@@ -42,6 +42,22 @@ export default async function EmailInboxPage() {
             </form>
             <form action={mailboxForget}><button className="btn btn-ghost btn-sm" type="submit">Disconnect</button></form>
           </div>
+        </section>
+      ) : null}
+
+      {s?.hasPassword && s.allFolders ? (
+        <section className="card card-pad" id="folders">
+          <h2>Folders checked</h2>
+          <p className="card-sub">If your mail rules file Zoopla or OnTheMarket emails into their own folder, tick it here. The Inbox and Junk are always checked. When you tick a folder, its last 2 weeks are read straight away (nothing is added twice).</p>
+          <form action={mailboxSetFolders} className="mb-folders">
+            <label className="mb-folder"><input type="checkbox" checked disabled /> Inbox</label>
+            {s.junkPath ? <label className="mb-folder"><input type="checkbox" checked disabled /> {s.junkPath} <small>(enquiries only)</small></label> : null}
+            {s.allFolders.map((f) => {
+              const on = (s.watched ?? s.allFolders!.filter((x) => LEAD_FOLDER.test(x))).includes(f)
+              return <label key={f} className="mb-folder"><input type="checkbox" name="folder" value={f} defaultChecked={on} /> {f}{s.folders?.[f] ? <small> · checked</small> : null}</label>
+            })}
+            <div className="actions" style={{ flexBasis: '100%' }}><button className="btn btn-dark btn-sm" type="submit">Save folders</button></div>
+          </form>
         </section>
       ) : null}
 
@@ -90,7 +106,7 @@ export default async function EmailInboxPage() {
           <li>Zoopla and OnTheMarket leads and website form emails become enquiries with the person’s name, phone, email and the property, and are linked to the listing when the street matches.</li>
           <li>Newsletters, automated emails and anything sent from your own address are ignored. Nothing is imported twice, including emails you already brought in with <Link href="/admin/import">Import emails</Link>.</li>
           <li>When you first connect, it also picks up the last 3 days, in case anything arrived before you set it up.</li>
-          <li>It also looks in the Junk folder for Zoopla, OnTheMarket and website enquiries, in case the mail server filed one there by mistake.</li>
+          <li>It also checks the folders your mail rules file leads into (such as “On The Market” or “Zoopla”, found by name, or the ones you tick above), and the Junk folder for Zoopla, OnTheMarket and website enquiries filed there by mistake.</li>
         </ul>
       </section>
     </>

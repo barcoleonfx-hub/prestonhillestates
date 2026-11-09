@@ -5,7 +5,7 @@ import { after } from 'next/server'
 import { auditState, markAuditStarting, runAudit } from '@/lib/mail-audit'
 import { requireAdmin, requireRole } from '@/lib/auth'
 import { audit } from '@/lib/contacts'
-import { FASTHOSTS_IMAP, addSkippedEmail, checkMailbox, forgetSkipped, findMailServer, forgetMailbox, mailboxStatus, saveMailbox, setMailboxEnabled, testMailbox } from '@/lib/mailbox'
+import { FASTHOSTS_IMAP, setWatchedFolders, addSkippedEmail, checkMailbox, forgetSkipped, findMailServer, forgetMailbox, mailboxStatus, saveMailbox, setMailboxEnabled, testMailbox } from '@/lib/mailbox'
 
 export type MailboxFormState = { ok?: boolean; error?: string; detail?: string; messages?: number; found?: number; host?: string; port?: number }
 
@@ -105,5 +105,15 @@ export async function mailboxLookBack() {
   const me = await requireAdmin()
   const r = await checkMailbox({ force: true, lookBackDays: 7 })
   await audit(me.id, 'mailbox_look_back', 'settings', 'mailbox', r.error ? `error: ${r.error}` : `${r.found ?? 0} found`)
+  revalidatePath('/admin', 'layout')
+}
+
+/** Which folders (besides the Inbox and Junk) are checked for enquiries. A newly ticked folder's last 2 weeks are read. */
+export async function mailboxSetFolders(form: FormData) {
+  const me = await requireRole('admin')
+  const paths = form.getAll('folder').map(String).filter(Boolean).slice(0, 40)
+  await setWatchedFolders(paths)
+  await audit(me.id, 'mailbox_folders', 'settings', 'mailbox', paths.join(', ').slice(0, 200))
+  await checkMailbox({ force: true })
   revalidatePath('/admin', 'layout')
 }

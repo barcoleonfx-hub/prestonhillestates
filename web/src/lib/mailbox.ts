@@ -34,6 +34,22 @@ export type MailboxSettings = {
   lastStored?: number
   /** The Junk/Spam folder, checked for portal and website leads that landed there. */
   junkPath?: string | null; junkValidity?: string; junkLastUid?: number; lastJunkFound?: number
+  /** Folders besides the Inbox that are checked (mail rules often file portal leads into their own folder).
+   *  Not set: found automatically by name ("On The Market", "Zoopla", "Enquiries"…). */
+  watched?: string[]
+  /** Where each checked folder got to. */
+  folders?: Record<string, { validity: string; lastUid: number }>
+  /** Every folder in the mailbox that could hold leads, for choosing on Email settings. */
+  allFolders?: string[]
+}
+
+/** Folder names that look like they hold portal or website leads. */
+export const LEAD_FOLDER = /on ?the ?market|onthemarket|\botm\b|zoopla|rightmove|enquir|\bleads?\b|website|valuations?|portals?|applicants?|lettings|sales/i
+const NEW_FOLDER_DAYS = 14 // a folder checked for the first time: pick up the last fortnight
+
+export async function setWatchedFolders(paths: string[]) {
+  const s = await load()
+  if (s) await store({ ...s, watched: paths })
 }
 export type MailboxStatus = Omit<MailboxSettings, 'pass'> & { hasPassword: boolean }
 
@@ -301,21 +317,29 @@ export async function checkMailbox(opts: { force?: boolean; lookBackDays?: numbe
     await take('INBOX', batch, validity, false)
     if (batch.length) lastUid = Math.max(lastUid, ...batch)
 
-    // Leads that the mail server put in Junk.
-    let junkPath = s.junkPath, junkValidity = s.junkValidity, junkLastUid = s.junkLastUid ?? 0
-    try {
-      if (junkPath === undefined) junkPath = ((await c.list()).find((f) => f.specialUse === '\\Junk') ?? (await c.list()).find((f) => /^(junk|spam|junk e-?mail|bulk mail)$/i.test(f.name)))?.path ?? null
-      if (junkPath) {
-        const jb = await c.mailboxOpen(junkPath, { readOnly: true })
-        const jv = String(jb.uidValidity)
-        let jl: number[]
-        if (opts.lookBackDays || !junkValidity || junkValidity !== jv || !junkLastUid) { jl = ((await c.search({ since: new Date(Date.now() - (opts.lookBackDays ?? FIRST_LOOK_DAYS) * 86400000) }, { uid: true })) || []) as number[]; junkValidity = jv }
-        else jl = jb.uidNext > junkLastUid + 1 ? (((await c.search({ uid: `${junkLastUid + 1}:*` }, { uid: true })) || []) as number[]).filter((u) => u > junkLastUid) : []
-        jl.sort((a, b) => a - b)
-        await take(junkPath, jl.slice(0, limit), jv, true)
-        junkLastUid = Math.max(junkLastUid, ...jl.slice(0, limit), jb.uidNext ? (jl.length ? 0 : jb.uidNext - 1) : 0)
-      }
-    } catch (e) { console.error('mailbox: Junk folder check failed', e) }
+    // Other folders: leads that mail rules filed elsewhere ("On The Market", "Zoopla"…), and Junk.
+    const listed = await c.list().catch(() => [])
+    const usable = listed.filter((f) => !f.flags?.has('\\Noselect'))
+    const junkPath = (usable.find((f) => f.specialUse === '\\Junk') ?? usable.find((f) => /^(junk|spam|junk e-?mail|bulk mail)$/i.test(f.name)))?.path ?? null
+    const notLeads = (f: (typeof usable)[number]) => f.path.toUpperCase() === 'INBOX' || f.path === junkPath || ['\\Sent', '\\Drafts', '\\Trash', '\\All', '\\Flagged'].includes(f.specialUse ?? '')
+      || /^(sent|drafts?|deleted|trash|bin|outbox|notes|calendar|contacts|tasks|journal|conversation history|sync issues|rss|archive)/i.test(f.name)
+    const allFolders = usable.filter((f) => !notLeads(f)).map((f) => f.path)
+    const watched = (s.watched ?? allFolders.filter((p) => LEAD_FOLDER.test(p))).filter((p) => allFolders.includes(p))
+    const folders: Record<string, { validity: string; lastUid: number }> = { ...(s.folders ?? {}) }
+    if (s.junkPath && s.junkValidity && !folders[s.junkPath]) folders[s.junkPath] = { validity: s.junkValidity, lastUid: s.junkLastUid ?? 0 }
+    for (const path of [...watched, ...(junkPath ? [junkPath] : [])]) {
+      try {
+        const fb = await c.mailboxOpen(path, { readOnly: true })
+        const fv = String(fb.uidValidity), st = folders[path]
+        const fresh = !st || st.validity !== fv || !st.lastUid
+        let list: number[]
+        if (opts.lookBackDays || fresh) list = ((await c.search({ since: new Date(Date.now() - (opts.lookBackDays ?? (st ? FIRST_LOOK_DAYS : NEW_FOLDER_DAYS)) * 86400000) }, { uid: true })) || []) as number[]
+        else list = fb.uidNext > st.lastUid + 1 ? (((await c.search({ uid: `${st.lastUid + 1}:*` }, { uid: true })) || []) as number[]).filter((u) => u > st.lastUid) : []
+        list = list.sort((a, b) => a - b).slice(0, limit)
+        await take(path, list, fv, path === junkPath)
+        folders[path] = { validity: fv, lastUid: Math.max(fresh ? 0 : st.lastUid, ...list, list.length ? 0 : (fb.uidNext ?? 1) - 1) }
+      } catch (e) { console.error('mailbox: folder check failed', path, e) }
+    }
     await noteSkipped(skipped).catch(() => {})
 
     // Keep the portal's copy of the inbox and sent mail up to date (for the Inbox page).
@@ -323,7 +347,7 @@ export async function checkMailbox(opts: { force?: boolean; lookBackDays?: numbe
     try { stored = (await syncMailStore(c)).stored } catch (e) { console.error('mail store sync failed', e) }
     await c.logout().catch(() => c.close())
     if (!uids.length && box.uidNext) lastUid = Math.max(lastUid, box.uidNext - 1)
-    await store({ ...s, junkPath, junkValidity, junkLastUid, uidValidity, lastUid, lastCheckAt: now(), lastOkAt: now(), lastError: null, lastFound: found, totalFound: (s.totalFound ?? 0) + found, lastStored: stored })
+    await store({ ...s, junkPath, folders, allFolders, uidValidity, lastUid, lastCheckAt: now(), lastOkAt: now(), lastError: null, lastFound: found, totalFound: (s.totalFound ?? 0) + found, lastStored: stored })
     return { ran: true, found }
   } catch (e) {
     await c.logout().catch(() => c.close())

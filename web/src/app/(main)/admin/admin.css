@@ -982,3 +982,6 @@ kbd { font: 600 0.68rem/1 var(--sans, inherit); padding: 3px 6px; border-radius:
 .mb-skip small { display: block; font-size: 0.76rem; color: var(--faint); }
 .mb-skip small.why { color: var(--gold-deep); }
 .mb-skip-acts { display: flex; gap: 6px; }
+.mb-folders { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 10px; }
+.mb-folder { display: inline-flex; gap: 6px; align-items: center; font-size: 0.88rem; }
+.mb-folder small { color: var(--faint); }
