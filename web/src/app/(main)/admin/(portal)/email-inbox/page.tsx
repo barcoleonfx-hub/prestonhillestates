@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { requireRole } from '@/lib/auth'
 import { FASTHOSTS_IMAP, mailboxStatus, skippedEmails } from '@/lib/mailbox'
-import { mailboxAddSkipped, mailboxCheckNow, mailboxDismissSkipped, mailboxForget, mailboxOnOff } from '../../mailbox-actions'
+import { mailboxAddSkipped, mailboxCheckNow, mailboxDismissSkipped, mailboxForget, mailboxLookBack, mailboxOnOff } from '../../mailbox-actions'
 import { ConnectForm } from './ConnectForm'
 
 export const dynamic = 'force-dynamic'
@@ -35,6 +35,7 @@ export default async function EmailInboxPage() {
           </div>
           <div className="mb-actions">
             {on ? <form action={mailboxCheckNow}><button className="btn btn-dark btn-sm" type="submit">Check now</button></form> : null}
+            {on ? <form action={mailboxLookBack}><button className="btn btn-ghost btn-sm" type="submit" title="Reads the last 7 days of the Inbox and Junk again. Nothing is added twice.">Look again at the last 7 days</button></form> : null}
             <form action={mailboxOnOff}>
               <input type="hidden" name="on" value={on ? '0' : '1'} />
               <button className="btn btn-ghost btn-sm" type="submit" disabled={!s.hasPassword}>{on ? 'Pause' : 'Turn back on'}</button>

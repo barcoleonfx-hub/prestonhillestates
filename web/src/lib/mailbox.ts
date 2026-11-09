@@ -61,7 +61,8 @@ export async function skippedEmails(): Promise<SkippedEmail[]> {
 }
 async function noteSkipped(items: SkippedEmail[]) {
   if (!items.length) return
-  const keep = [...items, ...(await skippedEmails())].slice(0, 60)
+  const seen = new Set<string>()
+  const keep = [...items, ...(await skippedEmails())].filter((x) => { const k = `${x.folder}|${x.uid}`; if (seen.has(k)) return false; seen.add(k); return true }).slice(0, 60)
   await db.insert(settings).values({ key: SKIPPED_KEY, value: JSON.stringify(keep), updatedAt: now() })
     .onConflictDoUpdate({ target: settings.key, set: { value: JSON.stringify(keep), updatedAt: now() } })
 }
@@ -221,7 +222,7 @@ export type CheckResult = { ran: boolean; found?: number; error?: string }
  * Looks for new emails since the last check and saves the enquiries among them.
  * Safe to call often: it does nothing unless the mailbox is switched on and a couple of minutes have passed.
  */
-export async function checkMailbox(opts: { force?: boolean } = {}): Promise<CheckResult> {
+export async function checkMailbox(opts: { force?: boolean; lookBackDays?: number } = {}): Promise<CheckResult> {
   const s = await load()
   if (!s?.enabled || !s.pass) return { ran: false }
   if (!(await claim(!!opts.force))) return { ran: false }
@@ -241,7 +242,11 @@ export async function checkMailbox(opts: { force?: boolean } = {}): Promise<Chec
     const validity = String(box.uidValidity)
     // First run, or the server renumbered the mailbox: look at the last few days only.
     let uids: number[]
-    if (!uidValidity || uidValidity !== validity || !lastUid) {
+    // Asked to look again at recent days (nothing is added twice), or first run / renumbered mailbox.
+    if (opts.lookBackDays) {
+      uids = ((await c.search({ since: new Date(Date.now() - opts.lookBackDays * 86400000) }, { uid: true })) || []) as number[]
+      uidValidity = validity
+    } else if (!uidValidity || uidValidity !== validity || !lastUid) {
       const since = new Date(Date.now() - FIRST_LOOK_DAYS * 86400000)
       uids = ((await c.search({ since }, { uid: true })) || []) as number[]
       uidValidity = validity
@@ -249,7 +254,8 @@ export async function checkMailbox(opts: { force?: boolean } = {}): Promise<Chec
       uids = box.uidNext > lastUid + 1 ? (((await c.search({ uid: `${lastUid + 1}:*` }, { uid: true })) || []) as number[]).filter((u) => u > lastUid) : []
     }
     uids.sort((a, b) => a - b)
-    const batch = uids.slice(0, MAX_PER_RUN)
+    const limit = opts.lookBackDays ? 800 : MAX_PER_RUN
+    const batch = uids.slice(0, limit)
     const skipped: SkippedEmail[] = []
     // Reads the given emails in the open folder; saves the enquiries among them. In Junk, only portal and
     // website leads count (anything else there really is junk).
@@ -303,11 +309,11 @@ export async function checkMailbox(opts: { force?: boolean } = {}): Promise<Chec
         const jb = await c.mailboxOpen(junkPath, { readOnly: true })
         const jv = String(jb.uidValidity)
         let jl: number[]
-        if (!junkValidity || junkValidity !== jv || !junkLastUid) { jl = ((await c.search({ since: new Date(Date.now() - FIRST_LOOK_DAYS * 86400000) }, { uid: true })) || []) as number[]; junkValidity = jv }
+        if (opts.lookBackDays || !junkValidity || junkValidity !== jv || !junkLastUid) { jl = ((await c.search({ since: new Date(Date.now() - (opts.lookBackDays ?? FIRST_LOOK_DAYS) * 86400000) }, { uid: true })) || []) as number[]; junkValidity = jv }
         else jl = jb.uidNext > junkLastUid + 1 ? (((await c.search({ uid: `${junkLastUid + 1}:*` }, { uid: true })) || []) as number[]).filter((u) => u > junkLastUid) : []
         jl.sort((a, b) => a - b)
-        await take(junkPath, jl.slice(0, MAX_PER_RUN), jv, true)
-        junkLastUid = Math.max(junkLastUid, ...jl.slice(0, MAX_PER_RUN), jb.uidNext ? (jl.length ? 0 : jb.uidNext - 1) : 0)
+        await take(junkPath, jl.slice(0, limit), jv, true)
+        junkLastUid = Math.max(junkLastUid, ...jl.slice(0, limit), jb.uidNext ? (jl.length ? 0 : jb.uidNext - 1) : 0)
       }
     } catch (e) { console.error('mailbox: Junk folder check failed', e) }
     await noteSkipped(skipped).catch(() => {})
