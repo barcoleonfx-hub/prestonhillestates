@@ -98,3 +98,80 @@ export async function walkingTimes(home: LatLon, places: LatLon[]): Promise<{ mi
     })
   })
 }
+
+/** Google's encoded-polyline format (precision 5), which Mapbox's map pictures take for drawn lines and areas. */
+export function encodePolyline(points: LatLon[]): string {
+  let out = '', pLat = 0, pLon = 0
+  const enc = (v: number) => {
+    let n = v < 0 ? ~(v << 1) : v << 1
+    let s = ''
+    while (n >= 0x20) { s += String.fromCharCode((0x20 | (n & 0x1f)) + 63); n >>= 5 }
+    return s + String.fromCharCode(n + 63)
+  }
+  for (const p of points) {
+    const lat = Math.round(p.lat * 1e5), lon = Math.round(p.lon * 1e5)
+    out += enc(lat - pLat) + enc(lon - pLon)
+    pLat = lat; pLon = lon
+  }
+  return out
+}
+
+export type WalkZone = { minutes: number; polyline: string; box: { s: number; w: number; n: number; e: number } }
+/** The areas within a 5- and 10-minute walk of the home (Mapbox isochrones), simplified for drawing. */
+export async function walkingZones(home: LatLon): Promise<WalkZone[] | null> {
+  const t = mapboxToken()
+  if (!t) return null
+  return remembered(`iso:${home.lon.toFixed(5)},${home.lat.toFixed(5)}`, async () => {
+    const res = await fetch(`https://api.mapbox.com/isochrone/v1/mapbox/walking/${home.lon.toFixed(6)},${home.lat.toFixed(6)}?contours_minutes=5,10&polygons=true&generalize=20&access_token=${t}`, { headers: headers(), signal: AbortSignal.timeout(8000) })
+    if (!res.ok) throw new Error(`Mapbox walking areas answered ${res.status}`)
+    const body = (await res.json()) as { features?: { properties?: { contour?: number }; geometry?: { type?: string; coordinates?: number[][][] } }[] }
+    return (body.features ?? []).map((f) => {
+      const ring = (f.geometry?.coordinates?.[0] ?? []).map(([lon, lat]) => ({ lat, lon }))
+      // Fewer corners keep the map's address short enough; the shape barely changes.
+      const step = Math.max(1, Math.ceil(ring.length / 160))
+      const pts = ring.filter((_, i) => i % step === 0)
+      if (pts.length) pts.push(pts[0])
+      return {
+        minutes: f.properties?.contour ?? 0, polyline: encodePolyline(pts),
+        box: { s: Math.min(...ring.map((p) => p.lat)), n: Math.max(...ring.map((p) => p.lat)), w: Math.min(...ring.map((p) => p.lon)), e: Math.max(...ring.map((p) => p.lon)) },
+      }
+    }).filter((z) => z.minutes && z.polyline).sort((a, b) => b.minutes - a.minutes)
+  })
+}
+
+/** The walking route from the home to a place, for drawing on the map. */
+export async function walkingRoute(home: LatLon, to: LatLon): Promise<{ polyline: string; minutes: number; metres: number } | null> {
+  const t = mapboxToken()
+  if (!t) return null
+  return remembered(`route:${home.lon.toFixed(5)},${home.lat.toFixed(5)};${to.lon.toFixed(5)},${to.lat.toFixed(5)}`, async () => {
+    const res = await fetch(`https://api.mapbox.com/directions/v5/mapbox/walking/${home.lon.toFixed(6)},${home.lat.toFixed(6)};${to.lon.toFixed(6)},${to.lat.toFixed(6)}?geometries=polyline&overview=simplified&access_token=${t}`, { headers: headers(), signal: AbortSignal.timeout(8000) })
+    if (!res.ok) throw new Error(`Mapbox walking route answered ${res.status}`)
+    const r = ((await res.json()) as { routes?: { geometry?: string; duration?: number; distance?: number }[] }).routes?.[0]
+    return r?.geometry ? { polyline: r.geometry, minutes: Math.max(1, Math.round((r.duration ?? 0) / 60)), metres: Math.round(r.distance ?? 0) } : null
+  })
+}
+
+/** Places people drive to from our patch: what's within easy reach by car. */
+export const DRIVE_TO: { name: string; at: LatLon }[] = [
+  { name: 'M1', at: { lat: 51.5726, lon: -0.2302 } },
+  { name: 'A40', at: { lat: 51.5302, lon: -0.2929 } },
+  { name: 'Brent Cross', at: { lat: 51.5763, lon: -0.2237 } },
+  { name: 'Wembley Stadium', at: { lat: 51.556, lon: -0.2796 } },
+  { name: 'Northwick Park Hospital', at: { lat: 51.5755, lon: -0.3215 } },
+  { name: 'Heathrow', at: { lat: 51.4706, lon: -0.4619 } },
+  { name: 'Central London', at: { lat: 51.5131, lon: -0.1589 } },
+]
+
+/** Driving times without traffic from the home to DRIVE_TO (Mapbox driving matrix). */
+export async function drivingTimes(home: LatLon): Promise<{ name: string; minutes: number }[] | null> {
+  const t = mapboxToken()
+  if (!t) return null
+  const pts = [home, ...DRIVE_TO.map((d) => d.at)]
+  return remembered(`drive:${home.lon.toFixed(5)},${home.lat.toFixed(5)}`, async () => {
+    const res = await fetch(`https://api.mapbox.com/directions-matrix/v1/mapbox/driving/${pts.map((p) => `${p.lon.toFixed(6)},${p.lat.toFixed(6)}`).join(';')}?sources=0&annotations=duration&access_token=${t}`, { headers: headers(), signal: AbortSignal.timeout(8000) })
+    if (!res.ok) throw new Error(`Mapbox driving times answered ${res.status}`)
+    const body = (await res.json()) as { code?: string; durations?: (number | null)[][] }
+    if (body.code !== 'Ok' || !body.durations?.[0]) throw new Error(`Mapbox driving times: ${body.code ?? 'no answer'}`)
+    return DRIVE_TO.map((d, i) => ({ name: d.name, minutes: Math.max(1, Math.round((body.durations![0][i + 1] ?? -60) / 60)) })).filter((d) => d.minutes > 0)
+  })
+}

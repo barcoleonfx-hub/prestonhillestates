@@ -21,6 +21,8 @@ export type BookletComp = {
   rent: boolean
   source: string
   metres?: number | null
+  /** Where it is (Land Registry sales: their postcode), for the map of comparables. */
+  at?: LatLon | null
 }
 
 export type BookletReview = { text: string; name: string; date?: string; rating: number }
@@ -46,7 +48,14 @@ export type BookletFields = {
 }
 
 /** Where the home is and what's around it, for "What buyers will love". */
-export type BookletArea = { home: LatLon | null; postcode: string | null; approx: boolean; walked: boolean; mapToken: string | null; mapboxWhy: string; places: Place[]; source: string; error: string | null; pending: boolean }
+export type BookletArea = {
+  home: LatLon | null; postcode: string | null; approx: boolean; walked: boolean; mapToken: string | null; mapboxWhy: string
+  places: Place[]; source: string; error: string | null; pending: boolean
+  /** Mapbox extras: the 5- and 10-minute walking areas, the walk to the nearest station, and driving times. */
+  zones: { minutes: number; polyline: string; box: { s: number; w: number; n: number; e: number } }[]
+  route: { polyline: string; minutes: number; metres: number; to: string } | null
+  drives: { name: string; minutes: number }[]
+}
 /** The home's own story, for "Your home's story". */
 export type BookletStory = {
   sales: Sale[]

@@ -183,7 +183,7 @@
 .bk-map-tiles > div { position: absolute; width: 256px; height: 256px; background-size: 256px 256px; }
 .bk-map-pins { position: absolute; inset: 0; }
 .bk-map-credit { position: absolute; right: 0; bottom: 0; background: rgba(255,255,255,.85); font-size: 6.5pt; color: #59554a; padding: .6mm 1.6mm; }
-.bk-places { list-style: none; display: grid; grid-template-columns: 1fr 1fr; gap: 2.4mm 8mm; margin-top: 5mm; }
+.bk-places { list-style: none; display: grid; grid-template-columns: 1fr 1fr; gap: 2mm 8mm; margin-top: 4mm; }
 .bk-places li { display: grid; grid-template-columns: 7mm 1fr; gap: 3mm; align-items: start; padding-bottom: 2.2mm; border-bottom: 1px solid var(--line); }
 .bk-places i { width: 7mm; height: 7mm; border-radius: 50%; background: var(--ink); color: var(--gold2); font-style: normal; font-size: 8.5pt; font-weight: 700; display: flex; align-items: center; justify-content: center; }
 .bk-places b { display: block; font-size: 9.5pt; color: var(--ink); line-height: 1.25; }
@@ -231,3 +231,28 @@
 .bk-map-mapbox img { display: block; width: 100%; height: 100%; object-fit: cover; }
 
 .bk-help.bk-warn { color: #8a2b22; }
+
+/* Mapbox maps */
+.bk-maps { display: grid; grid-template-columns: 112mm 1fr; gap: 3mm; margin-top: 4mm; height: 78mm; }
+.bk-maps > div { position: relative; border-radius: 3mm; overflow: hidden; box-shadow: 0 0 0 1px var(--line); background: #ece8dc; }
+.bk-mbmap { display: block; width: 100%; height: 100%; object-fit: cover; }
+.bk-mapbox-aerial span { position: absolute; left: 2.5mm; bottom: 2.5mm; background: rgba(35,33,26,.82); color: #fff; font-size: 7pt; letter-spacing: .16em; text-transform: uppercase; padding: 1.2mm 2.4mm; border-radius: 1.5mm; }
+.bk-legend { display: flex; flex-wrap: wrap; gap: 2mm 6mm; margin-top: 2.5mm; font-size: 8pt; color: var(--body); align-items: center; }
+.bk-legend span { display: inline-flex; align-items: center; gap: 1.8mm; }
+.bk-legend i { display: inline-block; width: 5mm; height: 3mm; border-radius: 1mm; }
+.bk-legend i.z5 { background: rgba(196,151,47,.35); border: 1px solid rgba(164,123,29,.8); }
+.bk-legend i.z10 { background: rgba(196,151,47,.15); border: 1px solid rgba(164,123,29,.5); }
+.bk-legend i.rt { height: 0; border-top: 2.5px solid #23211a; border-radius: 0; }
+.bk-legend .note { color: var(--faint); }
+.bk-drives { display: flex; flex-wrap: wrap; gap: 1.2mm 1.6mm; align-items: center; margin-top: 3mm; font-size: 8pt; color: var(--body); }
+.bk-drives b { font-size: 7pt; letter-spacing: .18em; text-transform: uppercase; color: var(--gold); margin-right: 1mm; }
+.bk-drives span { background: var(--cream); border-radius: 99px; padding: .8mm 2.6mm; }
+.bk-drives em { font-style: normal; font-weight: 700; color: var(--ink); }
+.bk-compsmap { margin-top: 3mm; height: 46mm; border-radius: 3mm; overflow: hidden; box-shadow: 0 0 0 1px var(--line); background: #ece8dc; }
+.bk-n { display: inline-flex; width: 5mm; height: 5mm; border-radius: 50%; background: var(--ink); color: var(--gold2); font-style: normal; font-size: 7pt; font-weight: 700; align-items: center; justify-content: center; margin-right: 2mm; vertical-align: middle; }
+.bk-n:empty { background: none; }
+
+/* With the Mapbox maps, the page is fuller: smaller fact tiles. */
+.bk-maps ~ .bk-facts { margin-top: 3.5mm; }
+.bk-maps ~ .bk-facts > div { padding: 2.2mm 3mm; }
+.bk-maps ~ .bk-facts span { font-size: 10.5pt; }
