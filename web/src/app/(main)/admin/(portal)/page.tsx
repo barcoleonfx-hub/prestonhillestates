@@ -12,6 +12,7 @@ import { mailboxCheckNow, mailboxLookBack } from '../mailbox-actions'
 import { mailboxStatus, skippedEmails } from '@/lib/mailbox'
 import { ActivityFeed } from './ActivityFeed'
 import { LogCallButton } from './LogCallButton'
+import { AutoRefresh } from './AutoRefresh'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Dashboard' }
@@ -44,6 +45,7 @@ export default async function Dashboard() {
 
   return (
     <>
+      <AutoRefresh seconds={60} />
       <div className="page-head">
         <div>
           <h1>{h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'}, {me.name.split(' ')[0]}</h1>

@@ -985,3 +985,4 @@ kbd { font: 600 0.68rem/1 var(--sans, inherit); padding: 3px 6px; border-radius:
 .mb-folders { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 10px; }
 .mb-folder { display: inline-flex; gap: 6px; align-items: center; font-size: 0.88rem; }
 .mb-folder small { color: var(--faint); }
+.enq-showing { font-size: 0.84rem; color: var(--ink-soft); margin: 0 0 8px; } .enq-showing a { font-weight: 600; }
