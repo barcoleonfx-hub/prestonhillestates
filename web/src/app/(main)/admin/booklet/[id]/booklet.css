@@ -229,3 +229,5 @@
 .bk-status .btn { margin-left: 4px; }
 
 .bk-map-mapbox img { display: block; width: 100%; height: 100%; object-fit: cover; }
+
+.bk-help.bk-warn { color: #8a2b22; }

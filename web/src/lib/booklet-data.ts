@@ -16,7 +16,7 @@ import { osgbToLatLon } from './geo'
 import { demandNear, epcConfigured, epcHistory, ourHomesNear, parseHomeAddress, saleHistory, streetRecord } from './home-history'
 import { cached } from './lookup-cache'
 import { positionOf } from './postcode-geo'
-import { geocodeHome, mapboxToken, walkingTimes } from './mapbox'
+import { geocodeHome, mapboxStatus, mapboxToken, walkingTimes } from './mapbox'
 import type { BookletArea, BookletStory } from './booklet'
 import { figureText, homeFrom } from './valuation-check'
 import { rentCheck } from './valuation-check-data'
@@ -63,7 +63,7 @@ const TYPE_WORD: Record<string, string> = { F: 'Flat or maisonette', T: 'Terrace
 /** Where the home is, what's around it, and its own story. Every part is optional: what can't be found is left out. */
 async function areaAndStory(postcode: string | null, address: string | null, rent: boolean, home: { type: string | null; typeLabel: string | null; beds: number | null }): Promise<{ area: BookletArea; story: BookletStory }> {
   const empty: BookletStory = { sales: [], epcs: [], epcKey: epcConfigured(), street: null, demand: null, ours: [], council: null, facts: [], errors: [] }
-  if (!postcode) return { area: { home: null, postcode: null, approx: true, walked: false, mapToken: mapboxToken(), places: [], source: 'none', error: 'no postcode', pending: false }, story: empty }
+  if (!postcode) return { area: { home: null, postcode: null, approx: true, walked: false, mapToken: mapboxToken(), mapboxWhy: mapboxStatus().why, places: [], source: 'none', error: 'no postcode', pending: false }, story: empty }
   const pos = await positionOf(postcode).catch(() => null)
   const pcAt = pos ? osgbToLatLon(pos.e, pos.n) : null
   // The house itself, if Mapbox finds its exact address in this postcode; otherwise the postcode's centre.
@@ -99,7 +99,7 @@ async function areaAndStory(postcode: string | null, address: string | null, ren
     { label: 'Council', value: council?.name ?? '' },
   ].filter((f) => f.value)
   return {
-    area: { home: at, postcode, approx: !exact, walked, mapToken: mapboxToken(), places: places.places, source: places.source, error: places.error, pending: places.pending },
+    area: { home: at, postcode, approx: !exact, walked, mapToken: mapboxToken(), mapboxWhy: mapboxStatus().why, places: places.places, source: places.source, error: places.error, pending: places.pending },
     story: {
       sales: sales.sales, epcs: epcs.certs, epcKey: epcConfigured(),
       street: street && addr?.street ? { name: addr.street.toLowerCase().replace(/\b([a-z])/g, (c) => c.toUpperCase()), ...street } : null,
