@@ -14,9 +14,8 @@ export function mapboxToken(): string | null {
   if (token !== undefined) return token
   const fromEnv = process.env.MAPBOX_TOKEN?.trim()
   if (fromEnv) return (token = fromEnv)
-  for (const f of ['/etc/secrets/MAPBOX_TOKEN', `${process.cwd()}/MAPBOX_TOKEN`]) {
-    try { const t = readFileSync(f, 'utf8').trim(); if (t) return (token = t) } catch { /* not there */ }
-  }
+  // Render keeps secret files here.
+  try { const t = readFileSync('/etc/secrets/MAPBOX_TOKEN', 'utf8').trim(); if (t) return (token = t) } catch { /* not there */ }
   return (token = null)
 }
 
