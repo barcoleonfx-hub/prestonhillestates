@@ -60,6 +60,8 @@ export default async function PortalLayout({ children }: { children: React.React
           <form action={logout}>
             <button type="submit">Sign out</button>
           </form>
+          {/* Which update the live site is running (Render sets this), so it's easy to tell when a change is live. */}
+          {process.env.RENDER_GIT_COMMIT ? <div className="admin-version" title={process.env.RENDER_GIT_COMMIT}>Version {process.env.RENDER_GIT_COMMIT.slice(0, 7)}</div> : null}
         </div>
       </aside>
       <main className="admin-main">{children}</main>
