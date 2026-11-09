@@ -86,6 +86,8 @@ export type BookletInput = {
   estimate: { low: number; high: number; rent: boolean; basis: string } | null
   otm: { url: string; error: string | null } | null
   area: BookletArea
+  /** Its private link for the owner, and whether they've opened it. */
+  share: { url: string; views: number; firstViewAt: string | null; lastViewAt: string | null } | null
   story: BookletStory
   reviews: BookletReview[]
   google: { rating: number | null; count: number | null }

@@ -192,6 +192,16 @@ export const lookupCache = sqliteTable('lookup_cache', {
   fetchedAt: text('fetched_at').notNull(),
 })
 
+/** A private link to a valuation booklet for its owner, and when they opened it. */
+export const bookletShares = sqliteTable('booklet_shares', {
+  token: text('token').primaryKey(),
+  bookletId: text('booklet_id').notNull(),
+  createdAt: text('created_at').notNull(),
+  views: integer('views').notNull().default(0),
+  firstViewAt: text('first_view_at'),
+  lastViewAt: text('last_view_at'),
+})
+
 /** What staff changed on a valuation booklet (JSON of the changed fields only). */
 export const booklets = sqliteTable('booklets', {
   id: text('id').primaryKey(),

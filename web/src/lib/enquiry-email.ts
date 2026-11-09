@@ -29,13 +29,15 @@ export type EnquiryEmailContext = {
   figure?: string
   /** Our Google rating and a real review for each side of the business (4 or 5 stars, chosen in the portal). */
   brand?: { rating: number | null; count: number | null; reviewsUrl: string | null; sales: QuotedReview | null; lettings: QuotedReview | null }
+  /** Their personal property report (the valuation booklet at its private link), and a photo of their home from above. */
+  report?: { url: string; image: string } | null
 }
-export type EnquiryEmailExtra = { when?: string; times?: string; figure?: string }
+export type EnquiryEmailExtra = { when?: string; times?: string; figure?: string; attached?: boolean }
 
 type Section =
   | 'stats' | 'valuation-steps' | 'letting-steps' | 'sold' | 'evidence' | 'figure' | 'appointment' | 'why-sell' | 'why-let'
   | 'sell-plan' | 'landlord' | 'rra' | 'landlord-docs' | 'seller-docs' | 'review' | 'founder' | 'schemes' | 'property'
-  | 'tenant-docs' | 'buyer-help' | 'tenant-help' | 'offer-steps'
+  | 'tenant-docs' | 'buyer-help' | 'tenant-help' | 'offer-steps' | 'report' | 'meet'
 
 export type EnquiryTemplate = {
   key: string
@@ -48,7 +50,7 @@ export type EnquiryTemplate = {
   kicker: string
   /** The big line at the top of the email. */
   headline: (c: EnquiryEmailContext, x: EnquiryEmailExtra) => string
-  photo: 'shopfront' | 'property'
+  photo: 'shopfront' | 'property' | 'report'
   sections: Section[]
   cta?: (c: EnquiryEmailContext) => { href: string; label: string } | null
 }
@@ -65,6 +67,7 @@ const TIMES = '[the times you can offer]'
 const FIGURE = '[your valuation]'
 const area = (c: EnquiryEmailContext) => (c.postcode ? c.postcode.split(' ')[0] : 'your area')
 const fig = (c: EnquiryEmailContext, x: EnquiryEmailExtra) => x.figure || c.figure || FIGURE
+const isPostcode = (s: string) => /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i.test(s.trim())
 const book = (c: EnquiryEmailContext, what: string) => ({ href: `mailto:${c.sender.email}?subject=${encodeURIComponent(what)}`, label: 'Reply to book a time' })
 
 // ---------- the emails ----------
@@ -116,8 +119,30 @@ const confirmViewing = (letting: boolean): EnquiryTemplate => ({
   sections: letting ? ['appointment', 'property', 'tenant-docs'] : ['appointment', 'property', 'offer-steps'],
 })
 
+/** The first email for a valuation: their personal property report, what we're about, and an invitation to meet. */
+const reportEmail = (letting: boolean): EnquiryTemplate => ({
+  key: 'report', label: 'Their property report', hint: 'Recommended first email: their personal report, who we are, and an invitation to meet.',
+  kicker: 'Your personal property report', photo: 'report',
+  headline: (c) => `${first(c)}, we’ve made something for you.`,
+  subject: (c) => `${first(c)}, your personal property report${c.address && !isPostcode(c.address) ? ` for ${c.address}` : ''}`,
+  message: (c) => [
+    hello(c),
+    `Thank you for asking us about ${letting ? 'letting your property' : 'your home'}${at(c)}. Rather than send you a standard reply, we’ve put together a personal report, just for ${letting ? 'your property' : 'your home'}.`,
+    letting
+      ? 'It shows what tenants will love about where it is, what similar homes nearby let for, how letting with us works, and what our landlords say about us.'
+      : 'It shows what buyers will love about where you live, your home’s story, what similar homes nearby have actually sold for, and exactly how we’d sell it.',
+    letting
+      ? 'An online report is a good start, but the rent a property achieves comes down to things only a visit shows. Give us half an hour at a time that suits you and we’ll tell you exactly what to expect. It’s free, with no obligation.'
+      : 'An online figure is a good start, but it can’t see your new kitchen, the extension or the garden, and that’s what buyers pay for. Give us 30 to 45 minutes at a time that suits you and we’ll give you an accurate figure, with the evidence. It’s free, with no obligation.',
+    `Just reply with a day and time that works for you, or call us on ${PHONE}.`,
+  ].join('\n\n'),
+  cta: (c) => (c.report ? { href: c.report.url, label: 'Open your report' } : book(c, 'Booking a valuation')),
+  sections: letting ? ['report', 'landlord', 'review', 'meet', 'schemes'] : ['report', 'why-sell', 'review', 'meet', 'founder', 'schemes'],
+})
+
 export const ENQUIRY_TEMPLATES: Record<EnquiryEmailKind, EnquiryTemplate[]> = {
   'sales-valuation': [
+    reportEmail(false),
     {
       key: 'thanks', label: 'Thank you + book a valuation', hint: 'The first reply: who we are, what happens, and when to visit.',
       kicker: 'Your free valuation', photo: 'shopfront',
@@ -164,6 +189,7 @@ export const ENQUIRY_TEMPLATES: Record<EnquiryEmailKind, EnquiryTemplate[]> = {
     },
   ],
   'lettings-valuation': [
+    reportEmail(true),
     {
       key: 'thanks', label: 'Thank you + book a visit', hint: 'The first reply: who we are, our service, and when to visit.',
       kicker: 'Letting your property', photo: 'shopfront',
@@ -449,6 +475,46 @@ ${g?.rating && g.count ? `<p style="margin:10px 0 0; font-family:${SANS}; font-s
 <td valign="top" style="padding:22px 22px 22px 14px;"><p style="margin:0; font-family:${SERIF}; font-style:italic; font-size:17px; line-height:25px; color:${C.ink};">“Never back away from a challenge. Whatever it takes, every client leaves this office with a smile.”</p>
 <p style="margin:10px 0 0; font-family:${SANS}; font-size:13px; color:${C.faint};"><b style="color:${C.ink};">Jamil Ahmed</b> &middot; Founder &middot; 35+ years in property</p></td>
 </tr></table>`)
+    case 'report': {
+      if (!c.report) return ''
+      const letting = c.kind === 'lettings-valuation'
+      const inside: [string, string][] = letting ? [
+        ['Why Preston Hill', 'Who we are, and how close we are to you'],
+        ['What tenants will love', 'Stations, schools, shops and parks, with walking times'],
+        ['Your property’s story', 'Its sales history and energy certificates'],
+        ['Rents nearby', 'What similar homes let for, and what’s on the market now'],
+        ['How letting with us works', 'From valuation to rent day, fully managed'],
+        ['Peace of mind', 'Our fee, the Renters’ Rights Act, and the schemes we belong to'],
+      ] : [
+        ['Why Preston Hill', 'Who we are, and how close we are to you'],
+        ['What buyers will love', 'Stations, schools, shops and parks, with walking times and travel into London'],
+        ['Your home’s story', 'Every sale since 1995, and its energy certificates'],
+        ['What similar homes sold for', 'Real sold prices nearby from HM Land Registry, on a map'],
+        ['How we’d sell it', 'From valuation to keys, step by step'],
+        ['What our clients say', 'Real reviews, word for word'],
+      ]
+      const cell = ([title, d]: [string, string]) => `<td width="50%" valign="top" style="padding:7px 8px 7px 0;"><p style="margin:0; font-family:${SANS}; font-size:14px; line-height:20px; color:#FFFDF6;"><span style="color:${C.goldBtn}; font-weight:bold;">&#10003;</span>&nbsp; <b>${esc(title)}</b></p><p style="margin:2px 0 0 20px; font-family:${SANS}; font-size:12px; line-height:18px; color:#CFC9B6;">${esc(d)}</p></td>`
+      const rows: string[] = []
+      for (let i = 0; i < inside.length; i += 2) rows.push(`<tr>${cell(inside[i])}${inside[i + 1] ? cell(inside[i + 1]) : '<td></td>'}</tr>`)
+      return row(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${C.dark}" style="border-radius:16px;"><tr><td style="padding:24px 24px 22px;">
+<p style="margin:0 0 6px; font-family:${SANS}; font-size:11px; font-weight:bold; letter-spacing:2.5px; text-transform:uppercase; color:${C.goldBtn};">Inside your report</p>
+<p style="margin:0 0 12px; font-family:${SERIF}; font-size:24px; line-height:30px; color:#FFFDF6;">Made for ${esc(c.address && !isPostcode(c.address) ? c.address : letting ? 'your property' : 'your home')}</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${rows.join('')}</table>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:16px;"><tr><td>${btn(c.report.url, 'Open your report')}</td></tr></table>
+<p style="margin:12px 0 0; font-family:${SANS}; font-size:12px; line-height:18px; color:#A9A28C;">Opens in your browser, on your phone or computer. You can save it as a PDF to keep.${x.attached ? ' We’ve also attached it to this email.' : ''}</p>
+</td></tr></table>`, 22)
+    }
+    case 'meet': {
+      const letting = c.kind === 'lettings-valuation'
+      return row(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${C.cream}" style="border-radius:16px;"><tr><td style="padding:24px 26px;">
+${eyebrow('The next step')}${h2(letting ? 'Let us see it in person' : 'Let us see your home in person')}
+<p style="margin:0 0 16px; font-family:${SANS}; font-size:14px; line-height:22px; color:${C.body};">${letting
+        ? 'Your report is a starting point. Condition, furnishing, the garden and the exact street all change the rent, and only a visit shows them. Half an hour is all it takes: we’ll tell you the rent to expect, what (if anything) needs doing first, and how we’d look after it. Free, and no obligation.'
+        : 'Your report is a starting point. Size, condition, any extensions, the garden and the exact street all change the price, and only a visit shows them. Give us 30 to 45 minutes and we’ll give you an accurate figure, with the evidence, and a clear plan. Free, and no obligation.'}</p>
+${btn(`mailto:${c.sender.email}?subject=${encodeURIComponent(letting ? 'Booking a rental valuation' : 'Booking a valuation')}`, 'Book a time to meet', true)}
+<p style="margin:12px 0 0; font-family:${SANS}; font-size:13px; color:${C.body};">Or call us on <a href="tel:+442089049005" style="color:${C.gold}; text-decoration:none; font-weight:bold;">${PHONE}</a></p>
+</td></tr></table>`, 26)
+    }
     case 'schemes':
       return row(`<p style="margin:0; font-family:${SANS}; font-size:11px; line-height:18px; letter-spacing:1.5px; text-transform:uppercase; color:${C.faint}; text-align:center;">Regulated &amp; protected<br/><span style="color:${C.body};">The Property Ombudsman &middot; safeagent &middot; Property Redress Scheme &middot; myDeposits</span></p>`, 26)
   }
@@ -460,8 +526,8 @@ export function renderEnquiryEmail(c: EnquiryEmailContext, t: EnquiryTemplate, s
   const utm = `enquiry_${c.kind}_${t.key}`
   const cta = t.cta?.(c) ?? null
   const site = withUtm(`${c.base}/`, utm, 'enquiry_reply')
-  const photo = t.photo === 'property' && c.property?.photo ? c.property.photo : `${c.base}/img/shopfront.jpg`
-  const photoAlt = t.photo === 'property' && c.property?.photo ? c.property.address : 'Preston Hill Estates, 271 Preston Road, Harrow'
+  const photo = t.photo === 'property' && c.property?.photo ? c.property.photo : t.photo === 'report' && c.report ? c.report.image : `${c.base}/img/shopfront.jpg`
+  const photoAlt = t.photo === 'property' && c.property?.photo ? c.property.address : t.photo === 'report' && c.report ? 'Your home from above' : 'Preston Hill Estates, 271 Preston Road, Harrow'
   const body = t.sections.map((s) => section(s, c, t, x, utm)).join('\n')
   const html = `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head>
@@ -485,7 +551,7 @@ a { color:${C.gold}; }
 
 <tr><td bgcolor="${C.card}" style="border:1px solid ${C.line}; border-radius:20px; overflow:hidden;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-<tr><td style="padding:0;"><img src="${esc(photo)}" width="600" alt="${esc(photoAlt)}" style="display:block; width:100%; max-width:600px; height:auto; border-radius:19px 19px 0 0;"/></td></tr>
+<tr><td style="padding:0;">${t.photo === 'report' && c.report ? `<a href="${esc(c.report.url)}" target="_blank">` : ''}<img src="${esc(photo)}" width="600" alt="${esc(photoAlt)}" style="display:block; width:100%; max-width:600px; height:auto; border-radius:19px 19px 0 0;"/>${t.photo === 'report' && c.report ? '</a>' : ''}</td></tr>
 <tr><td bgcolor="${C.dark}" style="padding:26px 40px 28px;" class="px">
 <p style="margin:0 0 10px; font-family:${SANS}; font-size:11px; font-weight:bold; letter-spacing:3px; text-transform:uppercase; color:${C.goldBtn};">${esc(t.kicker)}</p>
 <p class="hero-h" style="margin:0; font-family:${SERIF}; font-size:32px; line-height:38px; color:#FFFDF6;">${esc(t.headline(c, x))}</p>

@@ -833,4 +833,20 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       `CREATE INDEX area_places_square_idx ON area_places (square)`,
     ],
   },
+  {
+    id: '040_booklet_shares',
+    sql: [
+      // A private link to a valuation booklet, for the person it's for (sent in the "property report" email), and
+      // when they opened it.
+      `CREATE TABLE booklet_shares (
+        token TEXT PRIMARY KEY,
+        booklet_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        views INTEGER NOT NULL DEFAULT 0,
+        first_view_at TEXT,
+        last_view_at TEXT
+      )`,
+      `CREATE UNIQUE INDEX booklet_shares_booklet_idx ON booklet_shares (booklet_id)`,
+    ],
+  },
 ]

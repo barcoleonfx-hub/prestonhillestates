@@ -391,7 +391,7 @@ function smtpFor(s: MailboxSettings) {
   return { host, port }
 }
 
-export type OutgoingMail = { to: string[]; cc?: string[]; subject: string; text: string; html?: string; headers?: Record<string, string>; inReplyTo?: string | null; references?: string[]; by?: string | null }
+export type OutgoingMail = { to: string[]; cc?: string[]; subject: string; text: string; html?: string; headers?: Record<string, string>; inReplyTo?: string | null; references?: string[]; by?: string | null; attachments?: { filename: string; content: Buffer; contentType: string }[] }
 
 /**
  * Sends an email from the office mailbox, puts a copy in its Sent folder (so Apple Mail shows it too)
@@ -407,6 +407,7 @@ export async function sendFromMailbox(m: OutgoingMail): Promise<{ ok: true; mess
   const built = await nodemailer.createTransport({ streamTransport: true, buffer: true, newline: 'windows' }).sendMail({
     from, to: m.to, cc: m.cc?.length ? m.cc : undefined, subject: m.subject, text: m.text, html: m.html, headers: m.headers,
     inReplyTo: m.inReplyTo ?? undefined, references: m.references?.length ? m.references : undefined,
+    attachments: m.attachments?.length ? m.attachments : undefined,
   })
   const raw = built.message as Buffer
   const { host, port } = smtpFor(s)

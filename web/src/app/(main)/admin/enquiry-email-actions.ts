@@ -42,16 +42,21 @@ export async function sendEnquiryEmail(_prev: SendState, form: FormData): Promis
   const to = w.e.email?.trim()
   if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return { error: 'There’s no email address for this person. Call them instead.' }
   if (w.contact?.doNotContact) return { error: 'This person asked not to be contacted.' }
-  const { html, text } = renderEnquiryEmail({ ...w.ctx, kind }, t, subject, message, extra)
+  // Files attached in the composer (e.g. the booklet saved as a PDF).
+  const files = form.getAll('attachment').filter((f): f is File => typeof f === 'object' && 'arrayBuffer' in f && f.size > 0)
+  if (files.reduce((n, f) => n + f.size, 0) > 15 * 1024 * 1024) return { error: 'The attachments are over 15 MB. Many mailboxes refuse emails that big: send a smaller PDF.' }
+  if (files.some((f) => !/\.(pdf|jpe?g|png)$/i.test(f.name))) return { error: 'Attach PDFs or photos (JPEG or PNG) only.' }
+  const attachments = await Promise.all(files.map(async (f) => ({ filename: f.name.replace(/[^\w .()-]/g, '_').slice(0, 120), content: Buffer.from(await f.arrayBuffer()), contentType: f.type || 'application/octet-stream' })))
+  const { html, text } = renderEnquiryEmail({ ...w.ctx, kind }, t, subject, message, { ...extra, attached: attachments.length > 0 })
   // The design around the message (headline, figure box) uses the boxes above it, so they must be filled in too.
   if (/\[your valuation\]/i.test(html)) return { error: 'Type your valuation in the “Your valuation” box first.' }
   if (/\[day and time\]/i.test(html)) return { error: 'Type the day and time in the box first.' }
-  const res = await sendFromMailbox({ to: [to], subject, text, html, by: me.id })
+  const res = await sendFromMailbox({ to: [to], subject, text, html, by: me.id, attachments })
   if (!res.ok) return { error: res.error }
   const at = now()
   // Recorded with its email ID, so their reply joins this enquiry.
   await recordOutgoing(id, { messageId: res.messageId, subject, body: message, by: me.id, sentAt: at })
-  await db.insert(enquiryNotes).values({ id: uid(), enquiryId: id, body: `Email sent: ${subject}`, createdBy: me.id, createdAt: at })
+  await db.insert(enquiryNotes).values({ id: uid(), enquiryId: id, body: `Email sent: ${subject}${attachments.length ? ` (attached: ${attachments.map((a) => a.filename).join(', ')})` : ''}`, createdBy: me.id, createdAt: at })
   // Sending a sales or lettings email settles which list an unsorted enquiry belongs on.
   const side = kind === 'lettings-valuation' || kind === 'tenant' ? 'lettings' : 'sales'
   await db.update(enquiries).set({ handled: true, ...(w.sorted.side ? {} : { side }) }).where(eq(enquiries.id, id))

@@ -17,6 +17,7 @@ import { demandNear, epcConfigured, epcHistory, ourHomesNear, parseHomeAddress, 
 import { cached } from './lookup-cache'
 import { fmtPostcode, positionOf, positionsOf } from './postcode-geo'
 import { tubeTimes } from './tfl'
+import { shareFor, shareStats } from './booklet-share'
 import { drivingTimes, geocodeHome, mapboxStatus, mapboxToken, walkingRoute, walkingTimes, walkingZones } from './mapbox'
 import type { BookletArea, BookletStory } from './booklet'
 import { figureText, homeFrom } from './valuation-check'
@@ -60,6 +61,14 @@ async function councilOf(postcode: string): Promise<{ name: string; planningUrl:
 }
 
 const BRANCH_POSTCODE = 'HA3 0PS' // 271 Preston Road
+
+async function shareInfo(id: string, base: string) {
+  try {
+    const token = await shareFor(id)
+    const st = await shareStats(id)
+    return { url: `${base}/report/${token}`, views: st?.views ?? 0, firstViewAt: st?.firstViewAt ?? null, lastViewAt: st?.lastViewAt ?? null }
+  } catch { return null }
+}
 
 const TYPE_WORD: Record<string, string> = { F: 'Flat or maisonette', T: 'Terraced house', S: 'Semi-detached house', D: 'Detached house' }
 
@@ -235,7 +244,7 @@ export async function bookletInput(id: string, me: { name: string }): Promise<Bo
     id, enquiryId, defaults, saved, comps, compsWhere: where,
     estimate: rents ? { low: rents.low, high: rents.high, rent: true, basis: `${home.beds != null ? `${home.beds}-bed homes, ` : ''}from ${rents.basis}` } : null,
     otm: otm ? { url: otm.url, error: otm.error ?? null } : null,
-    area, story,
+    area, story, share: await shareInfo(id, base),
     reviews: pickReviews(revs), google: { rating: google.rating, count: google.count },
     prepared: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/London' }),
     base,
