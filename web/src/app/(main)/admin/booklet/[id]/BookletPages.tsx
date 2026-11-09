@@ -82,7 +82,7 @@ export function BookletPages({ data, f }: { data: BookletInput; f: BookletFields
   const compsPins = withCompsMap ? evidence.map((c, i) => (c.at ? { n: i + 1, at: c.at } : null)).filter((x): x is { n: number; at: { lat: number; lon: number } } => !!x) : []
   const market = data.comps.filter((c) => c.group === 'market' && !hidden.has(c.key)).slice(0, 4)
   // With the Mapbox maps (two pictures and the driving times) there's room for eight places, otherwise ten.
-  const places = data.area.places.filter((p) => !hidden.has(p.key)).slice(0, data.area.mapToken && data.area.home ? 8 : 10)
+  const places = data.area.places.filter((p) => !hidden.has(p.key)).slice(0, data.area.mapToken && data.area.home ? (data.area.tube.length && data.area.drives.length ? 6 : 8) : data.area.tube.length ? 8 : 10)
   const timeline = homeTimeline(data, f, rent)
   // Only a number worth showing: the people asking about homes in their own district if that's a good few,
   // otherwise everyone who asked us; and not at all if it's small.
@@ -181,13 +181,16 @@ export function BookletPages({ data, f }: { data: BookletInput; f: BookletFields
                 ))}
               </ol>
             ) : null}
+            {data.area.tube.length ? (
+              <div className="bk-drives bk-tube"><b>By tube &amp; train</b>{data.area.tube.map((d) => <span key={d.name} title={d.via.join(', ')}>{d.name} <em>{d.minutes} min</em></span>)}</div>
+            ) : null}
             {data.area.drives.length ? (
               <div className="bk-drives"><b>By car</b>{data.area.drives.map((d) => <span key={d.name}>{d.name} <em>{d.minutes} min</em></span>)}</div>
             ) : null}
             {data.story.facts.length ? (
               <div className="bk-facts">{data.story.facts.map((x) => <div key={x.label}><b>{x.label}</b><span>{x.value}</span></div>)}</div>
             ) : null}
-            <p className="bk-src">These are the things we’ll lead with when we market your {rent ? 'property' : 'home'}. {data.area.walked ? 'Walking times along streets, from your front door' : 'Walking times are approximate, measured from your postcode'}{data.area.walked && data.area.approx ? ' (from your postcode)' : ''}. {data.area.drives.length ? 'Driving times without traffic. ' : ''}Being near a school doesn’t guarantee a place. Places from OpenStreetMap{data.area.mapToken ? `; map${data.area.walked ? ' and walking routes' : ''} from Mapbox` : ''}.</p>
+            <p className="bk-src">These are the things we’ll lead with when we market your {rent ? 'property' : 'home'}. {data.area.walked ? 'Walking times along streets, from your front door' : 'Walking times are approximate, measured from your postcode'}{data.area.walked && data.area.approx ? ' (from your postcode)' : ''}. {data.area.tube.length ? 'Tube and train times door to door on a weekday morning (TfL Journey Planner, powered by TfL Open Data). ' : ''}{data.area.drives.length ? 'Driving times without traffic. ' : ''}Being near a school doesn’t guarantee a place. Places from OpenStreetMap{data.area.mapToken ? `; map${data.area.walked ? ' and walking routes' : ''} from Mapbox` : ''}.</p>
           </div>
           <Foot n={4} />
         </section>

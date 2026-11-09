@@ -55,6 +55,8 @@ export type BookletArea = {
   zones: { minutes: number; polyline: string; box: { s: number; w: number; n: number; e: number } }[]
   route: { polyline: string; minutes: number; metres: number; to: string } | null
   drives: { name: string; minutes: number }[]
+  /** Door-to-door tube and train times into London (TfL). */
+  tube: { name: string; minutes: number; via: string[] }[]
 }
 /** The home's own story, for "Your home's story". */
 export type BookletStory = {
