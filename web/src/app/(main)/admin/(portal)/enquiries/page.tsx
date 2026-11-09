@@ -10,6 +10,7 @@ import type { EnquiryRow as Row } from '../EnquiryItem'
 import { removeNotEnquiry, setEnquiryHandled, setEnquirySide } from '../../actions'
 import { EnquiryOutcome } from '../EnquiryOutcome'
 import { LogCallButton } from '../LogCallButton'
+import { AutoRefresh } from '../AutoRefresh'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Enquiries' }
@@ -63,8 +64,7 @@ export default async function EnquiriesPage({ searchParams }: { searchParams: Pr
     const list = found.filter((r) => sideOf.get(r.e.id) === x && (!t || (t === 'valuations') === valOf.get(r.e.id)))
     return { all: list.length, fresh: list.filter((r) => !r.e.handled).length }
   }
-  // Sales and Lettings show one list at a time: valuations, unless only buyer/tenant enquiries are waiting.
-  if (!type && (side === 'sales' || side === 'lettings')) type = count(side, 'valuations').fresh || !count(side, 'enquiries').fresh ? 'valuations' : 'enquiries'
+  // Everything shows until a card is chosen, so nothing new is ever out of sight.
   const rows = found.filter((r) => (!side || sideOf.get(r.e.id) === side) && (!type || (type === 'valuations') === valOf.get(r.e.id)))
 
   const recentFrom = new Date(Date.now() - RECENT_DAYS * 86400000).toISOString()
@@ -104,7 +104,7 @@ export default async function EnquiriesPage({ searchParams }: { searchParams: Pr
             <Link href={`/admin/enquiries/${r.e.id}?back=${encodeURIComponent(here)}`} className="enq-link">
               <span className="enq-av" aria-hidden="true">{r.e.name.trim()[0]?.toUpperCase() ?? '?'}</span>
               <span className="enq-main">
-                <span className="enq-name">{r.e.name}{!r.e.handled ? <span className="pill gold">New</span> : null}{r.e.outcome ? <span className="pill">{outcomeText(r.e.outcome)}</span> : null}{r.dnc ? <span className="pill warn">Do not contact</span> : null}</span>
+                <span className="enq-name">{r.e.name}{!r.e.handled ? <span className="pill gold">New</span> : null}{!type && valOf.get(r.e.id) ? <span className="pill">{sideOf.get(r.e.id) === 'lettings' ? 'Rental valuation' : 'Valuation'}</span> : null}{r.e.outcome ? <span className="pill">{outcomeText(r.e.outcome)}</span> : null}{r.dnc ? <span className="pill warn">Do not contact</span> : null}</span>
                 <span className="enq-what">{whatOf(r)}</span>
               </span>
               <span className="enq-src">{enquiryLabel(r.e).replace(/ (enquiry|request|registration|viewing request|valuation request)$/i, '')}<small>{ago(r.e.createdAt)}</small></span>
@@ -140,7 +140,7 @@ export default async function EnquiriesPage({ searchParams }: { searchParams: Pr
   }
 
   const Choice = ({ label, sub, c, to, on }: { label: string; sub: string; c: { all: number; fresh: number }; to: Record<string, string>; on: boolean }) => (
-    <Link className={`enq-choice${on ? ' on' : ''}`} href={href({ ...to, show: '' })}>
+    <Link className={`enq-choice${on ? ' on' : ''}`} href={href({ ...(on ? Object.fromEntries(Object.keys(to).map((k) => [k, ''])) : to), show: '' })} title={on ? 'Click again to show everything' : undefined}>
       <span className="t">{label}</span>
       <span className="s">{sub}</span>
       <span className="n">{c.fresh ? <b>{c.fresh} new</b> : null}<span>{c.all} in all</span></span>
@@ -151,6 +151,7 @@ export default async function EnquiriesPage({ searchParams }: { searchParams: Pr
 
   return (
     <>
+      <AutoRefresh seconds={60} />
       <div className="page-head">
         <div>
           <h1>{HEAD[side || 'all'][0]}</h1>
@@ -172,11 +173,12 @@ export default async function EnquiriesPage({ searchParams }: { searchParams: Pr
           </>
         ) : (
           <>
-            <Choice label="Sales" sub="Valuations and buyers" c={count('sales')} to={{ side: 'sales', type: 'valuations' }} on={false} />
-            <Choice label="Lettings" sub="Rental valuations and tenants" c={count('lettings')} to={{ side: 'lettings', type: 'valuations' }} on={false} />
+            <Choice label="Sales" sub="Valuations and buyers" c={count('sales')} to={{ side: 'sales' }} on={false} />
+            <Choice label="Lettings" sub="Rental valuations and tenants" c={count('lettings')} to={{ side: 'lettings' }} on={false} />
           </>
         )}
       </div>
+      {side && type ? <p className="enq-showing">Showing {type === 'valuations' ? (isLet ? 'rental valuations' : 'valuations') : isLet ? 'tenant enquiries' : side === 'unsorted' ? 'other enquiries' : 'buyer enquiries'} only · <Link href={href({ type: '', show: '' })}>Show everything</Link></p> : null}
       {side !== 'unsorted' && unsortedCount.all ? (
         <p className="enq-unsorted"><Link href={href({ side: 'unsorted', type: '', show: '' })}>{unsortedCount.all} enquir{unsortedCount.all === 1 ? 'y doesn’t' : 'ies don’t'} say whether {unsortedCount.all === 1 ? 'it’s' : 'they’re'} sales or lettings{unsortedCount.fresh ? ` (${unsortedCount.fresh} new)` : ''} →</Link></p>
       ) : null}
