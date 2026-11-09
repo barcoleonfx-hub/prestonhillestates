@@ -7,7 +7,7 @@ import { eq } from 'drizzle-orm'
 import { db, getClient, ready } from '@/db/client'
 import { notifications, settings } from '@/db/schema'
 import { analyse } from '@/lib/email-import'
-import { saveEmailRow } from '@/lib/email-intake'
+import { repairZooplaRow, saveEmailRow } from '@/lib/email-intake'
 import { attachReply, linkSentReplies, matchReply } from '@/lib/enquiry-thread'
 import { enquiryLabel } from '@/lib/enquiry-labels'
 import { open, seal } from '@/lib/secret-box'
@@ -241,10 +241,12 @@ export type CheckResult = { ran: boolean; found?: number; error?: string }
  * Looks for new emails since the last check and saves the enquiries among them.
  * Safe to call often: it does nothing unless the mailbox is switched on and a couple of minutes have passed.
  */
-export async function checkMailbox(opts: { force?: boolean; lookBackDays?: number } = {}): Promise<CheckResult> {
+/** `repairOnly`: read the emails again only to fill in Zoopla valuations saved without an address (adds nothing). */
+export async function checkMailbox(opts: { force?: boolean; lookBackDays?: number; repairOnly?: boolean } = {}): Promise<CheckResult> {
   const s = await load()
   if (!s?.enabled || !s.pass) return { ran: false }
-  if (!(await claim(!!opts.force))) return { ran: false }
+  // The repair-only look-back is guarded by its caller (once ever), and must not take the regular check's turn.
+  if (!opts.repairOnly && !(await claim(!!opts.force))) return { ran: false }
   const pass = open(s.pass)
   if (!pass) {
     await store({ ...s, lastCheckAt: now(), lastError: 'The saved password could not be read. Enter it again.' })
@@ -292,6 +294,7 @@ export async function checkMailbox(opts: { force?: boolean; lookBackDays?: numbe
           try {
             const row = await analyse(source)
             if (!row) continue
+            if (opts.repairOnly) { if (await repairZooplaRow(row)) found++; continue }
             // A reply to one of our emails (or a follow-up from someone with an enquiry) joins that enquiry.
             const reply = await matchReply(row).catch(() => null)
             if (reply) { if (await attachReply(reply.enquiryId, row, reply.how)) found++; continue }
@@ -358,7 +361,9 @@ export async function checkMailbox(opts: { force?: boolean; lookBackDays?: numbe
     await linkSentReplies().catch((e) => console.error('linking sent replies failed', e))
     await c.logout().catch(() => c.close())
     if (!uids.length && box.uidNext) lastUid = Math.max(lastUid, box.uidNext - 1)
-    await store({ ...s, junkPath, folders, allFolders, uidValidity, lastUid, lastCheckAt: now(), lastOkAt: now(), lastError: null, lastFound: found, totalFound: (s.totalFound ?? 0) + found, lastStored: stored })
+    // A repair-only look-back leaves every folder's place alone, so the next check still reads anything new.
+    if (opts.repairOnly) await store({ ...(await load() ?? s), lastCheckAt: now() })
+    else await store({ ...s, junkPath, folders, allFolders, uidValidity, lastUid, lastCheckAt: now(), lastOkAt: now(), lastError: null, lastFound: found, totalFound: (s.totalFound ?? 0) + found, lastStored: stored })
     return { ran: true, found }
   } catch (e) {
     await c.logout().catch(() => c.close())

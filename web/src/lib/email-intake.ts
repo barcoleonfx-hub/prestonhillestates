@@ -1,5 +1,5 @@
 import 'server-only'
-import { eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { db } from '@/db/client'
 import { contacts, enquiries } from '@/db/schema'
 import { upsertContact } from '@/lib/contacts'
@@ -30,6 +30,14 @@ export const SOURCE_FOR_CONTACT: Record<string, string | null> = { zoopla: 'Zoop
  * Returns null if that email is already in the portal (matched by its Message-ID).
  * `startedAt` is when this batch began, so contacts created during it can have their date set to the email's.
  */
+/** A Zoopla valuation saved before its address could be read: fill in the address and details. Adds nothing new. */
+export async function repairZooplaRow(r: ImportRow): Promise<boolean> {
+  if (r.source !== 'zoopla' || r.intent !== 'valuation' || !r.propertyPostcode) return false
+  const res = await db.update(enquiries).set({ message: [r.about ? `About: ${r.about}` : '', r.message].filter(Boolean).join('\n').slice(0, 2000), postcode: r.propertyPostcode })
+    .where(and(eq(enquiries.externalId, r.key), isNull(enquiries.postcode)))
+  return res.rowsAffected > 0
+}
+
 export async function saveEmailRow(r: ImportRow, opts: { by: string | null; handled: boolean; startedAt: string }): Promise<{ enquiryId: string; contactId: string; propertyId: string | null } | null> {
   if (await db.query.enquiries.findFirst({ where: eq(enquiries.externalId, r.key) })) return null
   const contactId = await upsertContact({
@@ -61,6 +69,10 @@ export async function saveEmailRow(r: ImportRow, opts: { by: string | null; hand
     name: r.name, phone: r.phone, email: r.email, handled: opts.handled, createdAt: r.date,
     message: [r.about ? `About: ${r.about}` : '', r.message].filter(Boolean).join('\n').slice(0, 2000),
   }).onConflictDoNothing()
-  if (!res.rowsAffected) return null
+  if (!res.rowsAffected) {
+    // Already here. A Zoopla valuation saved before its address could be read gets the address now.
+    await repairZooplaRow(r)
+    return null
+  }
   return { enquiryId: id, contactId, propertyId }
 }
