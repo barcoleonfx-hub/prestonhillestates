@@ -2,6 +2,7 @@ import { LETTINGS } from '@/lib/site'
 import { gbp, storyLines, type BookletComp, type BookletFields, type BookletInput } from '@/lib/booklet'
 import { distanceText } from '@/lib/geo'
 import { BookletMap } from './BookletMap'
+import { AerialMap, AreaMap, CompsMap } from './MapboxMaps'
 
 // The printed booklet: eight A4 pages. Shared by the live preview and the printout, so what staff see is what prints.
 
@@ -74,9 +75,14 @@ function homeTimeline(data: BookletInput, f: BookletFields, rent: boolean) {
 export function BookletPages({ data, f }: { data: BookletInput; f: BookletFields }) {
   const rent = f.kind === 'lettings'
   const hidden = new Set(f.hide)
-  const evidence = data.comps.filter((c) => c.group === 'evidence' && !hidden.has(c.key)).slice(0, 6)
+  const evidenceAll = data.comps.filter((c) => c.group === 'evidence' && !hidden.has(c.key))
+  // With the map of comparables there's room for five rows, otherwise six.
+  const withCompsMap = !!(data.area.mapToken && data.area.home && evidenceAll.slice(0, 5).filter((c) => c.at).length >= 2)
+  const evidence = evidenceAll.slice(0, withCompsMap ? 5 : 6)
+  const compsPins = withCompsMap ? evidence.map((c, i) => (c.at ? { n: i + 1, at: c.at } : null)).filter((x): x is { n: number; at: { lat: number; lon: number } } => !!x) : []
   const market = data.comps.filter((c) => c.group === 'market' && !hidden.has(c.key)).slice(0, 4)
-  const places = data.area.places.filter((p) => !hidden.has(p.key)).slice(0, 10)
+  // With the Mapbox maps (two pictures and the driving times) there's room for eight places, otherwise ten.
+  const places = data.area.places.filter((p) => !hidden.has(p.key)).slice(0, data.area.mapToken && data.area.home ? 8 : 10)
   const timeline = homeTimeline(data, f, rent)
   // Only a number worth showing: the people asking about homes in their own district if that's a good few,
   // otherwise everyone who asked us; and not at all if it's small.
@@ -154,7 +160,20 @@ export function BookletPages({ data, f }: { data: BookletInput; f: BookletFields
           <div className="bk-in">
             <div className="bk-kicker">{rent ? 'What tenants will love' : 'What buyers will love'}</div>
             <h2>{rent ? 'What tenants will love' : 'What buyers will love'}<br /><em>about where you live.</em></h2>
-            {data.area.home && places.length ? <div className="bk-mapwrap"><BookletMap home={data.area.home} mapToken={data.area.mapToken} pins={places.map((p, i) => ({ n: i + 1, at: p, kind: p.kind }))} /></div> : null}
+            {data.area.home && data.area.mapToken ? (
+              <>
+                <div className="bk-maps">
+                  <div className="bk-mapbox-main"><AreaMap home={data.area.home} token={data.area.mapToken} zones={data.area.zones} route={data.area.route?.polyline ?? null} pins={places.map((p, i) => ({ n: i + 1, at: p }))} width={423} height={295} /></div>
+                  <div className="bk-mapbox-aerial"><AerialMap home={data.area.home} token={data.area.mapToken} width={219} height={295} /><span>{rent ? 'Your property' : 'Your home'} from above</span></div>
+                </div>
+                <div className="bk-legend">
+                  {data.area.zones.some((z) => z.minutes <= 5) ? <span><i className="z5" />5-minute walk</span> : null}
+                  {data.area.zones.some((z) => z.minutes === 10) ? <span><i className="z10" />10-minute walk</span> : null}
+                  {data.area.route ? <span><i className="rt" />Walk to {data.area.route.to}: {data.area.route.minutes} min</span> : null}
+                  {data.area.approx ? <span className="note">Pin at your postcode</span> : null}
+                </div>
+              </>
+            ) : data.area.home && places.length ? <div className="bk-mapwrap"><BookletMap home={data.area.home} mapToken={null} pins={places.map((p, i) => ({ n: i + 1, at: p, kind: p.kind }))} /></div> : null}
             {places.length ? (
               <ol className="bk-places">
                 {places.map((p, i) => (
@@ -162,10 +181,13 @@ export function BookletPages({ data, f }: { data: BookletInput; f: BookletFields
                 ))}
               </ol>
             ) : null}
+            {data.area.drives.length ? (
+              <div className="bk-drives"><b>By car</b>{data.area.drives.map((d) => <span key={d.name}>{d.name} <em>{d.minutes} min</em></span>)}</div>
+            ) : null}
             {data.story.facts.length ? (
               <div className="bk-facts">{data.story.facts.map((x) => <div key={x.label}><b>{x.label}</b><span>{x.value}</span></div>)}</div>
             ) : null}
-            <p className="bk-src">These are the things we’ll lead with when we market your {rent ? 'property' : 'home'}. {data.area.walked ? 'Walking times along streets, from your front door' : 'Walking times are approximate, measured from your postcode'}{data.area.walked && data.area.approx ? ' (from your postcode)' : ''}. Being near a school doesn’t guarantee a place. Places from OpenStreetMap{data.area.mapToken ? `; map${data.area.walked ? ' and walking routes' : ''} from Mapbox` : ''}.</p>
+            <p className="bk-src">These are the things we’ll lead with when we market your {rent ? 'property' : 'home'}. {data.area.walked ? 'Walking times along streets, from your front door' : 'Walking times are approximate, measured from your postcode'}{data.area.walked && data.area.approx ? ' (from your postcode)' : ''}. {data.area.drives.length ? 'Driving times without traffic. ' : ''}Being near a school doesn’t guarantee a place. Places from OpenStreetMap{data.area.mapToken ? `; map${data.area.walked ? ' and walking routes' : ''} from Mapbox` : ''}.</p>
           </div>
           <Foot n={4} />
         </section>
@@ -228,10 +250,11 @@ export function BookletPages({ data, f }: { data: BookletInput; f: BookletFields
           <div className="bk-h3">{rent ? 'Rents nearby' : 'Recently sold nearby'}<small>{[...new Set(evidence.map((c) => c.source))].join(' · ').toUpperCase()}</small></div>
           {evidence.length ? (
             <>
+              {compsPins.length >= 2 && data.area.home && data.area.mapToken ? <div className="bk-compsmap"><CompsMap home={data.area.home} token={data.area.mapToken} pins={compsPins} width={658} height={174} /></div> : null}
               <Strip prices={evidence.map((c) => c.price)} rent={rent} />
               <table className="bk-sold"><tbody>
-                {evidence.map((c) => (
-                  <tr key={c.key}><td>{c.where}</td><td>{c.what}</td><td>{c.metres != null ? (c.metres < 1000 ? `${c.metres} m away` : `${(c.metres / 1000).toFixed(1)} km away`) : ''}</td><td className="p">{price(c)}</td></tr>
+                {evidence.map((c, i) => (
+                  <tr key={c.key}><td>{compsPins.length >= 2 ? <i className="bk-n">{c.at ? i + 1 : ''}</i> : null}{c.where}</td><td>{c.what}</td><td>{c.metres != null ? (c.metres < 1000 ? `${c.metres} m away` : `${(c.metres / 1000).toFixed(1)} km away`) : ''}</td><td className="p">{price(c)}</td></tr>
                 ))}
               </tbody></table>
             </>

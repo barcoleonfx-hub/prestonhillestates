@@ -1,7 +1,7 @@
 import { currentAdmin } from '@/lib/auth'
 import { placesNear } from '@/lib/area-facts'
 import { areaPlacesStatus } from '@/lib/area-places'
-import { geocodeHome, mapboxStatus, mapboxToken, walkingTimes } from '@/lib/mapbox'
+import { drivingTimes, geocodeHome, mapboxStatus, mapboxToken, walkingTimes, walkingZones } from '@/lib/mapbox'
 import { osgbToLatLon } from '@/lib/geo'
 import { epcConfigured, epcHistory, parseHomeAddress, saleHistory } from '@/lib/home-history'
 import { positionOf } from '@/lib/postcode-geo'
@@ -33,7 +33,9 @@ export async function GET(req: Request) {
   const exact = tok && address ? await geocodeHome(address.replace(/,?\s*$/, ''), postcode).catch((e) => `error: ${String((e as Error).message ?? e)}`) : null
   const from = typeof exact === 'object' && exact ? exact : at
   const walk = tok && from && places?.places.length ? await walkingTimes(from, places.places.slice(0, 3)).catch((e) => `error: ${String((e as Error).message ?? e)}`) : null
-  const mapbox = tok ? { token: `${tok.slice(0, 6)}…`, exactHouse: exact ?? (address ? 'not found in this postcode (the postcode centre is used)' : 'add &address=… to test'), walkingSample: walk } : `not connected: ${mapboxStatus().why}`
+  const zones = tok && from ? await walkingZones(from).then((z) => z?.map((x) => `${x.minutes}-minute walk: ${x.polyline.length} characters`)).catch((e) => `error: ${String((e as Error).message ?? e)}`) : null
+  const drives = tok && from ? await drivingTimes(from).catch((e) => `error: ${String((e as Error).message ?? e)}`) : null
+  const mapbox = tok ? { token: `${tok.slice(0, 6)}…`, exactHouse: exact ?? (address ? 'not found in this postcode (the postcode centre is used)' : 'add &address=… to test'), walkingSample: walk, walkingAreas: zones, drivingTimes: drives } : `not connected: ${mapboxStatus().why}`
   return Response.json({
     postcode, at, address: home, mapbox, ourCopy,
     places: places && { source: places.source, error: places.error, stillLooking: places.pending, found: places.places.map((p) => `${p.detail}: ${p.name}, about ${p.minutes} min walk`) },

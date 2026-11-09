@@ -15,8 +15,8 @@ import { placesNear } from './area-facts'
 import { osgbToLatLon } from './geo'
 import { demandNear, epcConfigured, epcHistory, ourHomesNear, parseHomeAddress, saleHistory, streetRecord } from './home-history'
 import { cached } from './lookup-cache'
-import { positionOf } from './postcode-geo'
-import { geocodeHome, mapboxStatus, mapboxToken, walkingTimes } from './mapbox'
+import { fmtPostcode, positionOf, positionsOf } from './postcode-geo'
+import { drivingTimes, geocodeHome, mapboxStatus, mapboxToken, walkingRoute, walkingTimes, walkingZones } from './mapbox'
 import type { BookletArea, BookletStory } from './booklet'
 import { figureText, homeFrom } from './valuation-check'
 import { rentCheck } from './valuation-check-data'
@@ -63,7 +63,7 @@ const TYPE_WORD: Record<string, string> = { F: 'Flat or maisonette', T: 'Terrace
 /** Where the home is, what's around it, and its own story. Every part is optional: what can't be found is left out. */
 async function areaAndStory(postcode: string | null, address: string | null, rent: boolean, home: { type: string | null; typeLabel: string | null; beds: number | null }): Promise<{ area: BookletArea; story: BookletStory }> {
   const empty: BookletStory = { sales: [], epcs: [], epcKey: epcConfigured(), street: null, demand: null, ours: [], council: null, facts: [], errors: [] }
-  if (!postcode) return { area: { home: null, postcode: null, approx: true, walked: false, mapToken: mapboxToken(), mapboxWhy: mapboxStatus().why, places: [], source: 'none', error: 'no postcode', pending: false }, story: empty }
+  if (!postcode) return { area: { home: null, postcode: null, approx: true, walked: false, mapToken: mapboxToken(), mapboxWhy: mapboxStatus().why, places: [], source: 'none', error: 'no postcode', pending: false, zones: [], route: null, drives: [] }, story: empty }
   const pos = await positionOf(postcode).catch(() => null)
   const pcAt = pos ? osgbToLatLon(pos.e, pos.n) : null
   // The house itself, if Mapbox finds its exact address in this postcode; otherwise the postcode's centre.
@@ -88,6 +88,14 @@ async function areaAndStory(postcode: string | null, address: string | null, ren
       walked = times.some((x) => x.minutes > 0)
     }
   }
+  // Mapbox extras for the map page (each optional): walking areas, the walk to the nearest station, driving times.
+  const station = places.places.find((p) => p.kind === 'station')
+  const [zones, route, drives] = at ? await Promise.all([
+    walkingZones(at).catch(() => null),
+    station ? walkingRoute(at, station).catch(() => null) : Promise.resolve(null),
+    drivingTimes(at).catch(() => null),
+  ]) : [null, null, null]
+  if (station && route) { station.minutes = route.minutes; station.metres = route.metres }
   const latestEpc = epcs.certs[epcs.certs.length - 1]
   const tenure = [...sales.sales].reverse().find((s) => s.tenure)?.tenure ?? null
   const facts = [
@@ -99,7 +107,7 @@ async function areaAndStory(postcode: string | null, address: string | null, ren
     { label: 'Council', value: council?.name ?? '' },
   ].filter((f) => f.value)
   return {
-    area: { home: at, postcode, approx: !exact, walked, mapToken: mapboxToken(), mapboxWhy: mapboxStatus().why, places: places.places, source: places.source, error: places.error, pending: places.pending },
+    area: { home: at, postcode, approx: !exact, walked, mapToken: mapboxToken(), mapboxWhy: mapboxStatus().why, places: places.places, source: places.source, error: places.error, pending: places.pending, zones: zones ?? [], route: route && station ? { ...route, to: station.name } : null, drives: drives ?? [] },
     story: {
       sales: sales.sales, epcs: epcs.certs, epcKey: epcConfigured(),
       street: street && addr?.street ? { name: addr.street.toLowerCase().replace(/\b([a-z])/g, (c) => c.toUpperCase()), ...street } : null,
@@ -180,6 +188,14 @@ export async function bookletInput(id: string, me: { name: string }): Promise<Bo
   const comps: BookletComp[] = [...savedComps]
   for (const s of near?.recent ?? []) {
     comps.push({ key: `lr:${s.street}|${s.postcode}|${s.soldOn}|${s.price}`, group: 'evidence', where: [s.street, s.postcode].filter(Boolean).join(', '), what: `${s.typeLabel} · sold ${month(s.soldOn)}`, price: s.price, rent: false, source: 'HM Land Registry', metres: s.metres ?? null })
+  }
+  // Where each Land Registry sale is (its postcode), for the map of comparables.
+  const pcs = [...new Set((near?.recent ?? []).map((x) => x.postcode).filter((x): x is string => !!x).map(fmtPostcode))]
+  const pos = pcs.length ? await positionsOf(pcs).catch(() => new Map<string, { e: number; n: number }>()) : new Map<string, { e: number; n: number }>()
+  for (const c of comps) {
+    const pc = /\b([A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2})$/i.exec(c.where)?.[1]
+    const g = c.source === 'HM Land Registry' && pc ? pos.get(fmtPostcode(pc)) : undefined
+    if (g) c.at = osgbToLatLon(g.e, g.n)
   }
   for (const n of rents?.nearby ?? []) {
     comps.push({ key: `let:${n.area}|${n.beds}|${n.rent}`, group: 'evidence', where: n.area, what: `${n.beds} bed · let by us · ${n.km} km away`, price: n.rent, rent: true, source: 'Our lets' })
