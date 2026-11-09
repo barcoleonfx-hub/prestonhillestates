@@ -10,6 +10,8 @@ import { EnquiryNotes } from '../../EnquiryNotes'
 import { EnquiryOutcome } from '../../EnquiryOutcome'
 import { LogCallButton } from '../../LogCallButton'
 import { EmailComposer } from './EmailComposer'
+import { ReplyBox } from './ReplyBox'
+import { conversation } from '@/lib/enquiry-thread'
 import { ValuationCheck } from './ValuationCheck'
 import { homeFrom, portalLinks } from '@/lib/valuation-check'
 import { landRegistryEstimate, rentCheck } from '@/lib/valuation-check-data'
@@ -27,7 +29,7 @@ export default async function EnquiryPage({ params, searchParams }: { params: Pr
   const w = await enquiryWorkspace(id, me)
   if (!w) notFound()
   const { e, p, contact, sorted, valuation, kind, ctx, lines } = w
-  const trail = (await trailFor([e]))[e.id] ?? []
+  const [trail, thread] = await Promise.all([trailFor([e]).then((t) => t[e.id] ?? []), conversation(e.id)])
   // The valuation check: our estimate, the portal searches, comparables and the figure.
   const rent = kind === 'lettings-valuation'
   const home = homeFrom(e.message)
@@ -64,6 +66,7 @@ export default async function EnquiryPage({ params, searchParams }: { params: Pr
             {!e.handled ? <span className="pill gold">New</span> : <span className="pill">Dealt with</span>}
             {sorted.side ? <span className={`pill side-${sorted.side}`}>{SIDE_LABEL[sorted.side]}</span> : <span className="pill warn">Sales or lettings?</span>}
             {e.outcome ? <span className="pill">{outcomeText(e.outcome)}</span> : null}
+            {e.lastReplyAt && !e.handled ? <span className="pill gold">Replied</span> : null}
             {dnc ? <span className="pill warn">Do not contact</span> : null}
           </div>
         </div>
@@ -125,11 +128,34 @@ export default async function EnquiryPage({ params, searchParams }: { params: Pr
           </section>
         </div>
 
+        <div className="ew-main">
+        <section className="card card-pad cv" id="conversation">
+          <h2>Conversation{thread.length ? <small> · {thread.length} email{thread.length === 1 ? '' : 's'}</small> : null}</h2>
+          <div className="cv-list">
+            <div className="cv-msg in">
+              <div className="cv-meta"><b>{e.name}</b> · {enquiryLabel(e)} · {new Date(e.createdAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/London' })}</div>
+              <div className="cv-body">{lines.length ? lines.slice(0, 8).map((l) => (l.label ? `${l.label}: ${l.value}` : l.value)).join('\n') : 'No message.'}</div>
+            </div>
+            {thread.map((m) => (
+              <div key={m.id} className={`cv-msg ${m.direction}`}>
+                <div className="cv-meta">
+                  <b>{m.direction === 'in' ? e.name : 'Preston Hill Estates'}</b>{m.via === 'mailbox' ? ' · sent from Apple Mail' : ''} · {new Date(m.sentAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/London' })}
+                  {m.subject ? <span className="cv-subj">{m.subject}</span> : null}
+                </div>
+                <div className="cv-body">{m.body || '(no text)'}</div>
+              </div>
+            ))}
+          </div>
+          {thread.length ? null : <p className="cv-note">When you email {e.name.split(/\s+/)[0]} from here, the email and their reply appear in this conversation.</p>}
+          <ReplyBox id={e.id} name={e.name.split(/\s+/)[0]} disabled={dnc ? 'This person asked not to be contacted.' : !e.email ? 'There’s no email address for this person.' : !w.mailboxReady ? 'Connect the office mailbox (Email settings) to reply from here.' : null} />
+        </section>
+
         <section className="card card-pad ew-email" id="email">
           <h2>Email {e.name.split(/\s+/)[0]}</h2>
           <p className="card-sub">Choose an email, check the wording, and send it. It goes from the office mailbox and is noted here.</p>
           <EmailComposer key={`${sp.tpl ?? ''}|${ctx.figure ?? ''}`} start={sp.tpl} id={e.id} ctx={ctx} to={e.email} canSend={!blocked} blocked={blocked} chooseKind={!sorted.side} />
         </section>
+        </div>
       </div>
     </>
   )

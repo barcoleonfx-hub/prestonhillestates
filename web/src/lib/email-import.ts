@@ -24,6 +24,16 @@ export type ImportRow = {
   situation: string | null // e.g. "I am a first-time buyer" → the contact's position
   applicantAddress: string | null // where the applicant lives (OnTheMarket includes it)
   propertyPostcode: string | null
+  /** For recognising replies to emails we sent: the threading headers, who it's from, and what they wrote
+   *  (above the quoted email). */
+  reply: { messageId: string | null; inReplyTo: string | null; references: string[]; from: string | null; text: string }
+}
+
+/** What someone wrote in a reply, without the quoted email underneath it. */
+export function replyText(text: string): string {
+  const lines = text.replace(/\r/g, '').split('\n')
+  const cut = lines.findIndex((l, i) => i > 0 && (/^\s*>/.test(l) || /^-{2,}\s*original message\s*-{2,}/i.test(l) || /^on .{6,120}wrote:\s*$/i.test(l) || /^from:\s.+/i.test(l) && /^(sent|date|to|subject):/i.test(lines[i + 1] ?? '') || /^_{10,}$/.test(l.trim())))
+  return (cut > 0 ? lines.slice(0, cut) : lines).join('\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, 4000)
 }
 
 const OWN_DOMAIN = /@prestonhillestates\.(com|co\.uk)$/i
@@ -254,7 +264,10 @@ export async function analyse(raw: string, nowMs = Date.now()): Promise<ImportRo
   const phone = labelledPhone ?? bodyPhone
   const name = (labelledName || (goodReplyTo?.name && !SERVICE.test(goodReplyTo.name) ? goodReplyTo.name : '') || subjectName || (directSender?.name && !SERVICE.test(directSender.name) ? directSender.name : '') || (email ? email.split('@')[0].replace(/[._]/g, ' ').replace(/\d+/g, '').trim() : '') || '').trim().slice(0, 120)
 
+  const refs = (Array.isArray(mail.references) ? mail.references : mail.references ? [mail.references] : []).map(String)
+  const reply = { messageId: mail.messageId ?? null, inReplyTo: mail.inReplyTo ?? null, references: refs.slice(-20), from: from?.address?.toLowerCase() ?? null, text: replyText(text) }
   const row: ImportRow = {
+    reply,
     key, date, source, subject, name: name || 'Unknown', email: email?.toLowerCase() ?? null, phone,
     about,
     message: lead

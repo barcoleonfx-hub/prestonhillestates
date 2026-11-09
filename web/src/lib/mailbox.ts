@@ -8,6 +8,7 @@ import { db, getClient, ready } from '@/db/client'
 import { notifications, settings } from '@/db/schema'
 import { analyse } from '@/lib/email-import'
 import { saveEmailRow } from '@/lib/email-intake'
+import { attachReply, linkSentReplies, matchReply } from '@/lib/enquiry-thread'
 import { enquiryLabel } from '@/lib/enquiry-labels'
 import { open, seal } from '@/lib/secret-box'
 import { now, uid } from '@/lib/util'
@@ -291,6 +292,9 @@ export async function checkMailbox(opts: { force?: boolean; lookBackDays?: numbe
           try {
             const row = await analyse(source)
             if (!row) continue
+            // A reply to one of our emails (or a follow-up from someone with an enquiry) joins that enquiry.
+            const reply = await matchReply(row).catch(() => null)
+            if (reply) { if (await attachReply(reply.enquiryId, row, reply.how)) found++; continue }
             // In a folder the office's own mail rules fill with leads (Rightmove, Webchat, Valuation…), an email from a
             // person or a service counts as an enquiry too, as long as it has someone to contact.
             const wanted = junk ? row.category === 'portal' || row.category === 'website'
@@ -350,6 +354,8 @@ export async function checkMailbox(opts: { force?: boolean; lookBackDays?: numbe
     // Keep the portal's copy of the inbox and sent mail up to date (for the Inbox page).
     let stored = s.lastStored ?? 0
     try { stored = (await syncMailStore(c)).stored } catch (e) { console.error('mail store sync failed', e) }
+    // Replies sent from Apple Mail to someone in an enquiry's conversation.
+    await linkSentReplies().catch((e) => console.error('linking sent replies failed', e))
     await c.logout().catch(() => c.close())
     if (!uids.length && box.uidNext) lastUid = Math.max(lastUid, box.uidNext - 1)
     await store({ ...s, junkPath, folders, allFolders, uidValidity, lastUid, lastCheckAt: now(), lastOkAt: now(), lastError: null, lastFound: found, totalFound: (s.totalFound ?? 0) + found, lastStored: stored })
@@ -386,7 +392,7 @@ export type OutgoingMail = { to: string[]; cc?: string[]; subject: string; text:
  * Sends an email from the office mailbox, puts a copy in its Sent folder (so Apple Mail shows it too)
  * and files it in the portal's conversation history.
  */
-export async function sendFromMailbox(m: OutgoingMail): Promise<{ ok: true } | { ok: false; error: string }> {
+export async function sendFromMailbox(m: OutgoingMail): Promise<{ ok: true; messageId: string | null } | { ok: false; error: string }> {
   const s = await load()
   if (!s?.pass) return { ok: false, error: 'Connect the mailbox on the Email inbox page first.' }
   const pass = open(s.pass)
@@ -413,7 +419,7 @@ export async function sendFromMailbox(m: OutgoingMail): Promise<{ ok: true } | {
   const c = client(s.host, s.port, s.user, pass)
   try { await c.connect(); const path = await sentFolderPath(c); if (path) await c.append(path, raw, ['\\Seen']) } catch (e) { console.error('could not save a copy in Sent', e) } finally { await c.logout().catch(() => c.close()) }
   await storeMail({ raw, direction: 'out', via: 'portal', sentBy: m.by ?? null }).catch((e) => console.error('could not file sent email', e))
-  return { ok: true }
+  return { ok: true, messageId: built.messageId ?? null }
 }
 
 export type BulkMail = { to: string; subject: string; text: string; html: string; headers?: Record<string, string> }

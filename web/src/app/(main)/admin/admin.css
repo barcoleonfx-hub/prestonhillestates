@@ -986,3 +986,18 @@ kbd { font: 600 0.68rem/1 var(--sans, inherit); padding: 3px 6px; border-radius:
 .mb-folder { display: inline-flex; gap: 6px; align-items: center; font-size: 0.88rem; }
 .mb-folder small { color: var(--faint); }
 .enq-showing { font-size: 0.84rem; color: var(--ink-soft); margin: 0 0 8px; } .enq-showing a { font-weight: 600; }
+
+/* ---------- Conversation on an enquiry ---------- */
+.ew-main { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.cv h2 small { font-weight: 500; color: var(--faint); font-size: 0.86rem; }
+.cv-list { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.cv-msg { max-width: 88%; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); }
+.cv-msg.in { align-self: flex-start; background: var(--gold-wash); border-color: var(--gold-tint); }
+.cv-msg.out { align-self: flex-end; background: #F2F4F7; }
+.cv-meta { font-size: 0.76rem; color: var(--faint); display: flex; flex-wrap: wrap; gap: 4px 6px; }
+.cv-meta b { color: var(--ink); }
+.cv-subj { flex-basis: 100%; color: var(--ink-soft); font-weight: 600; }
+.cv-body { margin-top: 6px; font-size: 0.88rem; color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto; }
+.cv-note { font-size: 0.82rem; color: var(--faint); margin-top: 10px; }
+.cv-reply { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+@media (max-width: 640px) { .cv-msg { max-width: 100%; } }

@@ -354,3 +354,15 @@ ${cta ? `<tr><td align="left" style="padding:26px 40px 0;" class="px">${button(w
 }
 
 export const templateFor = (kind: EnquiryEmailKind, key: string) => ENQUIRY_TEMPLATES[kind].find((t) => t.key === key) ?? null
+
+/** A plain reply in an email conversation: their words stay readable, with our signature underneath. */
+export function renderReply(message: string, sender: Sender): Rendered {
+  const html = `<!DOCTYPE html><html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"/></head>
+<body style="margin:0; padding:16px; background:#FFFFFF;">
+${paragraphs(message)}
+<p style="margin:18px 0 0; font-family:${SANS}; font-size:15px; line-height:22px; color:${C.ink};">Kind regards,</p>
+<p style="margin:4px 0 0; font-family:${SERIF}; font-size:18px; line-height:24px; color:${C.ink};">${esc(sender.name)}</p>
+<p style="margin:2px 0 0; font-family:${SANS}; font-size:13px; line-height:20px; color:${C.faint};">Preston Hill Estates &middot; 271 Preston Road, Harrow HA3 0PS &middot; <a href="tel:+442089049005" style="color:${C.gold}; text-decoration:none;">${PHONE}</a></p>
+</body></html>`
+  return { html, text: `${message}\n\nKind regards,\n${sender.name}\nPreston Hill Estates · 271 Preston Road, Harrow HA3 0PS · ${PHONE}` }
+}

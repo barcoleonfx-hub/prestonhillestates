@@ -767,4 +767,27 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       `ALTER TABLE enquiries ADD COLUMN valuation TEXT`,
     ],
   },
+  {
+    id: '036_enquiry_messages',
+    sql: [
+      // The email conversation on an enquiry: what we sent and what they replied, linked by the emails' own IDs.
+      `CREATE TABLE enquiry_messages (
+        id TEXT PRIMARY KEY,
+        enquiry_id TEXT NOT NULL REFERENCES enquiries(id) ON DELETE CASCADE,
+        message_id TEXT,
+        direction TEXT NOT NULL,
+        subject TEXT,
+        body TEXT,
+        from_addr TEXT,
+        via TEXT,
+        sent_by TEXT,
+        sent_at TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      )`,
+      `CREATE INDEX enquiry_messages_enquiry_idx ON enquiry_messages (enquiry_id, sent_at)`,
+      `CREATE UNIQUE INDEX enquiry_messages_message_idx ON enquiry_messages (message_id) WHERE message_id IS NOT NULL`,
+      // When they last replied (shown as "Replied" until someone deals with it).
+      `ALTER TABLE enquiries ADD COLUMN last_reply_at TEXT`,
+    ],
+  },
 ]
