@@ -46,7 +46,7 @@ export type BookletFields = {
 }
 
 /** Where the home is and what's around it, for "What buyers will love". */
-export type BookletArea = { home: LatLon | null; approx: boolean; places: Place[]; source: string; error: string | null; pending: boolean }
+export type BookletArea = { home: LatLon | null; postcode: string | null; approx: boolean; places: Place[]; source: string; error: string | null; pending: boolean }
 /** The home's own story, for "Your home's story". */
 export type BookletStory = {
   sales: Sale[]

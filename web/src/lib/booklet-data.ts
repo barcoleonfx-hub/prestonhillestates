@@ -62,7 +62,7 @@ const TYPE_WORD: Record<string, string> = { F: 'Flat or maisonette', T: 'Terrace
 /** Where the home is, what's around it, and its own story. Every part is optional: what can't be found is left out. */
 async function areaAndStory(postcode: string | null, address: string | null, rent: boolean, home: { type: string | null; typeLabel: string | null; beds: number | null }): Promise<{ area: BookletArea; story: BookletStory }> {
   const empty: BookletStory = { sales: [], epcs: [], epcKey: epcConfigured(), street: null, demand: null, ours: [], council: null, facts: [], errors: [] }
-  if (!postcode) return { area: { home: null, approx: true, places: [], source: 'none', error: 'no postcode', pending: false }, story: empty }
+  if (!postcode) return { area: { home: null, postcode: null, approx: true, places: [], source: 'none', error: 'no postcode', pending: false }, story: empty }
   const pos = await positionOf(postcode).catch(() => null)
   const at = pos ? osgbToLatLon(pos.e, pos.n) : null
   const addr = parseHomeAddress(address)
@@ -86,7 +86,7 @@ async function areaAndStory(postcode: string | null, address: string | null, ren
     { label: 'Council', value: council?.name ?? '' },
   ].filter((f) => f.value)
   return {
-    area: { home: at, approx: true, places: places.places, source: places.source, error: places.error, pending: places.pending },
+    area: { home: at, postcode, approx: true, places: places.places, source: places.source, error: places.error, pending: places.pending },
     story: {
       sales: sales.sales, epcs: epcs.certs, epcKey: epcConfigured(),
       street: street && addr?.street ? { name: addr.street.toLowerCase().replace(/\b([a-z])/g, (c) => c.toUpperCase()), ...street } : null,
@@ -145,17 +145,25 @@ export async function bookletInput(id: string, me: { name: string }): Promise<Bo
   const saved = await savedBooklet(id)
   const k: BookletKind = saved.kind ?? kind
   const rent = k === 'lettings'
+  // The home staff typed on the booklet wins: if it has a postcode, the map, places, sales and story are for that
+  // address. (The defaults still come from the enquiry, so a saved change is never mistaken for the default.)
+  let lookPc = postcode, lookAddr = address
+  const typedPc = saved.home?.match(POSTCODE)
+  if (saved.home && typedPc) {
+    lookPc = `${typedPc[1]} ${typedPc[2]}`.toUpperCase()
+    lookAddr = saved.home.replace(/\([^)]*\)/g, '').replace(POSTCODE, '').replace(/[\s,]+$/, '').trim() || null
+  }
 
   // The evidence: what similar homes sold (or let) for nearby, and what's on OnTheMarket now.
   const [near, rents, otm, base, google, revs] = await Promise.all([
-    !rent && postcode ? salesNear(postcode, { type: home.type, limit: 10 }).catch(() => null) : Promise.resolve(null),
-    rent && postcode ? rentCheck(postcode, home.beds).catch(() => null) : Promise.resolve(null),
-    postcode ? otmAskingPrices(postcode, { rent, beds: home.beds }).catch(() => null) : Promise.resolve(null),
+    !rent && lookPc ? salesNear(lookPc, { type: home.type, limit: 10 }).catch(() => null) : Promise.resolve(null),
+    rent && lookPc ? rentCheck(lookPc, home.beds).catch(() => null) : Promise.resolve(null),
+    lookPc ? otmAskingPrices(lookPc, { rent, beds: home.beds }).catch(() => null) : Promise.resolve(null),
     knownBase(),
     googleSummary().catch(() => ({ rating: null, count: null, url: null })),
     reviewsFor(rent ? 'lettings' : 'sales', 20).catch(() => []),
   ])
-  const { area, story } = await areaAndStory(postcode, address, rent, home)
+  const { area, story } = await areaAndStory(lookPc, lookAddr, rent, home)
   const comps: BookletComp[] = [...savedComps]
   for (const s of near?.recent ?? []) {
     comps.push({ key: `lr:${s.street}|${s.postcode}|${s.soldOn}|${s.price}`, group: 'evidence', where: [s.street, s.postcode].filter(Boolean).join(', '), what: `${s.typeLabel} · sold ${month(s.soldOn)}`, price: s.price, rent: false, source: 'HM Land Registry', metres: s.metres ?? null })
@@ -185,7 +193,7 @@ export async function bookletInput(id: string, me: { name: string }): Promise<Bo
     story: '',
     showPaid: true,
   }
-  const where = rent ? (rents ? `homes we’ve let near ${postcode}` : null) : near ? `${near.where}${near.typed && home.typeLabel ? `, ${home.typeLabel.toLowerCase()}` : ''}` : null
+  const where = rent ? (rents ? `homes we’ve let near ${lookPc}` : null) : near ? `${near.where}${near.typed && home.typeLabel ? `, ${home.typeLabel.toLowerCase()}` : ''}` : null
   return {
     id, enquiryId, defaults, saved, comps, compsWhere: where,
     estimate: rents ? { low: rents.low, high: rents.high, rent: true, basis: `${home.beds != null ? `${home.beds}-bed homes, ` : ''}from ${rents.basis}` } : null,
