@@ -17,18 +17,19 @@ const UA = 'PrestonHillEstates/1.0 (+https://www.prestonhillestates.com)'
 
 function query(p: LatLon) {
   const at = `${p.lat.toFixed(5)},${p.lon.toFixed(5)}`
-  return `[out:json][timeout:25];
+  // Lighter first: the everyday places as points and buildings, stations as points; only parks (often large
+  // areas mapped as relations) look at relations too. Smaller circles keep it quick on a busy server.
+  return `[out:json][timeout:60];
 (
-  nwr(around:2000,${at})["railway"="station"];
-  nwr(around:2000,${at})["station"="subway"];
-  nwr(around:1600,${at})["amenity"="school"]["name"];
-  nwr(around:1500,${at})["shop"="supermarket"]["name"];
-  nwr(around:1800,${at})["leisure"="park"]["name"];
-  nwr(around:1500,${at})["amenity"="doctors"]["name"];
-  nwr(around:1200,${at})["amenity"="pharmacy"]["name"];
-  nwr(around:1500,${at})["leisure"="fitness_centre"]["name"];
+  nw(around:1400,${at})["amenity"="school"]["name"];
+  nw(around:1200,${at})["shop"="supermarket"]["name"];
+  nwr(around:1400,${at})["leisure"="park"]["name"];
+  nw(around:1200,${at})["amenity"="doctors"]["name"];
+  nw(around:1000,${at})["amenity"="pharmacy"]["name"];
+  nw(around:1200,${at})["leisure"="fitness_centre"]["name"];
+  node(around:2000,${at})["railway"="station"];
 );
-out center tags;`
+out center tags qt;`
 }
 
 type OverpassElement = { type: string; id: number; lat?: number; lon?: number; center?: { lat: number; lon: number }; tags?: Record<string, string> }
@@ -54,10 +55,13 @@ async function fromOverpass(p: LatLon): Promise<Raw[]> {
     try {
       const res = await fetch(url, {
         method: 'POST', headers: { 'User-Agent': UA, Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: `data=${encodeURIComponent(query(p))}`, signal: AbortSignal.timeout(30_000),
+        body: `data=${encodeURIComponent(query(p))}`, signal: AbortSignal.timeout(65_000),
       })
       if (!res.ok) { said.push(`${new URL(url).host} answered ${res.status}`); continue }
-      const raw = parseOverpass((await res.json()) as { elements?: OverpassElement[] })
+      const body = (await res.json()) as { elements?: OverpassElement[]; remark?: string }
+      // A query that runs out of time still answers "OK", with only what it found so far: not good enough to keep.
+      if (/runtime error|timed out|out of memory/i.test(body.remark ?? '')) { said.push(`${new URL(url).host}: ${body.remark!.slice(0, 80)}`); continue }
+      const raw = parseOverpass(body)
       if (raw.some((r) => r.kind !== 'station')) return raw
       said.push(`${new URL(url).host} found nothing`)
     } catch (e) {
@@ -130,7 +134,8 @@ const inFlight = new Map<string, Promise<{ data: Raw[] | null; error: string | n
  * the rest is on its way; a refresh a minute later has everything, saved for 30 days.
  */
 export async function placesNear(postcode: string, home: LatLon): Promise<{ places: Place[]; source: 'openstreetmap' | 'stations only'; error: string | null; pending: boolean }> {
-  const key = `places:${postcode}`
+  // v2: answers saved by the first version could be cut short (stations only), so they're not used.
+  const key = `places-v2:${postcode}`
   let job = inFlight.get(key)
   if (!job) {
     job = cached<Raw[]>(key, 30, () => fromOverpass(home)).finally(() => inFlight.delete(key))
