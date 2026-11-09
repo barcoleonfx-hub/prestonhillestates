@@ -63,3 +63,13 @@ export function CompsMap({ home, pins, token, width, height }: { home: LatLon; p
   // eslint-disable-next-line @next/next/no-img-element
   return <img className="bk-mbmap" src={base('light-v11', overlays, 'auto', width, height, token).replace('?access_token', '?padding=34&access_token')} alt="Map of the homes compared with yours" width={width} height={height} />
 }
+
+/** The home and our branch on one map ("P" for Preston Hill), for the "Why Preston Hill" page. */
+export function BranchMap({ home, branch, token, width, height }: { home: LatLon; branch: LatLon; token: string; width: number; height: number }) {
+  const close = Math.abs(home.lat - branch.lat) < 0.002 && Math.abs(home.lon - branch.lon) < 0.003
+  const overlays = [`pin-l-p+23211a(${ll(branch)})`, `pin-l-home+c4972f(${ll(home)})`]
+  const view = close ? `${ll(branch)},15.2` : 'auto'
+  const src = base('light-v11', overlays, view, width, height, token)
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img className="bk-mbmap" src={close ? src : src.replace('?access_token', '?padding=60&access_token')} alt="Map of the home and our branch on Preston Road" width={width} height={height} />
+}
