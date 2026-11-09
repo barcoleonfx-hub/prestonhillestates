@@ -8,6 +8,8 @@ import { listBetween } from '@/lib/appointments'
 import { kindLabel } from '@/lib/appointment-options'
 import { addDays, dayLabel, endIso, fmtTime, isoToLondon, londonToIso, todayLondon } from '@/lib/time'
 import { createProperty } from '../actions'
+import { mailboxCheckNow } from '../mailbox-actions'
+import { mailboxStatus, skippedEmails } from '@/lib/mailbox'
 import { ActivityFeed } from './ActivityFeed'
 import { LogCallButton } from './LogCallButton'
 
@@ -23,7 +25,9 @@ export default async function Dashboard() {
   const nowIso = new Date().toISOString()
 
   const n = async (where?: SQL) => (await db.select({ c: count() }).from(properties).where(where))[0].c
-  const [open, activity, todays, [{ overdue }], [{ dueToday }], liveSale, liveLet, drafts, progressing] = await Promise.all([
+  const [box, notAdded, open, activity, todays, [{ overdue }], [{ dueToday }], liveSale, liveLet, drafts, progressing] = await Promise.all([
+    mailboxStatus().catch(() => null),
+    skippedEmails().catch(() => []),
     openEnquiryItems(),
     activityBetween(startToday, endToday),
     listBetween(startToday, endToday),
@@ -55,10 +59,30 @@ export default async function Dashboard() {
         <div className="today-head">
           <div>
             <h2 id="inbox-h">New enquiries waiting for a reply{open.length ? ` · ${open.length}` : ''}</h2>
-            <p className="card-sub">From the website. Calling them back or booking them in takes them off this list.</p>
+            <p className="card-sub">From the website, Zoopla, OnTheMarket and email. Calling them back or booking them in takes them off this list.</p>
           </div>
           <Link className="btn btn-ghost btn-sm" href="/admin/enquiries">All enquiries</Link>
         </div>
+        {(() => {
+          // Is the email inbox being checked? Said plainly, so a quiet list never hides a problem.
+          const ago = (iso?: string) => { if (!iso) return 'never'; const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000); return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago` }
+          const stale = !!box?.lastCheckAt && Date.now() - new Date(box.lastCheckAt).getTime() > 15 * 60000
+          const tone = !box || !box.hasPassword || !box.enabled || box.lastError || stale ? 'warn' : 'ok'
+          const text = !box || !box.hasPassword ? 'The email inbox isn’t connected, so Zoopla, OnTheMarket and website emails aren’t coming in.'
+            : !box.enabled ? 'Checking the email inbox is paused.'
+            : box.lastError ? `The email inbox couldn’t be checked (${ago(box.lastCheckAt)}): ${box.lastError}`
+            : stale ? `The email inbox hasn’t been checked since ${ago(box.lastCheckAt)}.`
+            : `Email inbox checked ${ago(box.lastCheckAt)}${box.lastFound ? ` · ${box.lastFound} new` : ''}.`
+          return (
+            <div className={`mb-strip ${tone}`}>
+              <span className="mb-strip-dot" aria-hidden="true" />
+              <span>{text}</span>
+              {box?.hasPassword && box.enabled ? <form action={mailboxCheckNow}><button className="btn btn-ghost btn-sm" type="submit">Check now</button></form> : null}
+              {tone === 'warn' ? <Link className="btn btn-ghost btn-sm" href="/admin/email-inbox">Email settings</Link> : null}
+              {notAdded.length ? <Link className="btn btn-ghost btn-sm" href="/admin/email-inbox#skipped">{notAdded.length} email{notAdded.length === 1 ? '' : 's'} to review</Link> : null}
+            </div>
+          )
+        })()}
         {open.length === 0 ? <p className="card-sub" style={{ marginTop: 10 }}>All caught up.</p> : (
           <ActivityFeed items={open} meId={me.id} showDay={(iso) => dayLabel(isoToLondon(iso).date, today)} />
         )}

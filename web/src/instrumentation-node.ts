@@ -8,6 +8,6 @@ export function startNode() {
   const tick = () => {
     fetch(url, { headers: { authorization: `Bearer ${secret}` }, signal: AbortSignal.timeout(110_000) }).catch(() => {})
   }
-  setTimeout(tick, 45_000).unref?.()
+  setTimeout(tick, 15_000).unref?.()
   setInterval(tick, 120_000).unref?.()
 }

@@ -3,9 +3,9 @@
 import { revalidatePath } from 'next/cache'
 import { after } from 'next/server'
 import { auditState, markAuditStarting, runAudit } from '@/lib/mail-audit'
-import { requireRole } from '@/lib/auth'
+import { requireAdmin, requireRole } from '@/lib/auth'
 import { audit } from '@/lib/contacts'
-import { FASTHOSTS_IMAP, checkMailbox, findMailServer, forgetMailbox, mailboxStatus, saveMailbox, setMailboxEnabled, testMailbox } from '@/lib/mailbox'
+import { FASTHOSTS_IMAP, addSkippedEmail, checkMailbox, forgetSkipped, findMailServer, forgetMailbox, mailboxStatus, saveMailbox, setMailboxEnabled, testMailbox } from '@/lib/mailbox'
 
 export type MailboxFormState = { ok?: boolean; error?: string; detail?: string; messages?: number; found?: number; host?: string; port?: number }
 
@@ -58,8 +58,9 @@ export async function mailboxOnOff(form: FormData) {
   revalidatePath('/admin', 'layout')
 }
 
+/** Anyone signed in can ask for an immediate check (it's harmless, and handy on the dashboard). */
 export async function mailboxCheckNow() {
-  await requireRole('admin')
+  await requireAdmin()
   await checkMailbox({ force: true })
   revalidatePath('/admin', 'layout')
 }
@@ -80,4 +81,21 @@ export async function startMailAudit(form: FormData) {
   await markAuditStarting()
   after(() => runAudit(months).catch((e) => console.error('mail audit failed', e)))
   revalidatePath('/admin/email-inbox/audit')
+}
+
+/** Adds an email the automatic check passed over, when staff say it is an enquiry. */
+export async function mailboxAddSkipped(form: FormData) {
+  const me = await requireAdmin()
+  const folder = String(form.get('folder') || 'INBOX'), u = Number(form.get('uid'))
+  if (!u) return
+  const r = await addSkippedEmail(folder, u)
+  await audit(me.id, 'mailbox_add_skipped', 'settings', 'mailbox', `${folder} ${u}: ${r.ok ? r.name : r.error}`)
+  revalidatePath('/admin', 'layout')
+}
+
+/** Takes an email off the "not added" list without adding it. */
+export async function mailboxDismissSkipped(form: FormData) {
+  await requireAdmin()
+  await forgetSkipped(Number(form.get('uid')), String(form.get('folder') || 'INBOX'))
+  revalidatePath('/admin/email-inbox')
 }
