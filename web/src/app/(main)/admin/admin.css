@@ -1001,3 +1001,6 @@ kbd { font: 600 0.68rem/1 var(--sans, inherit); padding: 3px 6px; border-radius:
 .cv-note { font-size: 0.82rem; color: var(--faint); margin-top: 10px; }
 .cv-reply { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
 @media (max-width: 640px) { .cv-msg { max-width: 100%; } }
+
+/* Which update the live site is running. */
+.admin-version { margin-top: 6px; font-size: 11px; color: #98937f; letter-spacing: .02em; }
