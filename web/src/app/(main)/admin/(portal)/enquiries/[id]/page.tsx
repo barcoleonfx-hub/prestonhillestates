@@ -73,6 +73,7 @@ export default async function EnquiryPage({ params, searchParams }: { params: Pr
         <div className="ew-head-actions">
           {!dnc && e.phone ? <LogCallButton label="Call them" className="btn btn-dark" prefill={{ name: e.name, phone: e.phone ?? undefined, email: e.email ?? undefined, enquiryId: e.id, direction: 'out', propertyId: e.propertyId ?? undefined, callerType, ...(e.contactId ? { contactId: e.contactId } : {}) }} /> : null}
           {!dnc ? <Link className="btn btn-gold" href={`/admin/diary/new?enquiry=${e.id}${valuation ? '&kind=valuation' : ''}`}>{valuation ? 'Book valuation' : 'Book viewing'}</Link> : null}
+          {valuation ? <Link className="btn btn-ghost" href={`/admin/booklet/${e.id}`}>Valuation booklet</Link> : null}
         </div>
       </div>
 

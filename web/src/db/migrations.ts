@@ -790,4 +790,17 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       `ALTER TABLE enquiries ADD COLUMN last_reply_at TEXT`,
     ],
   },
+  {
+    id: '037_booklets',
+    sql: [
+      // What staff changed on a valuation booklet (only the changes: everything else is filled in fresh each time).
+      // The id is the enquiry's id, or "a-" and the appointment's id for a valuation booked without an enquiry.
+      `CREATE TABLE booklets (
+        id TEXT PRIMARY KEY,
+        data TEXT NOT NULL,
+        updated_by TEXT,
+        updated_at TEXT NOT NULL
+      )`,
+    ],
+  },
 ]

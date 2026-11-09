@@ -114,6 +114,7 @@ export default async function EnquiriesPage({ searchParams }: { searchParams: Pr
               {!r.dnc && r.e.phone ? <LogCallButton label="Call" className="btn btn-dark btn-sm" prefill={{ name: r.e.name, phone: r.e.phone ?? undefined, email: r.e.email ?? undefined, enquiryId: r.e.id, direction: 'out', propertyId: r.e.propertyId ?? undefined, callerType: valOf.get(r.e.id) ? (sideOf.get(r.e.id) === 'lettings' ? 'landlord' : 'seller') : sideOf.get(r.e.id) === 'lettings' ? 'tenant' : 'buyer', ...(r.e.contactId ? { contactId: r.e.contactId } : {}) }} /> : null}
               {!r.dnc && r.e.email ? <Link className="btn btn-ghost btn-sm" href={`/admin/enquiries/${r.e.id}?back=${encodeURIComponent(here)}#email`}>Email</Link> : null}
               {!r.dnc ? <Link className="btn btn-ghost btn-sm" href={`/admin/diary/new?enquiry=${r.e.id}${valOf.get(r.e.id) ? '&kind=valuation' : ''}`}>{valOf.get(r.e.id) ? 'Book valuation' : 'Book viewing'}</Link> : null}
+              {valOf.get(r.e.id) ? <Link className="btn btn-ghost btn-sm" href={`/admin/booklet/${r.e.id}`}>Booklet</Link> : null}
               <span className="enq-acts-sep" aria-hidden="true" />
               <EnquiryOutcome id={r.e.id} outcome={r.e.outcome} channel={r.p?.channel ?? (sideOf.get(r.e.id) === 'lettings' ? 'let' : 'sale')} />
               <span className="enq-acts-sep" aria-hidden="true" />
