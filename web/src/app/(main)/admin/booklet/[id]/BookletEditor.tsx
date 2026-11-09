@@ -69,7 +69,8 @@ export function BookletEditor({ data, back }: { data: BookletInput; back: { href
           {data.area.places.length ? data.area.places.map((p) => (
             <label key={p.key} className="bk-comp"><input type="checkbox" checked={!f.hide.includes(p.key)} onChange={() => toggle(p.key)} /><span><b>{p.name}</b><small>{p.detail} · about {p.minutes} min walk</small></span></label>
           )) : <p className="bk-hint">{data.area.error ? `Couldn’t find places nearby just now (${data.area.error}).` : 'No places found nearby.'} This page shows the home’s key facts only.</p>}
-          {data.area.source === 'stations only' && data.area.places.length ? <p className="bk-hint">OpenStreetMap couldn’t be reached, so only stations are shown. It’s tried again later.</p> : null}
+          {data.area.pending ? <p className="bk-msg">Still looking up schools, shops and parks near this postcode. <button type="button" className="btn btn-ghost btn-sm" onClick={() => router.refresh()}>Check again</button> in a minute (it’s only slow the first time).</p>
+            : data.area.source === 'stations only' && data.area.places.length ? <p className="bk-hint">Only stations are shown: OpenStreetMap didn’t answer ({data.area.error}). It’s tried again within the hour.</p> : null}
 
           <h2>{rent ? 'Your property’s story' : 'Your home’s story'} <small>page 5</small></h2>
           <label className="bk-comp"><input type="checkbox" checked={f.showPaid} onChange={() => set('showPaid', !f.showPaid)} /><span><b>Show what it sold for</b><small>{data.story.sales.length ? `${data.story.sales.length} sale${data.story.sales.length === 1 ? '' : 's'} on record since 1995. Untick if the owner would rather not see the prices.` : 'No past sales found for this address.'}</small></span></label>
