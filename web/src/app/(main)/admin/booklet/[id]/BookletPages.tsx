@@ -1,4 +1,5 @@
 import { LETTINGS } from '@/lib/site'
+import { LogoMark } from '@/components/Logo'
 import { gbp, storyLines, type BookletComp, type BookletFields, type BookletInput } from '@/lib/booklet'
 import { distanceText } from '@/lib/geo'
 import { BookletMap } from './BookletMap'
@@ -107,6 +108,7 @@ export function BookletPages({ data, f }: { data: BookletInput; f: BookletFields
       <section className="bk-page bk-cover">
         <div className="bk-cover-photo" />
         <div className="bk-band">
+          <LogoMark className="bk-cover-logo" />
           <div className="bk-kicker gold2">{rent ? 'Your rental valuation' : 'Your valuation'} · Preston Hill Estates · Est. 2004</div>
           <h1>{rent ? <>Your property,<br /><em>let properly.</em></> : <>Your home,<br /><em>valued properly.</em></>}</h1>
           <div className="bk-for">
@@ -413,7 +415,7 @@ export function BookletPages({ data, f }: { data: BookletInput; f: BookletFields
             <div><b>Call</b><span>020 8904 9005</span></div>
             <div><b>Online</b><span>prestonhillestates.com<br />info@prestonhillestates.com</span></div>
           </div>
-          <div className="bk-mark">PRESTON HILL<span>ESTATES</span></div>
+          <div className="bk-mark-row"><LogoMark className="bk-back-logo" /><div className="bk-mark">PRESTON HILL<span>ESTATES</span></div></div>
         </div>
       </section>
     </div>

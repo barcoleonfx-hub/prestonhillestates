@@ -300,3 +300,11 @@
 .bk-share b { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: #a47b1d; }
 .bk-share a { color: #23211a; word-break: break-all; }
 .bk-share span { color: #59554a; }
+
+/* The logo (house in an open hand) */
+.bk-cover-logo { display: block; width: 15mm; height: 15mm; margin: -1mm 0 3mm; }
+.bk-mark-row { display: flex; align-items: center; gap: 4mm; margin-top: 12mm; }
+.bk-mark-row .bk-mark { margin-top: 0; }
+.bk-back-logo { width: 13mm; height: 13mm; flex: none; }
+.bk-report-bar .brand { display: flex; align-items: center; gap: 10px; }
+.bk-report-logo { width: 34px; height: 34px; flex: none; }
