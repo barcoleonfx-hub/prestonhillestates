@@ -32,6 +32,8 @@ export type MailboxSettings = {
   connectedAt?: string
   smtpHost?: string; smtpPort?: number
   lastStored?: number
+  /** The Junk/Spam folder, checked for portal and website leads that landed there. */
+  junkPath?: string | null; junkValidity?: string; junkLastUid?: number; lastJunkFound?: number
 }
 export type MailboxStatus = Omit<MailboxSettings, 'pass'> & { hasPassword: boolean }
 
@@ -45,6 +47,54 @@ async function load(): Promise<MailboxSettings | null> {
 async function store(s: MailboxSettings) {
   await db.insert(settings).values({ key: KEY, value: JSON.stringify(s), updatedAt: now() })
     .onConflictDoUpdate({ target: settings.key, set: { value: JSON.stringify(s), updatedAt: now() } })
+}
+
+// ---------- emails looked at but not added, so nothing disappears without a trace ----------
+
+const SKIPPED_KEY = 'mailbox_skipped'
+export type SkippedEmail = { at: string; seenAt: string; folder: string; uid: number; validity: string; from: string | null; subject: string; name: string | null; reason: string }
+
+export async function skippedEmails(): Promise<SkippedEmail[]> {
+  await ready()
+  const row = await db.query.settings.findFirst({ where: eq(settings.key, SKIPPED_KEY) })
+  try { return row ? (JSON.parse(row.value) as SkippedEmail[]) : [] } catch { return [] }
+}
+async function noteSkipped(items: SkippedEmail[]) {
+  if (!items.length) return
+  const keep = [...items, ...(await skippedEmails())].slice(0, 60)
+  await db.insert(settings).values({ key: SKIPPED_KEY, value: JSON.stringify(keep), updatedAt: now() })
+    .onConflictDoUpdate({ target: settings.key, set: { value: JSON.stringify(keep), updatedAt: now() } })
+}
+export async function forgetSkipped(uidInFolder: number, folder: string) {
+  const keep = (await skippedEmails()).filter((x) => !(x.uid === uidInFolder && x.folder === folder))
+  await db.insert(settings).values({ key: SKIPPED_KEY, value: JSON.stringify(keep), updatedAt: now() })
+    .onConflictDoUpdate({ target: settings.key, set: { value: JSON.stringify(keep), updatedAt: now() } })
+}
+
+/** Adds an email the check passed over (staff decided it is an enquiry after all). */
+export async function addSkippedEmail(folder: string, emailUid: number): Promise<{ ok: boolean; error?: string; name?: string }> {
+  const s = await load()
+  if (!s?.pass) return { ok: false, error: 'The mailbox isn’t connected.' }
+  const pass = open(s.pass)
+  if (!pass) return { ok: false, error: 'The saved mailbox password could not be read.' }
+  const c = client(s.host, s.port, s.user, pass)
+  try {
+    await c.connect()
+    await c.mailboxOpen(folder, { readOnly: true })
+    let source: string | null = null
+    for await (const m of c.fetch(String(emailUid), { uid: true, source: true }, { uid: true })) if (m.source) source = m.source.toString('utf8')
+    await c.logout().catch(() => c.close())
+    if (!source) return { ok: false, error: 'That email is no longer in the mailbox.' }
+    const row = await analyse(source)
+    if (!row) return { ok: false, error: 'That email couldn’t be read.' }
+    const forced = { ...row, category: row.source === 'zoopla' || row.source === 'onthemarket' ? 'portal' as const : row.source === 'website' ? 'website' as const : 'person' as const }
+    const saved = await saveEmailRow(forced, { by: null, handled: false, startedAt: now() })
+    await forgetSkipped(emailUid, folder)
+    return saved ? { ok: true, name: row.name } : { ok: false, error: 'It’s already in the portal.' }
+  } catch (e) {
+    await c.logout().catch(() => c.close())
+    return { ok: false, error: explain(e) }
+  }
 }
 
 export async function mailboxStatus(): Promise<MailboxStatus | null> {
@@ -200,44 +250,74 @@ export async function checkMailbox(opts: { force?: boolean } = {}): Promise<Chec
     }
     uids.sort((a, b) => a - b)
     const batch = uids.slice(0, MAX_PER_RUN)
-    // Lead emails are small: skip anything over 1 MB (big attachments), and read a few at a time.
-    const sizes = new Map<number, number>()
-    if (batch.length) for await (const m of c.fetch(batch.join(','), { uid: true, size: true }, { uid: true })) sizes.set(m.uid, m.size ?? 0)
-    const wantUids = batch.filter((u) => (sizes.get(u) ?? 0) <= 1_000_000)
-    for (let i = 0; i < wantUids.length; i += 10) {
-      const raws: { uid: number; source: string }[] = []
-      for await (const m of c.fetch(wantUids.slice(i, i + 10).join(','), { uid: true, source: true }, { uid: true })) {
-        if (m.source) raws.push({ uid: m.uid, source: m.source.toString('utf8') })
-      }
-      for (const { uid: u, source } of raws.sort((a, b) => a.uid - b.uid)) {
-        try {
-          const row = await analyse(source)
-          const wanted = row && row.category !== 'skipped' && (row.category !== 'person' || (s.includePeople && row.intent))
-          if (row && wanted) {
-            const saved = await saveEmailRow(row, { by: null, handled: false, startedAt })
-            if (saved) {
-              found++
-              await db.insert(notifications).values({
-                id: uid(), kind: 'enquiry', appointmentId: null,
-                title: `${enquiryLabel({ kind: 'email', source: row.source })}: ${row.name}`,
-                body: [row.name, [row.phone, row.about ?? row.subject].filter(Boolean).join(' · ')].join('\n'),
-                createdBy: null, createdAt: now(),
+    const skipped: SkippedEmail[] = []
+    // Reads the given emails in the open folder; saves the enquiries among them. In Junk, only portal and
+    // website leads count (anything else there really is junk).
+    const take = async (folder: string, list: number[], validityHere: string, junk: boolean) => {
+      const sizes = new Map<number, number>()
+      if (list.length) for await (const m of c.fetch(list.join(','), { uid: true, size: true }, { uid: true })) sizes.set(m.uid, m.size ?? 0)
+      // Lead emails are small: skip anything over 1 MB (big attachments), and read a few at a time.
+      const want = list.filter((u) => (sizes.get(u) ?? 0) <= 1_000_000)
+      for (let i = 0; i < want.length; i += 10) {
+        const raws: { uid: number; source: string }[] = []
+        for await (const m of c.fetch(want.slice(i, i + 10).join(','), { uid: true, source: true }, { uid: true })) {
+          if (m.source) raws.push({ uid: m.uid, source: m.source.toString('utf8') })
+        }
+        for (const { uid: u, source } of raws.sort((a, b) => a.uid - b.uid)) {
+          try {
+            const row = await analyse(source)
+            if (!row) continue
+            const wanted = junk ? row.category === 'portal' || row.category === 'website' : row.category !== 'skipped' && (row.category !== 'person' || (s.includePeople && row.intent))
+            if (wanted) {
+              const saved = await saveEmailRow(row, { by: null, handled: false, startedAt })
+              if (saved) {
+                found++
+                await db.insert(notifications).values({
+                  id: uid(), kind: 'enquiry', appointmentId: null,
+                  title: `${enquiryLabel({ kind: 'email', source: row.source })}: ${row.name}${junk ? ' (found in Junk)' : ''}`,
+                  body: [row.name, [row.phone, row.about ?? row.subject].filter(Boolean).join(' · ')].join('\n'),
+                  createdBy: null, createdAt: now(),
+                })
+              }
+            } else if (!junk && (row.category === 'person' ? !!row.intent : !/account email|no name, email or phone|older than|own address|newsletter/i.test(row.reason ?? ''))) {
+              // Portal or website emails we didn't add, and people's emails that look like enquiries.
+              skipped.push({
+                at: row.date, seenAt: now(), folder, uid: u, validity: validityHere, from: row.source, subject: row.subject, name: row.name && row.name !== 'Unknown' ? row.name : null,
+                reason: row.category === 'skipped' ? (row.reason ?? 'Not an enquiry') : 'An email from a person (emails from people aren’t added automatically)',
               })
             }
+          } catch (e) {
+            console.error('mailbox: could not read one email', folder, u, e)
           }
-        } catch (e) {
-          console.error('mailbox: could not read one email', u, e)
         }
       }
     }
+    await take('INBOX', batch, validity, false)
     if (batch.length) lastUid = Math.max(lastUid, ...batch)
+
+    // Leads that the mail server put in Junk.
+    let junkPath = s.junkPath, junkValidity = s.junkValidity, junkLastUid = s.junkLastUid ?? 0
+    try {
+      if (junkPath === undefined) junkPath = ((await c.list()).find((f) => f.specialUse === '\\Junk') ?? (await c.list()).find((f) => /^(junk|spam|junk e-?mail|bulk mail)$/i.test(f.name)))?.path ?? null
+      if (junkPath) {
+        const jb = await c.mailboxOpen(junkPath, { readOnly: true })
+        const jv = String(jb.uidValidity)
+        let jl: number[]
+        if (!junkValidity || junkValidity !== jv || !junkLastUid) { jl = ((await c.search({ since: new Date(Date.now() - FIRST_LOOK_DAYS * 86400000) }, { uid: true })) || []) as number[]; junkValidity = jv }
+        else jl = jb.uidNext > junkLastUid + 1 ? (((await c.search({ uid: `${junkLastUid + 1}:*` }, { uid: true })) || []) as number[]).filter((u) => u > junkLastUid) : []
+        jl.sort((a, b) => a - b)
+        await take(junkPath, jl.slice(0, MAX_PER_RUN), jv, true)
+        junkLastUid = Math.max(junkLastUid, ...jl.slice(0, MAX_PER_RUN), jb.uidNext ? (jl.length ? 0 : jb.uidNext - 1) : 0)
+      }
+    } catch (e) { console.error('mailbox: Junk folder check failed', e) }
+    await noteSkipped(skipped).catch(() => {})
 
     // Keep the portal's copy of the inbox and sent mail up to date (for the Inbox page).
     let stored = s.lastStored ?? 0
     try { stored = (await syncMailStore(c)).stored } catch (e) { console.error('mail store sync failed', e) }
     await c.logout().catch(() => c.close())
     if (!uids.length && box.uidNext) lastUid = Math.max(lastUid, box.uidNext - 1)
-    await store({ ...s, uidValidity, lastUid, lastCheckAt: now(), lastOkAt: now(), lastError: null, lastFound: found, totalFound: (s.totalFound ?? 0) + found, lastStored: stored })
+    await store({ ...s, junkPath, junkValidity, junkLastUid, uidValidity, lastUid, lastCheckAt: now(), lastOkAt: now(), lastError: null, lastFound: found, totalFound: (s.totalFound ?? 0) + found, lastStored: stored })
     return { ran: true, found }
   } catch (e) {
     await c.logout().catch(() => c.close())

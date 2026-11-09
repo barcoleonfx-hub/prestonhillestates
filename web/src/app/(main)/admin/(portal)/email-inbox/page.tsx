@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { requireRole } from '@/lib/auth'
-import { FASTHOSTS_IMAP, mailboxStatus } from '@/lib/mailbox'
-import { mailboxCheckNow, mailboxForget, mailboxOnOff } from '../../mailbox-actions'
+import { FASTHOSTS_IMAP, mailboxStatus, skippedEmails } from '@/lib/mailbox'
+import { mailboxAddSkipped, mailboxCheckNow, mailboxDismissSkipped, mailboxForget, mailboxOnOff } from '../../mailbox-actions'
 import { ConnectForm } from './ConnectForm'
 
 export const dynamic = 'force-dynamic'
@@ -11,7 +11,7 @@ const when = (iso?: string) => (iso ? new Date(iso).toLocaleString('en-GB', { da
 
 export default async function EmailInboxPage() {
   await requireRole('admin')
-  const s = await mailboxStatus()
+  const [s, skipped] = await Promise.all([mailboxStatus(), skippedEmails()])
   const on = !!s?.enabled && s.hasPassword
   return (
     <>
@@ -44,6 +44,28 @@ export default async function EmailInboxPage() {
         </section>
       ) : null}
 
+      {s && skipped.length ? (
+        <section className="card card-pad" id="skipped">
+          <h2>Emails that weren’t added · {skipped.length}</h2>
+          <p className="card-sub">Emails from Zoopla, OnTheMarket or the website that the check decided weren’t enquiries, and emails from people that look like one. If one is an enquiry, press Add it.</p>
+          <div className="mb-skipped">
+            {skipped.map((x) => (
+              <div key={`${x.folder}-${x.uid}`} className="mb-skip">
+                <div style={{ minWidth: 0 }}>
+                  <b>{x.subject || '(no subject)'}</b>
+                  <small>{[x.name, x.from === 'email' ? 'Email' : x.from === 'zoopla' ? 'Zoopla' : x.from === 'onthemarket' ? 'OnTheMarket' : x.from === 'website' ? 'Website' : x.from, when(x.at)].filter(Boolean).join(' · ')}</small>
+                  <small className="why">Not added: {x.reason}</small>
+                </div>
+                <div className="mb-skip-acts">
+                  <form action={mailboxAddSkipped}><input type="hidden" name="folder" value={x.folder} /><input type="hidden" name="uid" value={x.uid} /><button className="btn btn-dark btn-sm" type="submit">Add it</button></form>
+                  <form action={mailboxDismissSkipped}><input type="hidden" name="folder" value={x.folder} /><input type="hidden" name="uid" value={x.uid} /><button className="btn btn-ghost btn-sm" type="submit">Not an enquiry</button></form>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       <section className="card card-pad">
         <h2>{s ? 'Change the mailbox' : 'Connect your mailbox'}</h2>
         <p className="card-sub">Use the email address and password for the mailbox that receives your Zoopla, OnTheMarket and website enquiries. The password is stored encrypted and only used to read new mail.</p>
@@ -67,6 +89,7 @@ export default async function EmailInboxPage() {
           <li>Zoopla and OnTheMarket leads and website form emails become enquiries with the person’s name, phone, email and the property, and are linked to the listing when the street matches.</li>
           <li>Newsletters, automated emails and anything sent from your own address are ignored. Nothing is imported twice, including emails you already brought in with <Link href="/admin/import">Import emails</Link>.</li>
           <li>When you first connect, it also picks up the last 3 days, in case anything arrived before you set it up.</li>
+          <li>It also looks in the Junk folder for Zoopla, OnTheMarket and website enquiries, in case the mail server filed one there by mistake.</li>
         </ul>
       </section>
     </>
