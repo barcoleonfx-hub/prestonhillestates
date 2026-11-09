@@ -545,7 +545,7 @@ a { color:${C.gold}; }
 <table role="presentation" class="container" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px; max-width:600px;">
 
 <tr><td style="padding:4px 8px 16px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
-<td valign="middle"><a href="${esc(site)}" target="_blank" style="text-decoration:none;"><span style="font-family:${SANS}; font-size:15px; font-weight:bold; letter-spacing:3px; color:${C.ink};">PRESTON HILL</span><br/><span style="font-family:${SANS}; font-size:11px; letter-spacing:5px; color:${C.gold};">ESTATES</span></a></td>
+<td valign="middle"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td valign="middle" style="padding-right:12px;"><a href="${esc(site)}" target="_blank"><img src="${c.base}/img/logo-mark.png" width="46" height="46" alt="Preston Hill Estates" style="display:block; width:46px; height:46px;"/></a></td><td valign="middle"><a href="${esc(site)}" target="_blank" style="text-decoration:none;"><span style="font-family:${SANS}; font-size:15px; font-weight:bold; letter-spacing:3px; color:${C.ink};">PRESTON HILL</span><br/><span style="font-family:${SANS}; font-size:11px; letter-spacing:5px; color:${C.gold};">ESTATES</span></a></td></tr></table></td>
 <td valign="middle" align="right" style="font-family:${SANS}; font-size:11px; letter-spacing:2px; color:${C.gold};">EST. ${SINCE} &middot; HARROW</td>
 </tr></table></td></tr>
 

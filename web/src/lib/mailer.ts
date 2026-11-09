@@ -86,7 +86,7 @@ export function staffEmailHtml(opts: { kicker: string; heading: string; rows: [s
   return `<!doctype html><html><body style="margin:0;background:#F6F5F0;font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F6F5F0;padding:24px 12px"><tr><td align="center">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#fff;border:1px solid #EAE6DA;border-radius:14px">
-<tr><td style="padding:22px 26px 0"><div style="font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:#A47B1D;font-weight:700">${esc(opts.kicker)}</div>
+<tr><td style="padding:22px 26px 0"><img src="${portalUrl('/img/logo-mark.png')}" width="34" height="34" alt="Preston Hill Estates" style="display:block;width:34px;height:34px;margin:0 0 12px"/><div style="font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:#A47B1D;font-weight:700">${esc(opts.kicker)}</div>
 <h1 style="margin:8px 0 14px;font-family:Georgia,serif;font-weight:normal;font-size:24px;color:#23211A">${esc(opts.heading)}</h1></td></tr>
 <tr><td style="padding:0 26px"><table role="presentation" cellpadding="0" cellspacing="0">${rows}</table></td></tr>
 ${opts.note ? `<tr><td style="padding:14px 26px 0;color:#59554A;font-size:14px">${esc(opts.note)}</td></tr>` : ''}
