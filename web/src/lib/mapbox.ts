@@ -25,10 +25,13 @@ export function mapboxToken(): string | null {
   const fromEnv = process.env.MAPBOX_TOKEN?.trim()
   if (fromEnv) v = clean(fromEnv)
   else {
-    // Render keeps secret files here.
-    try { v = clean(readFileSync('/etc/secrets/MAPBOX_TOKEN', 'utf8')) || null } catch { v = null }
+    // Render puts secret files in /etc/secrets and in the app's root (the repository's top folder, or this one).
+    for (const f of ['/etc/secrets/MAPBOX_TOKEN', '/opt/render/project/src/MAPBOX_TOKEN', '/opt/render/project/src/web/MAPBOX_TOKEN']) {
+      try { v = clean(readFileSync(f, 'utf8')) || null } catch { v = null }
+      if (v) break
+    }
   }
-  why = !v ? 'no MAPBOX_TOKEN environment variable or secret file found' : !/^pk\./.test(v) ? 'the token should be a public token, starting "pk."' : ''
+  why = !v ? 'no MAPBOX_TOKEN environment variable or secret file found (add it in Render under Environment Variables)' : !/^pk\./.test(v) ? 'the token should be a public token, starting "pk."' : ''
   if (v && !/^pk\./.test(v)) v = null
   token = { v, at: Date.now() }
   return v
