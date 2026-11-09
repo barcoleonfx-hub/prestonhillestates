@@ -65,6 +65,19 @@ export function BookletEditor({ data, back }: { data: BookletInput; back: { href
         <div className="field"><label htmlFor="bk-fee">Our fee (page 7)</label><input id="bk-fee" className="input" value={f.fee} onChange={(e) => set('fee', e.target.value)} placeholder="Leave blank to write it in at the visit" /></div>
 
         <div className="bk-comps">
+          <h2>What {rent ? 'tenants' : 'buyers'} will love <small>page 4</small></h2>
+          {data.area.places.length ? data.area.places.map((p) => (
+            <label key={p.key} className="bk-comp"><input type="checkbox" checked={!f.hide.includes(p.key)} onChange={() => toggle(p.key)} /><span><b>{p.name}</b><small>{p.detail} · about {p.minutes} min walk</small></span></label>
+          )) : <p className="bk-hint">{data.area.error ? `Couldn’t find places nearby just now (${data.area.error}).` : 'No places found nearby.'} This page shows the home’s key facts only.</p>}
+          {data.area.source === 'stations only' && data.area.places.length ? <p className="bk-hint">OpenStreetMap couldn’t be reached, so only stations are shown. It’s tried again later.</p> : null}
+
+          <h2>{rent ? 'Your property’s story' : 'Your home’s story'} <small>page 5</small></h2>
+          <label className="bk-comp"><input type="checkbox" checked={f.showPaid} onChange={() => set('showPaid', !f.showPaid)} /><span><b>Show what it sold for</b><small>{data.story.sales.length ? `${data.story.sales.length} sale${data.story.sales.length === 1 ? '' : 's'} on record since 1995. Untick if the owner would rather not see the prices.` : 'No past sales found for this address.'}</small></span></label>
+          <div className="field"><label htmlFor="bk-story">Add to the timeline <span className="bk-hint" style={{ display: 'inline' }}>(one per line)</span></label><textarea id="bk-story" className="input" rows={4} value={f.story} onChange={(e) => set('story', e.target.value)} placeholder={'2015: Rear extension approved\n2021: New kitchen and boiler'} /></div>
+          {data.story.council?.planningUrl ? <p className="bk-hint"><a href={data.story.council.planningUrl} target="_blank" rel="noreferrer">Check planning history ({data.story.council.name} Council)</a>: search for the address, then add anything useful above.</p> : null}
+          {!data.story.epcKey ? <p className="bk-hint">Floor area, energy rating and when it was built appear once an EPC key is added (free, from the EPC register).</p> : null}
+          {data.story.errors.filter((e) => !/no EPC key/.test(e)).map((e) => <p key={e} className="bk-hint">{e}</p>)}
+
           <h2>{rent ? 'Rents nearby' : 'Sold nearby'} <small>{shown('evidence')} shown, up to 6</small></h2>
           {evidence.length ? evidence.map((c) => (
             <label key={c.key} className="bk-comp"><input type="checkbox" checked={!f.hide.includes(c.key)} onChange={() => toggle(c.key)} /><span><b>{gbp(c.price)}{c.rent ? ' pcm' : ''}</b> {c.where}<small>{c.what} · {c.source}</small></span></label>

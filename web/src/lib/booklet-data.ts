@@ -11,6 +11,12 @@ import { googleSummary, reviewsFor } from './reviews-data'
 import { LETTINGS, feeIncVat } from './site'
 import { salesNear } from './sold-prices'
 import { fmtWhen } from './time'
+import { placesNear } from './area-facts'
+import { osgbToLatLon } from './geo'
+import { demandNear, epcConfigured, epcHistory, ourHomesNear, parseHomeAddress, saleHistory, streetRecord } from './home-history'
+import { cached } from './lookup-cache'
+import { positionOf } from './postcode-geo'
+import type { BookletArea, BookletStory } from './booklet'
 import { figureText, homeFrom } from './valuation-check'
 import { rentCheck } from './valuation-check-data'
 
@@ -33,6 +39,62 @@ async function valuationFor(enquiryId: string): Promise<ApptRow | null> {
   const now = new Date().toISOString()
   const next = [...rows].reverse().find((r) => r.startsAt >= now) ?? rows[0]
   return next ? getAppointment(next.id) : null
+}
+
+/** The council for a postcode (postcodes.io, kept for a year), and where to search its planning applications. */
+const PLANNING: Record<string, string> = {
+  harrow: 'https://www.harrow.gov.uk/planning-developments',
+  brent: 'https://pa.brent.gov.uk/online-applications/',
+}
+async function councilOf(postcode: string): Promise<{ name: string; planningUrl: string | null } | null> {
+  const r = await cached<string>(`council:${postcode}`, 365, async () => {
+    const res = await fetch(`https://api.postcodes.io/postcodes/${encodeURIComponent(postcode)}?filter=admin_district`, { signal: AbortSignal.timeout(4000) })
+    if (!res.ok) throw new Error(`postcodes.io answered ${res.status}`)
+    return ((await res.json()) as { result?: { admin_district?: string } }).result?.admin_district ?? null
+  })
+  const fallback: Record<string, string> = { HA0: 'Brent', HA9: 'Brent', NW10: 'Brent', HA1: 'Harrow', HA2: 'Harrow', HA5: 'Harrow' }
+  const name = r.data ?? fallback[postcode.split(' ')[0]] ?? null
+  return name ? { name, planningUrl: PLANNING[name.toLowerCase()] ?? null } : null
+}
+
+const TYPE_WORD: Record<string, string> = { F: 'Flat or maisonette', T: 'Terraced house', S: 'Semi-detached house', D: 'Detached house' }
+
+/** Where the home is, what's around it, and its own story. Every part is optional: what can't be found is left out. */
+async function areaAndStory(postcode: string | null, address: string | null, rent: boolean, home: { type: string | null; typeLabel: string | null; beds: number | null }): Promise<{ area: BookletArea; story: BookletStory }> {
+  const empty: BookletStory = { sales: [], epcs: [], epcKey: epcConfigured(), street: null, demand: null, ours: [], council: null, facts: [], errors: [] }
+  if (!postcode) return { area: { home: null, approx: true, places: [], source: 'none', error: 'no postcode' }, story: empty }
+  const pos = await positionOf(postcode).catch(() => null)
+  const at = pos ? osgbToLatLon(pos.e, pos.n) : null
+  const addr = parseHomeAddress(address)
+  const [places, sales, epcs, street, demand, ours, council] = await Promise.all([
+    at ? placesNear(postcode, at).catch((e) => ({ places: [], source: 'none', error: String(e) })) : Promise.resolve({ places: [], source: 'none', error: 'postcode not found on the map' }),
+    addr ? saleHistory(postcode, addr).catch((e) => ({ sales: [], error: String(e) })) : Promise.resolve({ sales: [], error: 'no house number in the address' }),
+    addr ? epcHistory(postcode, addr).catch((e) => ({ certs: [], error: String(e) })) : Promise.resolve({ certs: [], error: epcConfigured() ? 'no house number in the address' : 'no EPC key set' }),
+    streetRecord(postcode, addr?.street ?? null).catch(() => null),
+    demandNear(postcode, rent).catch(() => null),
+    at ? ourHomesNear(at, rent).catch(() => []) : Promise.resolve([]),
+    councilOf(postcode).catch(() => null),
+  ])
+  const latestEpc = epcs.certs[epcs.certs.length - 1]
+  const tenure = [...sales.sales].reverse().find((s) => s.tenure)?.tenure ?? null
+  const facts = [
+    { label: 'Type', value: home.typeLabel ?? (home.type ? TYPE_WORD[home.type] ?? '' : latestEpc?.propertyType ?? '') },
+    { label: 'Bedrooms', value: home.beds != null ? String(home.beds) : '' },
+    { label: 'Tenure', value: tenure ?? '' },
+    { label: 'Floor area', value: latestEpc?.floorArea ? `${Math.round(latestEpc.floorArea * 10.764).toLocaleString('en-GB')} sq ft` : '' },
+    { label: 'Energy rating', value: latestEpc?.rating ? `${latestEpc.rating}${latestEpc.potential && latestEpc.potential !== latestEpc.rating ? `, could be ${latestEpc.potential}` : ''}` : '' },
+    { label: 'Council', value: council?.name ?? '' },
+  ].filter((f) => f.value)
+  return {
+    area: { home: at, approx: true, places: places.places, source: places.source, error: places.error },
+    story: {
+      sales: sales.sales, epcs: epcs.certs, epcKey: epcConfigured(),
+      street: street && addr?.street ? { name: addr.street.toLowerCase().replace(/\b([a-z])/g, (c) => c.toUpperCase()), ...street } : null,
+      demand: demand ? { ...demand, outward: postcode.split(' ')[0] } : null,
+      ours, council, facts,
+      errors: [sales.error && `Sale history: ${sales.error}`, epcs.error && `Energy certificates: ${epcs.error}`, places.error && `Places nearby: ${places.error}`].filter((x): x is string => !!x),
+    },
+  }
 }
 
 /** Real reviews for the reviews page: one long one to feature, then short ones. Never a review cut off mid-sentence. */
@@ -93,6 +155,7 @@ export async function bookletInput(id: string, me: { name: string }): Promise<Bo
     googleSummary().catch(() => ({ rating: null, count: null, url: null })),
     reviewsFor(rent ? 'lettings' : 'sales', 20).catch(() => []),
   ])
+  const { area, story } = await areaAndStory(postcode, address, rent, home)
   const comps: BookletComp[] = [...savedComps]
   for (const s of near?.recent ?? []) {
     comps.push({ key: `lr:${s.street}|${s.postcode}|${s.soldOn}|${s.price}`, group: 'evidence', where: [s.street, s.postcode].filter(Boolean).join(', '), what: `${s.typeLabel} · sold ${month(s.soldOn)}`, price: s.price, rent: false, source: 'HM Land Registry', metres: s.metres ?? null })
@@ -119,12 +182,15 @@ export async function bookletInput(id: string, me: { name: string }): Promise<Bo
     asking: '',
     fee: rent ? `${LETTINGS.percent}%${LETTINGS.vat === 'plus' ? ` + VAT (${feeIncVat()}% including VAT)` : ''} of the monthly rent` : '',
     hide: [],
+    story: '',
+    showPaid: true,
   }
   const where = rent ? (rents ? `homes we’ve let near ${postcode}` : null) : near ? `${near.where}${near.typed && home.typeLabel ? `, ${home.typeLabel.toLowerCase()}` : ''}` : null
   return {
     id, enquiryId, defaults, saved, comps, compsWhere: where,
     estimate: rents ? { low: rents.low, high: rents.high, rent: true, basis: `${home.beds != null ? `${home.beds}-bed homes, ` : ''}from ${rents.basis}` } : null,
     otm: otm ? { url: otm.url, error: otm.error ?? null } : null,
+    area, story,
     reviews: pickReviews(revs), google: { rating: google.rating, count: google.count },
     prepared: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/London' }),
     base,

@@ -5,6 +5,9 @@
 // Pure: no server imports, so the editor shows a live preview while staff type.
 
 import { firstName } from './property-email'
+import type { Place } from './area-facts'
+import type { Epc, OurHome, Sale } from './home-history'
+import type { LatLon } from './geo'
 
 export type BookletKind = 'sales' | 'lettings'
 
@@ -34,8 +37,27 @@ export type BookletFields = {
   figure: string
   asking: string
   fee: string
-  /** Comparables left out. */
+  /** Comparables and places left out. */
   hide: string[]
+  /** Extra lines for the home's timeline, one per line: "2015: Rear extension approved". */
+  story: string
+  /** Show what the home sold for in the past (some owners would rather not see it). */
+  showPaid: boolean
+}
+
+/** Where the home is and what's around it, for "What buyers will love". */
+export type BookletArea = { home: LatLon | null; approx: boolean; places: Place[]; source: string; error: string | null }
+/** The home's own story, for "Your home's story". */
+export type BookletStory = {
+  sales: Sale[]
+  epcs: Epc[]
+  epcKey: boolean
+  street: { name: string; count: number; highest: number; latest: { price: number; date: string }; since: string } | null
+  demand: { district: number; all: number; outward: string } | null
+  ours: OurHome[]
+  council: { name: string; planningUrl: string | null } | null
+  facts: { label: string; value: string }[]
+  errors: string[]
 }
 
 export type BookletInput = {
@@ -49,13 +71,15 @@ export type BookletInput = {
   /** A typical range to show beside the comparables (rents: our lets nearby or the official figures). */
   estimate: { low: number; high: number; rent: boolean; basis: string } | null
   otm: { url: string; error: string | null } | null
+  area: BookletArea
+  story: BookletStory
   reviews: BookletReview[]
   google: { rating: number | null; count: number | null }
   prepared: string
   base: string
 }
 
-export const FIELDS: (keyof BookletFields)[] = ['kind', 'forName', 'home', 'visit', 'greeting', 'letter', 'figure', 'asking', 'fee', 'hide']
+export const FIELDS: (keyof BookletFields)[] = ['kind', 'forName', 'home', 'visit', 'greeting', 'letter', 'figure', 'asking', 'fee', 'hide', 'story', 'showPaid']
 
 export const merge = (d: BookletFields, s: Partial<BookletFields>): BookletFields => ({ ...d, ...Object.fromEntries(Object.entries(s).filter(([, v]) => v !== undefined)) }) as BookletFields
 
@@ -89,3 +113,11 @@ export function defaultLetter(kind: BookletKind): string {
 }
 
 export const gbp = (n: number) => `£${Math.round(n).toLocaleString('en-GB')}`
+
+/** Staff's timeline lines: "2015: Rear extension approved", "March 2021 – new kitchen", or just text. */
+export function storyLines(text: string): { when: string; sort: string; what: string }[] {
+  return text.split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 12).map((l) => {
+    const m = /^((?:[A-Za-z]{3,9}\s+)?(\d{4}))\s*[:\-–—]\s*(.+)$/.exec(l)
+    return m ? { when: m[1], sort: m[2], what: m[3] } : { when: '', sort: '9998', what: l }
+  })
+}

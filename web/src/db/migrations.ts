@@ -803,4 +803,16 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       )`,
     ],
   },
+  {
+    id: '038_lookup_cache',
+    sql: [
+      // Answers from outside services (places near a postcode, a home's sale history, its energy certificates),
+      // kept for a while so a booklet opens quickly and those services are asked rarely.
+      `CREATE TABLE lookup_cache (
+        key TEXT PRIMARY KEY,
+        data TEXT NOT NULL,
+        fetched_at TEXT NOT NULL
+      )`,
+    ],
+  },
 ]

@@ -1,5 +1,7 @@
 import { LETTINGS } from '@/lib/site'
-import { gbp, type BookletComp, type BookletFields, type BookletInput } from '@/lib/booklet'
+import { gbp, storyLines, type BookletComp, type BookletFields, type BookletInput } from '@/lib/booklet'
+import { distanceText } from '@/lib/geo'
+import { BookletMap } from './BookletMap'
 
 // The printed booklet: eight A4 pages. Shared by the live preview and the printout, so what staff see is what prints.
 
@@ -38,11 +40,46 @@ function Strip({ prices, rent }: { prices: number[]; rent: boolean }) {
   )
 }
 
+
+const monthYear = (iso: string) => new Date(`${iso.slice(0, 10)}T12:00:00Z`).toLocaleDateString('en-GB', { month: 'short', year: 'numeric', timeZone: 'UTC' })
+
+/** The home's timeline: when it was built, every sale, its energy certificates, what staff added, and today. */
+function homeTimeline(data: BookletInput, f: BookletFields, rent: boolean) {
+  const items: { sort: string; when: string; title: string; text?: string; today?: boolean }[] = []
+  const { sales, epcs } = data.story
+  const band = epcs.find((e) => e.ageBand)?.ageBand
+  if (band) {
+    const yrs = band.match(/\d{4}/g) ?? []
+    items.push({ sort: yrs[0] ?? '1800', when: yrs.length ? (yrs.length > 1 ? `${yrs[0]}s` : /before/i.test(band) ? `Pre-${yrs[0]}` : `${yrs[0]}+`) : 'Built', title: 'Built', text: `Between ${band.replace(/-/, ' and ')}, according to its energy certificate` })
+  }
+  sales.forEach((sl, i) => items.push({
+    sort: sl.date, when: monthYear(sl.date),
+    title: f.showPaid ? `${i === 0 && sl.newBuild ? 'Sold new for' : 'Sold for'} ${gbp(sl.price)}` : i === 0 && sl.newBuild ? 'Sold new' : 'Changed hands',
+    text: [i === 0 && sl.tenure ? sl.tenure : null].filter(Boolean).join(' · ') || undefined,
+  }))
+  epcs.forEach((e, i) => {
+    const prev = epcs[i - 1]
+    const grew = prev?.floorArea && e.floorArea && e.floorArea > prev.floorArea * 1.08
+    items.push({
+      sort: e.date, when: monthYear(e.date), title: grew ? 'Extended' : 'Energy certificate',
+      text: [e.rating ? `Rated ${e.rating}` : null, e.floorArea ? `${Math.round(e.floorArea)} m²` : null, grew ? `floor area up from ${Math.round(prev!.floorArea!)} m²` : null, e.extensions ? `${e.extensions} extension${e.extensions === 1 ? '' : 's'} recorded` : null].filter(Boolean).join(' · '),
+    })
+  })
+  for (const l of storyLines(f.story)) items.push({ sort: l.sort, when: l.when, title: l.what })
+  items.sort((a, b) => a.sort.localeCompare(b.sort))
+  items.push({ sort: '9999', when: 'Today', title: `Valued by Preston Hill Estates`, text: rent ? 'Ready for its next tenant' : 'Ready for its next chapter', today: true })
+  return items
+}
+
 export function BookletPages({ data, f }: { data: BookletInput; f: BookletFields }) {
   const rent = f.kind === 'lettings'
   const hidden = new Set(f.hide)
   const evidence = data.comps.filter((c) => c.group === 'evidence' && !hidden.has(c.key)).slice(0, 6)
   const market = data.comps.filter((c) => c.group === 'market' && !hidden.has(c.key)).slice(0, 4)
+  const places = data.area.places.filter((p) => !hidden.has(p.key)).slice(0, 10)
+  const timeline = homeTimeline(data, f, rent)
+  const demandLocal = (data.story.demand?.district ?? 0) >= 3
+  const demandN = demandLocal ? data.story.demand!.district : data.story.demand?.all ?? 0
   const [big, ...small] = data.reviews
   const feature = big && big.text.length >= 80 ? big : null
   const shorts = (feature ? small : data.reviews).slice(0, 3)
@@ -109,7 +146,74 @@ export function BookletPages({ data, f }: { data: BookletInput; f: BookletFields
         <Foot n={3} />
       </section>
 
-      {/* 4. Their home in today's market */}
+      {/* 4. What buyers will love about where they live */}
+      {places.length || data.story.facts.length ? (
+        <section className="bk-page">
+          <div className="bk-in">
+            <div className="bk-kicker">{rent ? 'What tenants will love' : 'What buyers will love'}</div>
+            <h2>{rent ? 'What tenants will love' : 'What buyers will love'}<br /><em>about where you live.</em></h2>
+            {data.area.home && places.length ? <div className="bk-mapwrap"><BookletMap home={data.area.home} pins={places.map((p, i) => ({ n: i + 1, at: p, kind: p.kind }))} /></div> : null}
+            {places.length ? (
+              <ol className="bk-places">
+                {places.map((p, i) => (
+                  <li key={p.key}><i>{i + 1}</i><div><b>{p.name}</b><span>{p.detail}</span><small>about {p.minutes} min walk · {distanceText(p.metres)}</small></div></li>
+                ))}
+              </ol>
+            ) : null}
+            {data.story.facts.length ? (
+              <div className="bk-facts">{data.story.facts.map((x) => <div key={x.label}><b>{x.label}</b><span>{x.value}</span></div>)}</div>
+            ) : null}
+            <p className="bk-src">These are the things we’ll lead with when we market your {rent ? 'property' : 'home'}. Walking times are approximate, measured from your postcode. Being near a school doesn’t guarantee a place. Places from OpenStreetMap.</p>
+          </div>
+          <Foot n={4} />
+        </section>
+      ) : null}
+
+      {/* 5. The home's story */}
+      <section className="bk-page">
+        <div className="bk-in">
+          <div className="bk-kicker">{rent ? 'Your property’s story' : 'Your home’s story'}</div>
+          <h2>{rent ? 'Your property,' : 'Your home,'}<br /><em>through the years.</em></h2>
+          <div className="bk-story">
+            <ol className="bk-timeline">
+              {timeline.map((t, i) => (
+                <li key={i} className={t.today ? 'today' : ''}><span className="when">{t.when}</span><div><b>{t.title}</b>{t.text ? <span>{t.text}</span> : null}</div></li>
+              ))}
+              {timeline.length < 3 ? <li className="soft"><span className="when">&nbsp;</span><div><span>Tell us what’s been done to your {rent ? 'property' : 'home'} over the years (extensions, a new kitchen, a loft conversion) and we’ll add it here.</span></div></li> : null}
+            </ol>
+            <div className="bk-side">
+              {data.story.street ? (
+                <div className="bk-card">
+                  <b className="k">On {data.story.street.name}</b>
+                  <span className="big">{data.story.street.count}</span>
+                  <span>home{data.story.street.count === 1 ? '' : 's'} sold since {monthYear(data.story.street.since)}</span>
+                  <small>Highest {gbp(data.story.street.highest)} · latest {gbp(data.story.street.latest.price)}, {monthYear(data.story.street.latest.date)}</small>
+                </div>
+              ) : null}
+              {demandN >= 3 ? (
+                <div className="bk-card dark">
+                  <b className="k">{rent ? 'Tenants we already have' : 'Buyers we already have'}</b>
+                  <span className="big">{demandN}</span>
+                  <span>people asked us about homes to {rent ? 'rent' : 'buy'}{demandLocal ? ` in ${data.story.demand!.outward}` : ''} in the last 90 days</span>
+                </div>
+              ) : null}
+              {data.story.ours.length ? (
+                <div className="bk-card">
+                  <b className="k">{rent ? 'Homes we’ve let nearby' : 'Homes we’ve sold nearby'}</b>
+                  {data.story.ours.slice(0, 2).map((o) => (
+                    <div key={o.id} className="bk-ours">{o.photo ? <img src={o.photo} alt="" /> : <span className="ph" />}<div><b>{o.address}</b><small>{o.status} · {o.metres < 150 ? 'very close to you' : `${distanceText(o.metres)} away`}</small></div></div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </div>
+          <div className="bk-story-quote">“Every home has a story. Our job is to tell yours to the right {rent ? 'tenant' : 'buyer'}.”<small>Preston Hill Estates</small></div>
+          <p className="bk-src bk-story-src">Sales since 1995: HM Land Registry. {data.story.epcs.length ? 'Energy certificates: the EPC register. ' : ''}Street sales: the last three years.</p>
+        </div>
+        <Foot n={5} />
+      </section>
+
+      {/* 6. Their home in today's market */}
       <section className="bk-page">
         <div className="bk-in bk-tight">
           <div className="bk-kicker">{rent ? 'Your property in today’s market' : 'Your home in today’s market'}</div>
@@ -150,7 +254,7 @@ export function BookletPages({ data, f }: { data: BookletInput; f: BookletFields
         </div>
       </section>
 
-      {/* 5. The plan */}
+      {/* 7. The plan */}
       <section className="bk-page">
         <div className="bk-in">
           <div className="bk-kicker">{rent ? 'How letting with us works' : 'How we’ll sell your home'}</div>
@@ -178,10 +282,10 @@ export function BookletPages({ data, f }: { data: BookletInput; f: BookletFields
         <div className="bk-where">
           <div><b>Zoopla</b><span>Listed</span></div><div><b>OnTheMarket</b><span>Listed</span></div><div><b>Our website</b><span>prestonhillestates.com</span></div><div><b>Our window</b><span>271 Preston Road</span></div>
         </div>
-        <Foot n={5} />
+        <Foot n={7} />
       </section>
 
-      {/* 6. Reviews */}
+      {/* 8. Reviews */}
       <section className="bk-page">
         <div className="bk-in">
           <div className="bk-kicker">What our clients say</div>
@@ -196,10 +300,10 @@ export function BookletPages({ data, f }: { data: BookletInput; f: BookletFields
           ) : null}
           <div className="bk-google"><div className="bk-stars">★</div><p>{data.google.rating && data.google.count ? <><b>Rated {data.google.rating.toFixed(1)} out of 5 from {data.google.count} reviews on Google.</b> </> : <b>Read every review on Google. </b>}Search “Preston Hill Estates Harrow”. We only ever show real reviews, word for word.</p></div>
         </div>
-        <Foot n={6} />
+        <Foot n={8} />
       </section>
 
-      {/* 7. Peace of mind */}
+      {/* 9. Peace of mind */}
       <section className="bk-page">
         <div className="bk-in">
           <div className="bk-kicker">Peace of mind</div>
@@ -236,10 +340,10 @@ export function BookletPages({ data, f }: { data: BookletInput; f: BookletFields
           <div><i>2</i><h3>Straight after</h3><p>{rent ? 'Our rent figure by email, with the homes we compared it with.' : 'Our valuation by email, with the homes we compared it with.'}</p></div>
           <div><i>3</i><h3>When you’re ready</h3><p>{rent ? 'Say the word and we’ll start finding your tenant.' : 'Say the word and we’ll book your photos.'}</p></div>
         </div>
-        <Foot n={7} />
+        <Foot n={9} />
       </section>
 
-      {/* 8. Back cover */}
+      {/* 10. Back cover */}
       <section className="bk-page bk-back">
         <div className="c">
           <div className="bk-kicker gold2">{rent ? 'Let’s get it let' : 'Let’s get you moving'}</div>

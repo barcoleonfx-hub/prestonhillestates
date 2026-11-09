@@ -174,6 +174,13 @@ export const enquiryMessages = sqliteTable(
 )
 export type EnquiryMessage = typeof enquiryMessages.$inferSelect
 
+/** Answers from outside services (places near a postcode, sale history, energy certificates), kept for a while. */
+export const lookupCache = sqliteTable('lookup_cache', {
+  key: text('key').primaryKey(),
+  data: text('data').notNull(),
+  fetchedAt: text('fetched_at').notNull(),
+})
+
 /** What staff changed on a valuation booklet (JSON of the changed fields only). */
 export const booklets = sqliteTable('booklets', {
   id: text('id').primaryKey(),
