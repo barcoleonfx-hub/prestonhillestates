@@ -2,7 +2,7 @@ import { LETTINGS } from '@/lib/site'
 import { gbp, storyLines, type BookletComp, type BookletFields, type BookletInput } from '@/lib/booklet'
 import { distanceText } from '@/lib/geo'
 import { BookletMap } from './BookletMap'
-import { AerialMap, AreaMap, CompsMap } from './MapboxMaps'
+import { AerialMap, AreaMap, BranchMap, CompsMap } from './MapboxMaps'
 
 // The printed booklet: eight A4 pages. Shared by the live preview and the printout, so what staff see is what prints.
 
@@ -41,6 +41,15 @@ function Strip({ prices, rent }: { prices: number[]; rent: boolean }) {
   )
 }
 
+
+// Simple line icons in the booklet's gold.
+const icon = (d: string) => <svg className="bk-ico" viewBox="0 0 24 24" aria-hidden="true"><path d={d} fill="none" stroke="#a47b1d" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+const ICONS = {
+  pin: icon('M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z M12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z'),
+  person: icon('M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M4.5 20.5c1.2-3.8 4-5.5 7.5-5.5s6.3 1.7 7.5 5.5'),
+  scales: icon('M12 4v16 M7 20h10 M5 7h14 M5 7l-3 6a3 3 0 0 0 6 0z M19 7l-3 6a3 3 0 0 0 6 0z M12 4l-1.5-1.5h3z'),
+  key: icon('M14.5 9.5a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0z M13.2 12.7L21 20.5 M18 17.5l2-2 M16 15.5l1.5-1.5'),
+}
 
 const monthYear = (iso: string) => new Date(`${iso.slice(0, 10)}T12:00:00Z`).toLocaleDateString('en-GB', { month: 'short', year: 'numeric', timeZone: 'UTC' })
 
@@ -132,24 +141,47 @@ export function BookletPages({ data, f }: { data: BookletInput; f: BookletFields
         <Foot n={2} />
       </section>
 
-      {/* 3. Who we are */}
+      {/* 3. Why Preston Hill */}
       <section className="bk-page">
         <div className="bk-in">
-          <div className="bk-kicker">Who we are</div>
-          <h2>Part of Preston Road,<br /><em>not just on it.</em></h2>
-          <div className="bk-tn">
-            <figure><img src="/img/preston-road-then.jpg" alt="" /><figcaption>Preston Road, then</figcaption></figure>
-            <figure><img src="/img/preston-road-today.jpg" alt="" /><figcaption>And today</figcaption></figure>
+          <div className="bk-kicker">Why Preston Hill</div>
+          <h2>Independent, local,<br /><em>and just round the corner.</em></h2>
+          <div className="bk-why">
+            <div className="bk-why-map">
+              {data.area.home && data.area.branch && data.area.mapToken
+                ? <BranchMap home={data.area.home} branch={data.area.branch} token={data.area.mapToken} width={402} height={283} />
+                // eslint-disable-next-line @next/next/no-img-element
+                : <img className="bk-mbmap" src="/img/shopfront.jpg" alt="Our branch at 271 Preston Road" />}
+              {data.area.branchMetres != null ? (
+                <span className="bk-why-dist">{data.area.branchMetres < 400 ? `We’re just round the corner from your ${rent ? 'property' : 'home'}` : `Your ${rent ? 'property' : 'home'} is ${distanceText(data.area.branchMetres)} from our office`}</span>
+              ) : null}
+            </div>
+            <div className="bk-visit">
+              <b className="k">Visit us</b>
+              <p className="addr">271 Preston Road<br />Harrow HA3 0PS</p>
+              <p>On the parade by Preston Road station.</p>
+              <div className="rows">
+                <div><span>Monday to Friday</span><span>9.00 to 17.30</span></div>
+                <div><span>Saturday</span><span>10.00 to 13.00</span></div>
+                <div><span>Call</span><span>020 8904 9005</span></div>
+              </div>
+              <small>Est. 2004 · prestonhillestates.com</small>
+            </div>
           </div>
-          <p className="bk-intro">Our branch is on the parade by Preston Road station. We work here every day, so we know which roads {rent ? 'tenants' : 'buyers'} ask for, what {rent ? 'rents homes like yours achieve' : 'homes like yours really sell for'}, and who is ready to move now.</p>
-          <div className="bk-pillars">
-            <div><i>1</i><h3>Local since 2004</h3><p>{YEARS} years selling and letting homes in HA3 and HA9: we know what {rent ? 'lets' : 'sells'}, street by street.</p></div>
-            <div><i>2</i><h3>Founder-led, start to finish</h3><p>The person who values your {rent ? 'property' : 'home'} stays with you. No call centre, no being passed around.</p></div>
-            <div><i>3</i><h3>Honest figures</h3><p>{rent ? 'A rent backed by what similar homes actually let for' : 'A price backed by real sold prices from HM Land Registry'}, not a number to win your instruction.</p></div>
+          <div className="bk-kicker" style={{ marginTop: '7mm' }}>What makes us different</div>
+          <div className="bk-diff">
+            <div>{ICONS.pin}<div><h3>Local since 2004</h3><p>{YEARS} years selling and letting homes from Preston Road. We know which streets {rent ? 'tenants' : 'buyers'} ask for, and what {rent ? 'they pay' : 'homes really sell for'}, street by street.</p></div></div>
+            <div>{ICONS.person}<div><h3>Founder-led, start to finish</h3><p>The person who values your {rent ? 'property' : 'home'} stays with you. No call centre, no being passed around.</p></div></div>
+            <div>{ICONS.scales}<div><h3>Honest figures</h3><p>{rent ? 'A rent backed by what similar homes actually let for' : 'A price backed by real sold prices from HM Land Registry'}, never a number just to win your instruction.</p></div></div>
             {rent
-              ? <div><i>4</i><h3>We look after it</h3><p>Rent collected, repairs arranged, and the paperwork and the new rules kept right.</p></div>
-              : <div><i>4</i><h3>We do the viewings</h3><p>Every buyer is shown round by our own team, and you hear what they thought.</p></div>}
+              ? <div>{ICONS.key}<div><h3>We look after it</h3><p>Rent collected, repairs arranged, and the paperwork and the new rules kept right, so you don’t have to.</p></div></div>
+              : <div>{ICONS.key}<div><h3>We do every viewing</h3><p>Every buyer is shown round by our own team, and you hear what they thought the same day.</p></div></div>}
           </div>
+          <div className="bk-promise">
+            <b className="k">Our promise</b>
+            <div><span>An honest figure,<br />with the evidence</span><span>You’ll always know who’s looking after you</span><span>No obligation,<br />ever</span></div>
+          </div>
+          <div className="bk-areas"><b>Where we work</b>{['Preston Road', 'Wembley Park', 'Wembley', 'Kenton', 'Northwick Park', 'Kingsbury', 'Harrow'].map((a) => <span key={a}>{a}</span>)}</div>
         </div>
         <Foot n={3} />
       </section>

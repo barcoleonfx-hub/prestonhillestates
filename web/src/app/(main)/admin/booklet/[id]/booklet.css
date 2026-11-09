@@ -83,10 +83,6 @@
 .bk-stats span { display: block; margin-top: 2.5mm; font-size: 8.5pt; color: var(--faint); line-height: 1.4; }
 
 /* who we are */
-.bk-tn { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; margin-top: 8mm; }
-.bk-tn figure { position: relative; height: 56mm; border-radius: 3mm; overflow: hidden; }
-.bk-tn img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.bk-tn figcaption { position: absolute; left: 3mm; bottom: 3mm; background: rgba(35,33,26,.82); color: #fff; font-size: 7.5pt; letter-spacing: .18em; text-transform: uppercase; padding: 1.5mm 3mm; border-radius: 1.5mm; }
 .bk-intro { margin-top: 6mm; max-width: 155mm; }
 .bk-pillars { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; margin-top: 8mm; }
 .bk-pillars > div { background: var(--cream); border-radius: 3mm; padding: 6mm; }
@@ -258,3 +254,31 @@
 .bk-maps ~ .bk-facts span { font-size: 10.5pt; }
 
 .bk-tube + .bk-drives { margin-top: 1.6mm; }
+
+/* Why Preston Hill */
+.bk-why { display: grid; grid-template-columns: 106mm 1fr; gap: 4mm; margin-top: 7mm; height: 75mm; }
+.bk-why-map { position: relative; border-radius: 3mm; overflow: hidden; box-shadow: 0 0 0 1px var(--line); background: #ece8dc; }
+.bk-why-dist { position: absolute; left: 3mm; bottom: 3mm; right: 3mm; background: rgba(35,33,26,.86); color: #fff; font-size: 8.5pt; padding: 2mm 3mm; border-radius: 2mm; }
+.bk-visit { background: var(--ink); color: #fff; border-radius: 3mm; padding: 6mm 6mm 5mm; display: flex; flex-direction: column; }
+.bk-visit .k { font-size: 7pt; letter-spacing: .22em; text-transform: uppercase; color: var(--gold2); }
+.bk .bk-visit p { color: #d9d3c1; font-size: 9pt; margin-top: 2mm; line-height: 1.5; }
+.bk .bk-visit p.addr { font-family: var(--serif); font-size: 15pt; line-height: 1.25; color: #fff; margin-top: 3mm; }
+.bk-visit .rows { margin-top: auto; border-top: 1px solid rgba(255,255,255,.15); }
+.bk-visit .rows div { display: flex; justify-content: space-between; gap: 3mm; font-size: 8.5pt; padding: 1.8mm 0; border-bottom: 1px solid rgba(255,255,255,.1); color: #eae5d6; }
+.bk-visit .rows div span:first-child { color: #a9a28c; }
+.bk-visit small { margin-top: 3mm; font-size: 7.5pt; color: #a9a28c; letter-spacing: .04em; }
+.bk-diff { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm 9mm; margin-top: 3mm; }
+.bk-diff > div { display: grid; grid-template-columns: 11mm 1fr; gap: 4mm; align-items: start; padding-top: 4mm; border-top: 1px solid var(--line); }
+.bk-ico { width: 11mm; height: 11mm; padding: 2.2mm; border-radius: 50%; background: var(--cream); box-sizing: border-box; }
+.bk-diff h3 { font-family: var(--serif); font-weight: 400; font-size: 13.5pt; line-height: 1.2; color: var(--ink); }
+.bk-diff p { font-size: 9pt; line-height: 1.5; margin-top: 1.2mm; }
+.bk-areas { display: flex; flex-wrap: wrap; gap: 1.6mm 2mm; align-items: center; margin-top: 5mm; font-size: 8.5pt; color: var(--body); }
+.bk-areas b { font-size: 7pt; letter-spacing: .2em; text-transform: uppercase; color: var(--gold); margin-right: 1.5mm; }
+.bk-areas span { border: 1px solid var(--line); border-radius: 99px; padding: .9mm 3mm; }
+
+.bk-promise { margin-top: 6mm; background: var(--cream); border-radius: 3mm; padding: 4mm 6mm; }
+.bk-promise .k { font-size: 7pt; letter-spacing: .22em; text-transform: uppercase; color: var(--gold); }
+.bk-promise > div { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 3mm; }
+.bk-promise span { font-family: var(--serif); font-size: 11.5pt; line-height: 1.3; color: var(--ink); padding: 0 4mm; }
+.bk-promise span:first-child { padding-left: 0; }
+.bk-promise span + span { border-left: 1px solid #e3dcc6; }

@@ -55,6 +55,9 @@ export type BookletArea = {
   zones: { minutes: number; polyline: string; box: { s: number; w: number; n: number; e: number } }[]
   route: { polyline: string; minutes: number; metres: number; to: string } | null
   drives: { name: string; minutes: number }[]
+  /** Our branch (271 Preston Road) and how far the home is from it. */
+  branch: LatLon | null
+  branchMetres: number | null
   /** Door-to-door tube and train times into London (TfL). */
   tube: { name: string; minutes: number; via: string[] }[]
 }
