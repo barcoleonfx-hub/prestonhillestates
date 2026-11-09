@@ -138,16 +138,28 @@ export function parseZoopla(lines: string[]): Lead | null {
   const type = labelled(lines, ['Type of enquiry'])
   const situation = labelled(lines, ['About'])
   const ref = labelled(lines, ['Unique Reference', 'Reference'])
-  const address = labelled(lines, ['Address', 'Property address'])
+  const valuation = /valuation/i.test(kind ?? '')
+  // Valuation emails give their home as "Property:" with Zoopla's own estimate; buyer emails have a listing card.
+  const address = labelled(lines, valuation ? ['Property', 'Address', 'Property address'] : ['Address', 'Property address'])
   const postcode = labelled(lines, ['Postcode'])
-  const priceLine = lines.find((l) => /^£\s?[\d,]+/.test(l)) ?? null
+  const priceLine = valuation ? null : lines.find((l) => /^£\s?[\d,]+/.test(l)) ?? null
   const location = labelled(lines, ['Location'])
   const propType = labelled(lines, ['Type of property'])
-  const comments = labelled(lines, ['Message', 'Comments', 'Additional information'])
+  // A valuation's "Message:" is Zoopla's own estimate block (read below), not something they wrote.
+  const comments = labelled(lines, valuation ? ['Comments', 'Additional information'] : ['Message', 'Comments', 'Additional information'])
+  const money = (v: string | null) => { const n = Number((v ?? '').replace(/[^\d.]/g, '')); return n > 0 ? `£${Math.round(n).toLocaleString('en-GB')}` : null }
+  const estimate = valuation ? money(labelled(lines, ['Zoopla Estimate'])) ?? money(labelled(lines, ['Capital Val'])) : null
+  const range = valuation ? labelled(lines, ['Val Range'])?.split(/\s*[-–]\s*/).map((x) => money(x)).filter(Boolean) ?? [] : []
+  const confidence = valuation ? labelled(lines, ['Confidence']) : null
+  const homeType = valuation ? labelled(lines, ['Type']) : null
+  const prefers = valuation ? [labelled(lines, ['Contact Preference']), labelled(lines, ['Contact Time Preference'])].filter((x) => x && !/^no preference$/i.test(x)) : []
   const details = [
     kind ? `Zoopla ${kind.toLowerCase()} enquiry` : 'Zoopla enquiry',
     type ? `Type of enquiry: ${type}` : '',
     address ? `Property: ${address}${postcode ? ` (${postcode.toUpperCase()})` : ''}` : '',
+    homeType ? `Type: ${homeType}` : '',
+    estimate ? `Zoopla’s estimate: ${estimate}${range.length === 2 ? ` (range ${range[0]} to ${range[1]}${confidence ? `, ${confidence.toLowerCase()} confidence` : ''})` : ''}` : '',
+    prefers.length ? `Prefers: ${prefers.join(', ')}` : '',
     priceLine ? `Listing: ${priceLine.replace(/\s+-\s+/, ' – ')}` : '',
     ref ? `Zoopla reference: ${ref}` : '',
     situation ? `Situation: ${situation}` : '',
