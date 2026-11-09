@@ -2,18 +2,16 @@ import 'server-only'
 import { cached } from './lookup-cache'
 import { distanceText, metresBetween, walkMinutes, type LatLon } from './geo'
 import { STATIONS, stationByName } from './stations'
+import { localPlaces, runOverpass, type Raw } from './area-places'
+export { parseOverpass } from './area-places'
 
-// What buyers (and tenants) care about near a home: stations, schools, shops, parks and everyday essentials.
-// From OpenStreetMap (free, open data, © OpenStreetMap contributors) via the Overpass API, asked once per postcode
-// and kept for 30 days. Stations fall back to our own list if OpenStreetMap can't be reached.
+// What buyers (and tenants) care about near a home: stations, schools, shops, parks and everyday essentials, from
+// OpenStreetMap (free, open data, © OpenStreetMap contributors). Normally read from our own copy for the whole patch
+// (area-places.ts, filled in the background); for a home outside it, asked once per postcode and kept for 30 days.
+// Stations fall back to our own list if nothing else is to hand.
 
 export type PlaceKind = 'station' | 'school' | 'shop' | 'park' | 'health' | 'gym'
 export type Place = { key: string; kind: PlaceKind; name: string; detail: string; metres: number; minutes: number; lat: number; lon: number }
-type Raw = { kind: string; name: string; lat: number; lon: number; tags: Record<string, string> }
-
-// The main Overpass server is often busy; these public mirrors serve the same OpenStreetMap data.
-const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter', 'https://maps.mail.ru/osm/tools/overpass/api/interpreter']
-const UA = 'PrestonHillEstates/1.0 (+https://www.prestonhillestates.com)'
 
 function query(p: LatLon) {
   const at = `${p.lat.toFixed(5)},${p.lon.toFixed(5)}`
@@ -32,43 +30,11 @@ function query(p: LatLon) {
 out center tags qt;`
 }
 
-type OverpassElement = { type: string; id: number; lat?: number; lon?: number; center?: { lat: number; lon: number }; tags?: Record<string, string> }
-
-/** The raw answer from OpenStreetMap, as a flat list of named places with a position. */
-export function parseOverpass(body: { elements?: OverpassElement[] }): Raw[] {
-  const out: Raw[] = []
-  for (const el of body.elements ?? []) {
-    const t = el.tags ?? {}
-    const lat = el.lat ?? el.center?.lat, lon = el.lon ?? el.center?.lon
-    if (lat == null || lon == null || !t.name) continue
-    const kind = t.railway === 'station' || t.station === 'subway' ? 'station' : t.amenity === 'school' ? 'school' : t.shop === 'supermarket' ? 'shop'
-      : t.leisure === 'park' ? 'park' : t.amenity === 'doctors' || t.amenity === 'pharmacy' ? 'health' : t.leisure === 'fitness_centre' ? 'gym' : null
-    if (kind) out.push({ kind, name: t.name.trim(), lat, lon, tags: t })
-  }
-  return out
-}
-
-/** Asks each Overpass server in turn until one answers with places; says what each one said if none does. */
+/** Places within about a mile and a half of a home, from OpenStreetMap: asks the servers in turn. */
 async function fromOverpass(p: LatLon): Promise<Raw[]> {
-  const said: string[] = []
-  for (const url of OVERPASS) {
-    try {
-      const res = await fetch(url, {
-        method: 'POST', headers: { 'User-Agent': UA, Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: `data=${encodeURIComponent(query(p))}`, signal: AbortSignal.timeout(65_000),
-      })
-      if (!res.ok) { said.push(`${new URL(url).host} answered ${res.status}`); continue }
-      const body = (await res.json()) as { elements?: OverpassElement[]; remark?: string }
-      // A query that runs out of time still answers "OK", with only what it found so far: not good enough to keep.
-      if (/runtime error|timed out|out of memory/i.test(body.remark ?? '')) { said.push(`${new URL(url).host}: ${body.remark!.slice(0, 80)}`); continue }
-      const raw = parseOverpass(body)
-      if (raw.some((r) => r.kind !== 'station')) return raw
-      said.push(`${new URL(url).host} found nothing`)
-    } catch (e) {
-      said.push(`${new URL(url).host}: ${(e as Error).name === 'TimeoutError' ? 'took too long' : String((e as Error).message ?? e).slice(0, 80)}`)
-    }
-  }
-  throw new Error(said.join('; '))
+  const raw = await runOverpass(query(p), 65_000)
+  if (!raw.some((r) => r.kind !== 'station')) throw new Error('OpenStreetMap found nothing nearby')
+  return raw
 }
 
 const phase = (r: Raw): 'primary' | 'secondary' | null => {
@@ -134,6 +100,9 @@ const inFlight = new Map<string, Promise<{ data: Raw[] | null; error: string | n
  * the rest is on its way; a refresh a minute later has everything, saved for 30 days.
  */
 export async function placesNear(postcode: string, home: LatLon): Promise<{ places: Place[]; source: 'openstreetmap' | 'stations only'; error: string | null; pending: boolean }> {
+  // Our own copy first: instant, and doesn't depend on anyone's server being up.
+  const local = await localPlaces(home).catch(() => null)
+  if (local) return { places: pickPlaces(home, local), source: 'openstreetmap', error: null, pending: false }
   // v2: answers saved by the first version could be cut short (stations only), so they're not used.
   const key = `places-v2:${postcode}`
   let job = inFlight.get(key)
