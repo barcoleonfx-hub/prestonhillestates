@@ -53,7 +53,7 @@ export type BookletStory = {
   epcs: Epc[]
   epcKey: boolean
   street: { name: string; count: number; highest: number; latest: { price: number; date: string }; since: string } | null
-  demand: { district: number; all: number; outward: string } | null
+  demand: { district: number; all: number; months: number; outward: string } | null
   ours: OurHome[]
   council: { name: string; planningUrl: string | null } | null
   facts: { label: string; value: string }[]

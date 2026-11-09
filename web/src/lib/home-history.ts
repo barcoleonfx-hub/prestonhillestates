@@ -1,7 +1,8 @@
 import 'server-only'
-import { and, desc, eq, gte, inArray, isNotNull, like, ne, sql } from 'drizzle-orm'
+import { and, desc, eq, gte, inArray, isNotNull, like, sql } from 'drizzle-orm'
 import { db, ready } from '@/db/client'
-import { enquiries, media, properties, soldPrices } from '@/db/schema'
+import { contacts, enquiries, media, properties, soldPrices } from '@/db/schema'
+import { enquirySide, isValuation } from './enquiry-labels'
 import { cached } from './lookup-cache'
 import { metresBetween, osgbToLatLon, type LatLon } from './geo'
 import { fmtPostcode, positionsOf } from './postcode-geo'
@@ -119,16 +120,24 @@ export async function streetRecord(postcode: string, street: string | null) {
   return { count: rows.length, highest: Math.max(...rows.map((r) => r.price)), latest: { price: rows[0].price, date: rows[0].soldOn }, since: rows[rows.length - 1].soldOn }
 }
 
-/** How many people asked us about homes to buy (or rent) in this postcode district in the last 90 days. */
-export async function demandNear(postcode: string, rent: boolean): Promise<{ district: number; all: number }> {
+/**
+ * How many different people asked us about homes to buy (or rent) in the last 12 months: every channel (portals,
+ * website, email, phone), sorted the same way as the enquiry lists, leaving out valuations. `district` counts those
+ * who asked about a home in the same postcode district.
+ */
+export async function demandNear(postcode: string, rent: boolean): Promise<{ district: number; all: number; months: number }> {
   await ready()
-  const since = new Date(Date.now() - 90 * 86400_000).toISOString()
-  const out = postcode.split(' ')[0]
-  const rows = await db.select({ email: enquiries.email, phone: enquiries.phone, contactId: enquiries.contactId, pc: properties.postcode }).from(enquiries)
-    .innerJoin(properties, eq(enquiries.propertyId, properties.id))
-    .where(and(gte(enquiries.createdAt, since), eq(properties.channel, rent ? 'let' : 'sale'), ne(enquiries.kind, 'valuation')))
-  const who = (r: (typeof rows)[number]) => r.contactId ?? r.email ?? r.phone ?? Math.random().toString()
-  return { district: new Set(rows.filter((r) => (r.pc ?? '').toUpperCase().startsWith(`${out} `)).map(who)).size, all: new Set(rows.map(who)).size }
+  const months = 12
+  const since = new Date(Date.now() - months * 30.5 * 86400_000).toISOString()
+  const out = postcode.split(' ')[0].toUpperCase()
+  const rows = await db.select({ e: enquiries, channel: properties.channel, pc: properties.postcode, roles: contacts.roles }).from(enquiries)
+    .leftJoin(properties, eq(enquiries.propertyId, properties.id)).leftJoin(contacts, eq(enquiries.contactId, contacts.id))
+    .where(gte(enquiries.createdAt, since))
+  const want = rent ? 'lettings' : 'sales'
+  const mine = rows.filter((r) => !isValuation(r.e) && enquirySide(r.e, r.channel, r.roles) === want)
+  const who = (r: (typeof rows)[number]) => r.e.contactId ?? r.e.email?.toLowerCase() ?? r.e.phone?.replace(/\D/g, '') ?? r.e.id
+  const local = mine.filter((r) => (r.pc ?? r.e.postcode ?? '').toUpperCase().startsWith(`${out} `))
+  return { district: new Set(local.map(who)).size, all: new Set(mine.map(who)).size, months }
 }
 
 export type OurHome = { id: string; address: string; price: string; status: string; photo: string | null; metres: number }

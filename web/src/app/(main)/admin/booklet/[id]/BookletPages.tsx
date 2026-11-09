@@ -78,7 +78,9 @@ export function BookletPages({ data, f }: { data: BookletInput; f: BookletFields
   const market = data.comps.filter((c) => c.group === 'market' && !hidden.has(c.key)).slice(0, 4)
   const places = data.area.places.filter((p) => !hidden.has(p.key)).slice(0, 10)
   const timeline = homeTimeline(data, f, rent)
-  const demandLocal = (data.story.demand?.district ?? 0) >= 3
+  // Only a number worth showing: the people asking about homes in their own district if that's a good few,
+  // otherwise everyone who asked us; and not at all if it's small.
+  const demandLocal = (data.story.demand?.district ?? 0) >= 20
   const demandN = demandLocal ? data.story.demand!.district : data.story.demand?.all ?? 0
   const [big, ...small] = data.reviews
   const feature = big && big.text.length >= 80 ? big : null
@@ -190,11 +192,11 @@ export function BookletPages({ data, f }: { data: BookletInput; f: BookletFields
                   <small>Highest {gbp(data.story.street.highest)} · latest {gbp(data.story.street.latest.price)}, {monthYear(data.story.street.latest.date)}</small>
                 </div>
               ) : null}
-              {demandN >= 3 ? (
+              {demandN >= 20 ? (
                 <div className="bk-card dark">
                   <b className="k">{rent ? 'Tenants we already have' : 'Buyers we already have'}</b>
                   <span className="big">{demandN}</span>
-                  <span>people asked us about homes to {rent ? 'rent' : 'buy'}{demandLocal ? ` in ${data.story.demand!.outward}` : ''} in the last 90 days</span>
+                  <span>{rent ? 'tenants' : 'buyers'} asked us about homes {rent ? 'to rent' : 'for sale'}{demandLocal ? ` in ${data.story.demand!.outward}` : ''} in the last 12 months. We’ll tell the right ones about your {rent ? 'property' : 'home'} first.</span>
                 </div>
               ) : null}
               {data.story.ours.length ? (
