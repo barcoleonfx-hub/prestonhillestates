@@ -8,7 +8,7 @@ import { listBetween } from '@/lib/appointments'
 import { kindLabel } from '@/lib/appointment-options'
 import { addDays, dayLabel, endIso, fmtTime, isoToLondon, londonToIso, todayLondon } from '@/lib/time'
 import { createProperty } from '../actions'
-import { mailboxCheckNow } from '../mailbox-actions'
+import { mailboxCheckNow, mailboxLookBack } from '../mailbox-actions'
 import { mailboxStatus, skippedEmails } from '@/lib/mailbox'
 import { ActivityFeed } from './ActivityFeed'
 import { LogCallButton } from './LogCallButton'
@@ -78,6 +78,7 @@ export default async function Dashboard() {
               <span className="mb-strip-dot" aria-hidden="true" />
               <span>{text}</span>
               {box?.hasPassword && box.enabled ? <form action={mailboxCheckNow}><button className="btn btn-ghost btn-sm" type="submit">Check now</button></form> : null}
+              {box?.hasPassword && box.enabled ? <form action={mailboxLookBack}><button className="btn btn-ghost btn-sm" type="submit" title="Reads the last 7 days again. Nothing is added twice.">Look again at the last 7 days</button></form> : null}
               {tone === 'warn' ? <Link className="btn btn-ghost btn-sm" href="/admin/email-inbox">Email settings</Link> : null}
               {notAdded.length ? <Link className="btn btn-ghost btn-sm" href="/admin/email-inbox#skipped">{notAdded.length} email{notAdded.length === 1 ? '' : 's'} to review</Link> : null}
             </div>

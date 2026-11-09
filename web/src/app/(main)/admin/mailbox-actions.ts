@@ -99,3 +99,11 @@ export async function mailboxDismissSkipped(form: FormData) {
   await forgetSkipped(Number(form.get('uid')), String(form.get('folder') || 'INBOX'))
   revalidatePath('/admin/email-inbox')
 }
+
+/** Reads the last 7 days again (Inbox and Junk): adds any enquiries missed, lists the rest. Nothing is added twice. */
+export async function mailboxLookBack() {
+  const me = await requireAdmin()
+  const r = await checkMailbox({ force: true, lookBackDays: 7 })
+  await audit(me.id, 'mailbox_look_back', 'settings', 'mailbox', r.error ? `error: ${r.error}` : `${r.found ?? 0} found`)
+  revalidatePath('/admin', 'layout')
+}
