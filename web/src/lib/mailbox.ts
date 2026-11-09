@@ -44,7 +44,9 @@ export type MailboxSettings = {
 }
 
 /** Folder names that look like they hold portal or website leads. */
-export const LEAD_FOLDER = /on ?the ?market|onthemarket|\botm\b|zoopla|rightmove|enquir|\bleads?\b|website|valuations?|portals?|applicants?|lettings|sales/i
+export const LEAD_FOLDER = /on ?the ?market|onthemarket|\botm\b|zoopla|rightmove|enquir|\bleads?\b|website|valuations?|portals?|applicants?|lettings|sales|web ?chat|chat/i
+/** Folders inside the Inbox: mail rules file leads there, so they're checked unless someone unticks them. */
+export const autoWatched = (p: string) => LEAD_FOLDER.test(p) || /^inbox[/.]/i.test(p)
 const NEW_FOLDER_DAYS = 14 // a folder checked for the first time: pick up the last fortnight
 
 export async function setWatchedFolders(paths: string[]) {
@@ -275,7 +277,7 @@ export async function checkMailbox(opts: { force?: boolean; lookBackDays?: numbe
     const skipped: SkippedEmail[] = []
     // Reads the given emails in the open folder; saves the enquiries among them. In Junk, only portal and
     // website leads count (anything else there really is junk).
-    const take = async (folder: string, list: number[], validityHere: string, junk: boolean) => {
+    const take = async (folder: string, list: number[], validityHere: string, junk: boolean, leadFolder = false) => {
       const sizes = new Map<number, number>()
       if (list.length) for await (const m of c.fetch(list.join(','), { uid: true, size: true }, { uid: true })) sizes.set(m.uid, m.size ?? 0)
       // Lead emails are small: skip anything over 1 MB (big attachments), and read a few at a time.
@@ -289,7 +291,10 @@ export async function checkMailbox(opts: { force?: boolean; lookBackDays?: numbe
           try {
             const row = await analyse(source)
             if (!row) continue
-            const wanted = junk ? row.category === 'portal' || row.category === 'website' : row.category !== 'skipped' && (row.category !== 'person' || (s.includePeople && row.intent))
+            // In a folder the office's own mail rules fill with leads (Rightmove, Webchat, Valuation…), an email from a
+            // person or a service counts as an enquiry too, as long as it has someone to contact.
+            const wanted = junk ? row.category === 'portal' || row.category === 'website'
+              : row.category !== 'skipped' && (row.category !== 'person' || leadFolder || (s.includePeople && row.intent))
             if (wanted) {
               const saved = await saveEmailRow(row, { by: null, handled: false, startedAt })
               if (saved) {
@@ -324,7 +329,7 @@ export async function checkMailbox(opts: { force?: boolean; lookBackDays?: numbe
     const notLeads = (f: (typeof usable)[number]) => f.path.toUpperCase() === 'INBOX' || f.path === junkPath || ['\\Sent', '\\Drafts', '\\Trash', '\\All', '\\Flagged'].includes(f.specialUse ?? '')
       || /^(sent|drafts?|deleted|trash|bin|outbox|notes|calendar|contacts|tasks|journal|conversation history|sync issues|rss|archive)/i.test(f.name)
     const allFolders = usable.filter((f) => !notLeads(f)).map((f) => f.path)
-    const watched = (s.watched ?? allFolders.filter((p) => LEAD_FOLDER.test(p))).filter((p) => allFolders.includes(p))
+    const watched = (s.watched ?? allFolders.filter(autoWatched)).filter((p) => allFolders.includes(p))
     const folders: Record<string, { validity: string; lastUid: number }> = { ...(s.folders ?? {}) }
     if (s.junkPath && s.junkValidity && !folders[s.junkPath]) folders[s.junkPath] = { validity: s.junkValidity, lastUid: s.junkLastUid ?? 0 }
     for (const path of [...watched, ...(junkPath ? [junkPath] : [])]) {
@@ -336,7 +341,7 @@ export async function checkMailbox(opts: { force?: boolean; lookBackDays?: numbe
         if (opts.lookBackDays || fresh) list = ((await c.search({ since: new Date(Date.now() - (opts.lookBackDays ?? (st ? FIRST_LOOK_DAYS : NEW_FOLDER_DAYS)) * 86400000) }, { uid: true })) || []) as number[]
         else list = fb.uidNext > st.lastUid + 1 ? (((await c.search({ uid: `${st.lastUid + 1}:*` }, { uid: true })) || []) as number[]).filter((u) => u > st.lastUid) : []
         list = list.sort((a, b) => a - b).slice(0, limit)
-        await take(path, list, fv, path === junkPath)
+        await take(path, list, fv, path === junkPath, path !== junkPath)
         folders[path] = { validity: fv, lastUid: Math.max(fresh ? 0 : st.lastUid, ...list, list.length ? 0 : (fb.uidNext ?? 1) - 1) }
       } catch (e) { console.error('mailbox: folder check failed', path, e) }
     }

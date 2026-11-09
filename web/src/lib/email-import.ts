@@ -236,7 +236,11 @@ export async function analyse(raw: string, nowMs = Date.now()): Promise<ImportRo
   if (lead && /property to sell|home to sell|need to sell|have to sell|selling my/i.test(lead.situation ?? '')) lead.details.push('Has a home to sell: offer a valuation')
 
   // Anything else: labelled fields first (form emails), then reply-to, then the sender.
-  const labelledName = lead?.name || field(text, ['name', 'full name', 'your name', 'applicant name', 'customer name', 'contact name'])
+  const labelledName = lead?.name || field(text, ['name', 'full name', 'your name', 'applicant name', 'customer name', 'contact name', 'visitor name', 'visitor', 'client name', 'lead name', 'enquirer', 'enquirer name', 'sender name', 'first name'])
+  // "New chat lead: Sophie Turner", "Lettings enquiry from Zara Shoukat": the person's name in the subject.
+  const subjectName = /(?:lead|enquiry|request|message|chat)\s*(?:from|:|-)\s*([A-Z][\p{L}'’-]+(?:\s+[A-Z][\p{L}'’-]+){0,3})\s*$/u.exec(subject.trim())?.[1] ?? null
+  // A sender called "Website Chat", "Rightmove" or "Enquiries" is a service, not the person.
+  const SERVICE = /chat|rightmove|zoopla|onthemarket|website|enquir|leads?\b|notification|team|support|info|admin|no-?reply|form/i
   const labelledEmail = lead?.email ?? field(text, ['email', 'e-mail', 'email address', 'your email'])?.match(EMAIL1)?.[0] ?? null
   const labelledPhone = lead?.phone ?? tidyPhone(field(text, ['phone', 'telephone', 'tel', 'mobile', 'phone number', 'contact number', 'your phone']))
   const about = lead?.about ?? field(text, ['property', 'property address', 'address', 'listing', 'property reference', 'ref', 'regarding'])
@@ -248,7 +252,7 @@ export async function analyse(raw: string, nowMs = Date.now()): Promise<ImportRo
 
   const email = labelledEmail ?? goodReplyTo?.address ?? (source === 'email' ? directSender?.address : bodyEmails[0]) ?? null
   const phone = labelledPhone ?? bodyPhone
-  const name = (labelledName || goodReplyTo?.name || directSender?.name || (email ? email.split('@')[0].replace(/[._]/g, ' ') : '') || '').trim().slice(0, 120)
+  const name = (labelledName || (goodReplyTo?.name && !SERVICE.test(goodReplyTo.name) ? goodReplyTo.name : '') || subjectName || (directSender?.name && !SERVICE.test(directSender.name) ? directSender.name : '') || (email ? email.split('@')[0].replace(/[._]/g, ' ').replace(/\d+/g, '').trim() : '') || '').trim().slice(0, 120)
 
   const row: ImportRow = {
     key, date, source, subject, name: name || 'Unknown', email: email?.toLowerCase() ?? null, phone,

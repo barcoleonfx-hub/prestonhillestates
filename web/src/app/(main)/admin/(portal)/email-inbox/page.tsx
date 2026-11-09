@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { requireRole } from '@/lib/auth'
-import { FASTHOSTS_IMAP, LEAD_FOLDER, mailboxStatus, skippedEmails } from '@/lib/mailbox'
+import { FASTHOSTS_IMAP, autoWatched, mailboxStatus, skippedEmails } from '@/lib/mailbox'
 import { mailboxAddSkipped, mailboxCheckNow, mailboxDismissSkipped, mailboxForget, mailboxLookBack, mailboxOnOff, mailboxSetFolders } from '../../mailbox-actions'
 import { ConnectForm } from './ConnectForm'
 
@@ -48,12 +48,12 @@ export default async function EmailInboxPage() {
       {s?.hasPassword && s.allFolders ? (
         <section className="card card-pad" id="folders">
           <h2>Folders checked</h2>
-          <p className="card-sub">If your mail rules file Zoopla or OnTheMarket emails into their own folder, tick it here. The Inbox and Junk are always checked. When you tick a folder, its last 2 weeks are read straight away (nothing is added twice).</p>
+          <p className="card-sub">The Inbox, every folder inside it, and Junk are checked. Emails in the ticked folders count as enquiries, whoever they’re from (your mail rules put them there). Tick any other folder that holds enquiries. When you tick a folder, its last 2 weeks are read straight away (nothing is added twice).</p>
           <form action={mailboxSetFolders} className="mb-folders">
             <label className="mb-folder"><input type="checkbox" checked disabled /> Inbox</label>
             {s.junkPath ? <label className="mb-folder"><input type="checkbox" checked disabled /> {s.junkPath} <small>(enquiries only)</small></label> : null}
             {s.allFolders.map((f) => {
-              const on = (s.watched ?? s.allFolders!.filter((x) => LEAD_FOLDER.test(x))).includes(f)
+              const on = (s.watched ?? s.allFolders!.filter(autoWatched)).includes(f)
               return <label key={f} className="mb-folder"><input type="checkbox" name="folder" value={f} defaultChecked={on} /> {f}{s.folders?.[f] ? <small> · checked</small> : null}</label>
             })}
             <div className="actions" style={{ flexBasis: '100%' }}><button className="btn btn-dark btn-sm" type="submit">Save folders</button></div>
