@@ -9,14 +9,35 @@ import { portalUrl } from './mailer'
 // postcode's position, estimated walking times and OpenStreetMap's map, as before.
 // Mapbox's terms don't allow keeping look-up results, so they're only remembered in memory for a day.
 
-let token: string | null | undefined
+let token: { v: string | null; at: number } | null = null
+let why = ''
+
+/** "pk.abc", "MAPBOX_TOKEN=pk.abc" or "MAPBOX_TOKEN=\"pk.abc\"" (a .env-style file): the token itself. */
+const clean = (raw: string) => {
+  const line = raw.split(/\r?\n/).map((l) => l.trim()).find((l) => /(^|=)\s*["']?(pk|sk)\./.test(l)) ?? raw.trim()
+  return line.replace(/^[A-Z_]+\s*=\s*/, '').replace(/^["']|["']$/g, '').trim()
+}
+
+/** The Mapbox token, looked up afresh every minute (so a token added later is picked up without a restart). */
 export function mapboxToken(): string | null {
-  if (token !== undefined) return token
+  if (token && Date.now() - token.at < 60_000) return token.v
+  let v: string | null = null
   const fromEnv = process.env.MAPBOX_TOKEN?.trim()
-  if (fromEnv) return (token = fromEnv)
-  // Render keeps secret files here.
-  try { const t = readFileSync('/etc/secrets/MAPBOX_TOKEN', 'utf8').trim(); if (t) return (token = t) } catch { /* not there */ }
-  return (token = null)
+  if (fromEnv) v = clean(fromEnv)
+  else {
+    // Render keeps secret files here.
+    try { v = clean(readFileSync('/etc/secrets/MAPBOX_TOKEN', 'utf8')) || null } catch { v = null }
+  }
+  why = !v ? 'no MAPBOX_TOKEN environment variable or secret file found' : !/^pk\./.test(v) ? 'the token should be a public token, starting "pk."' : ''
+  if (v && !/^pk\./.test(v)) v = null
+  token = { v, at: Date.now() }
+  return v
+}
+
+/** For the booklet editor: is Mapbox connected, and if not, why. */
+export function mapboxStatus(): { connected: boolean; why: string } {
+  const v = mapboxToken()
+  return { connected: !!v, why: v ? '' : why }
 }
 
 const DAY = 86400_000
