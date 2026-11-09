@@ -26,6 +26,7 @@ export function EmailComposer({ id, ctx, to, canSend, blocked, chooseKind, start
   const [subject, setSubject] = useState(() => t.subject(c, { figure }))
   const [message, setMessage] = useState(() => t.message(c, { figure }))
   const [edited, setEdited] = useState(false)
+  const [files, setFiles] = useState<string[]>([])
   const [state, send, pending] = useActionState<SendState, FormData>(sendEnquiryEmail, {})
 
   // A new template, or a new time typed in: fresh wording, unless staff have rewritten it themselves.
@@ -36,7 +37,7 @@ export function EmailComposer({ id, ctx, to, canSend, blocked, chooseKind, start
   }, [t, c, when, times, figure, edited])
 
   const pick = (k: string) => { setKey(k); setEdited(false) }
-  const html = useMemo(() => renderEnquiryEmail(c, t, subject, message, { when, times, figure }).html, [c, t, subject, message, when, times, figure])
+  const html = useMemo(() => renderEnquiryEmail(c, t, subject, message, { when, times, figure, attached: files.length > 0 }).html, [c, t, subject, message, when, times, figure, files])
 
   return (
     <div className="ew-compose">
@@ -74,9 +75,11 @@ export function EmailComposer({ id, ctx, to, canSend, blocked, chooseKind, start
         {t.needs === 'times' ? (
           <div className="field"><label htmlFor="ew-times">Times you can offer (one per line)</label><textarea id="ew-times" className="input" rows={3} value={times} onChange={(e) => setTimes(e.target.value)} placeholder={'Saturday 15 November, 11am\nMonday 17 November, 5.30pm'} /></div>
         ) : null}
+        {t.key === 'report' ? <p className="ew-report-note">This sends their personal report at its own private link. <a href={`/admin/booklet/${id}`} target="_blank" rel="noreferrer">Check the booklet first</a>; any changes you save there are what they’ll see. You’ll be alerted when they open it.</p> : null}
         <div className="field"><label htmlFor="ew-to">To</label><input id="ew-to" className="input" value={to ?? 'No email address'} readOnly /></div>
         <div className="field"><label htmlFor="ew-subject">Subject</label><input id="ew-subject" name="subject" className="input" value={subject} onChange={(e) => { setSubject(e.target.value); setEdited(true) }} /></div>
         <div className="field"><label htmlFor="ew-message">Message</label><textarea id="ew-message" name="message" className="input" rows={10} value={message} onChange={(e) => { setMessage(e.target.value); setEdited(true) }} /></div>
+<div className="field"><label htmlFor="ew-files">Attach files <span className="hint">(optional, e.g. the booklet saved as a PDF; up to 15 MB)</span></label><input id="ew-files" name="attachment" type="file" multiple accept="application/pdf,.pdf,image/jpeg,image/png" className="input" onChange={(e) => setFiles([...(e.target.files ?? [])].map((f) => f.name))} />{files.length ? <small className="ew-files">Attached: {files.join(', ')}</small> : null}</div>
         {edited ? <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEdited(false)}>Go back to the standard wording</button> : null}
 
         {state.error ? <div className="notice err">{state.error}</div> : null}

@@ -282,3 +282,21 @@
 .bk-promise span { font-family: var(--serif); font-size: 11.5pt; line-height: 1.3; color: var(--ink); padding: 0 4mm; }
 .bk-promise span:first-child { padding-left: 0; }
 .bk-promise span + span { border-left: 1px solid #e3dcc6; }
+
+/* The report at its private link */
+.bk-report { background: #5f5d57; min-height: 100vh; }
+.bk-report-bar { position: sticky; top: 0; z-index: 10; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 20px; background: #23211a; color: #fff; font-family: 'Helvetica Neue', Arial, sans-serif; }
+.bk-report-bar b { display: block; letter-spacing: .14em; text-transform: uppercase; font-size: 13px; }
+.bk-report-bar span { font-size: 13px; color: #cfc9b6; }
+.bk-report-bar .acts { display: flex; gap: 10px; align-items: center; }
+.bk-report-bar .call { color: #e9d7a6; text-decoration: none; font-size: 14px; }
+.bk-report-bar button { background: #c4972f; color: #fff; border: 0; border-radius: 999px; padding: 10px 18px; font-weight: 700; font-size: 14px; cursor: pointer; }
+.bk-report-tip { text-align: center; color: #dcd7c8; font: 12px 'Helvetica Neue', Arial, sans-serif; margin: 10px 16px 0; }
+@media (max-width: 760px) { .bk-report .bk-stage .bk-page { zoom: 0.46; } .bk-report-bar { flex-wrap: wrap; } }
+@media (min-width: 761px) and (max-width: 1100px) { .bk-report .bk-stage .bk-page { zoom: 0.8; } }
+@media print { .bk-report { background: none; } .bk-report-bar, .bk-report-tip { display: none !important; } }
+
+.bk-share { margin-top: 12px; padding: 10px 12px; border: 1px solid #e7e3d6; border-radius: 10px; display: grid; gap: 3px; font-size: 12.5px; }
+.bk-share b { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: #a47b1d; }
+.bk-share a { color: #23211a; word-break: break-all; }
+.bk-share span { color: #59554a; }

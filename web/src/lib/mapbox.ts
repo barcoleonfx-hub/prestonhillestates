@@ -175,3 +175,13 @@ export async function drivingTimes(home: LatLon): Promise<{ name: string; minute
     return DRIVE_TO.map((d, i) => ({ name: d.name, minutes: Math.max(1, Math.round((body.durations![0][i + 1] ?? -60) / 60)) })).filter((d) => d.minutes > 0)
   })
 }
+
+/** An aerial photo of a home (satellite with streets), fetched by the server, for emails: email apps can't use our token. */
+export async function aerialPhoto(home: LatLon, w = 600, h = 340): Promise<{ body: ArrayBuffer; type: string } | null> {
+  const t = mapboxToken()
+  if (!t) return null
+  const at = `${home.lon.toFixed(5)},${home.lat.toFixed(5)}`
+  const res = await fetch(`https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/static/pin-l-home+c4972f(${at})/${at},17.3/${w}x${h}@2x?access_token=${t}`, { headers: headers(), signal: AbortSignal.timeout(10_000) })
+  if (!res.ok) throw new Error(`Mapbox photo answered ${res.status}`)
+  return { body: await res.arrayBuffer(), type: res.headers.get('content-type') ?? 'image/jpeg' }
+}

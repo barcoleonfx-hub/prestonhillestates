@@ -10,6 +10,7 @@ import { emailProperty, knownBase } from './property-email-data'
 import { googleSummary, reviewsFor } from './reviews-data'
 import type { Review } from './reviews'
 import { salesNear } from './sold-prices'
+import { shareFor } from './booklet-share'
 import { figureText, homeFrom, parseSaved } from './valuation-check'
 
 const PHONE = '020 8904 9005'
@@ -81,6 +82,11 @@ export async function enquiryWorkspace(id: string, me: { name: string }) {
     base, sender: { name: me.name, phone: PHONE, email: box?.user ?? 'info@prestonhillestates.com' },
     // A real five-star Google review (short enough to read in an email), with the honest overall rating.
     brand: { rating: google.rating, count: google.count, reviewsUrl: google.url, sales: quote(salesReviews), lettings: quote(lettingsReviews) },
+  }
+  // Their personal property report (the valuation booklet at its private link), for the first email.
+  if (valuation) {
+    const token = await shareFor(e.id).catch(() => null)
+    if (token) ctx.report = { url: `${base}/report/${token}`, image: `${base}/report/${token}/photo` }
   }
   // What staff settled on in the valuation check, for the "Your valuation" email.
   const saved = parseSaved(e.valuation)

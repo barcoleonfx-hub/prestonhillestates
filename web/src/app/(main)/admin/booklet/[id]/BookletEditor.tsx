@@ -61,6 +61,13 @@ export function BookletEditor({ data, back }: { data: BookletInput; back: { href
         {data.area.pending ? <p className="bk-status">Looking up schools, shops and parks near {data.area.postcode ?? 'this postcode'}… This page updates by itself (it’s only slow the first time).</p>
           : data.area.source === 'stations only' && data.area.home ? <p className="bk-status warn">Only stations could be found near {data.area.postcode ?? 'this postcode'}: OpenStreetMap didn’t answer ({data.area.error}). <button type="button" className="btn btn-ghost btn-sm" onClick={() => router.refresh()}>Try again</button></p> : null}
         <p className="bk-help small">When printing, choose A4, and turn on “Background graphics”.</p>
+        {data.share ? (
+          <div className="bk-share">
+            <b>Their private link</b>
+            <a href={data.share.url} target="_blank" rel="noreferrer">{data.share.url.replace(/^https?:\/\//, '')}</a>
+            <span>{data.share.views ? `Opened ${data.share.views} time${data.share.views === 1 ? '' : 's'}, last ${new Date(data.share.lastViewAt!).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/London' })}` : 'Not opened yet'}. Send it with the “Their property report” email on the enquiry.</span>
+          </div>
+        ) : null}
         <p className={`bk-help small${data.area.mapToken ? '' : ' bk-warn'}`}>{data.area.mapToken
           ? `Mapbox connected: ${data.area.approx ? 'pin on the postcode (the exact address wasn’t found)' : 'pin on the house itself'}${data.area.walked ? ', walking times along streets' : ''}.`
           : `Mapbox not connected: ${data.area.mapboxWhy || 'no token found'}. Using OpenStreetMap’s map.`}</p>
