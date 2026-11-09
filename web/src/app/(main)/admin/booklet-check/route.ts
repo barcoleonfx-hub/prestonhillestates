@@ -1,6 +1,7 @@
 import { currentAdmin } from '@/lib/auth'
 import { placesNear } from '@/lib/area-facts'
 import { areaPlacesStatus } from '@/lib/area-places'
+import { geocodeHome, mapboxToken, walkingTimes } from '@/lib/mapbox'
 import { osgbToLatLon } from '@/lib/geo'
 import { epcConfigured, epcHistory, parseHomeAddress, saleHistory } from '@/lib/home-history'
 import { positionOf } from '@/lib/postcode-geo'
@@ -27,8 +28,14 @@ export async function GET(req: Request) {
     home ? epcHistory(postcode, home) : Promise.resolve(null),
   ])
   const ourCopy = await areaPlacesStatus().catch((e) => String(e))
+  // Mapbox: is the token there, does it find the exact house, and does it give walking times?
+  const tok = mapboxToken()
+  const exact = tok && address ? await geocodeHome(address.replace(/,?\s*$/, ''), postcode).catch((e) => `error: ${String((e as Error).message ?? e)}`) : null
+  const from = typeof exact === 'object' && exact ? exact : at
+  const walk = tok && from && places?.places.length ? await walkingTimes(from, places.places.slice(0, 3)).catch((e) => `error: ${String((e as Error).message ?? e)}`) : null
+  const mapbox = tok ? { token: `${tok.slice(0, 6)}…`, exactHouse: exact ?? (address ? 'not found in this postcode (the postcode centre is used)' : 'add &address=… to test'), walkingSample: walk } : 'no Mapbox token found (MAPBOX_TOKEN environment variable or secret file)'
   return Response.json({
-    postcode, at, address: home, ourCopy,
+    postcode, at, address: home, mapbox, ourCopy,
     places: places && { source: places.source, error: places.error, stillLooking: places.pending, found: places.places.map((p) => `${p.detail}: ${p.name}, about ${p.minutes} min walk`) },
     sales: sales ?? 'add &address=… (house number and street) to look up its sales',
     epc: epcConfigured() ? epc : 'no EPC key set (EPC_API_EMAIL and EPC_API_KEY)',

@@ -16,6 +16,7 @@ import { osgbToLatLon } from './geo'
 import { demandNear, epcConfigured, epcHistory, ourHomesNear, parseHomeAddress, saleHistory, streetRecord } from './home-history'
 import { cached } from './lookup-cache'
 import { positionOf } from './postcode-geo'
+import { geocodeHome, mapboxToken, walkingTimes } from './mapbox'
 import type { BookletArea, BookletStory } from './booklet'
 import { figureText, homeFrom } from './valuation-check'
 import { rentCheck } from './valuation-check-data'
@@ -62,9 +63,12 @@ const TYPE_WORD: Record<string, string> = { F: 'Flat or maisonette', T: 'Terrace
 /** Where the home is, what's around it, and its own story. Every part is optional: what can't be found is left out. */
 async function areaAndStory(postcode: string | null, address: string | null, rent: boolean, home: { type: string | null; typeLabel: string | null; beds: number | null }): Promise<{ area: BookletArea; story: BookletStory }> {
   const empty: BookletStory = { sales: [], epcs: [], epcKey: epcConfigured(), street: null, demand: null, ours: [], council: null, facts: [], errors: [] }
-  if (!postcode) return { area: { home: null, postcode: null, approx: true, places: [], source: 'none', error: 'no postcode', pending: false }, story: empty }
+  if (!postcode) return { area: { home: null, postcode: null, approx: true, walked: false, mapToken: mapboxToken(), places: [], source: 'none', error: 'no postcode', pending: false }, story: empty }
   const pos = await positionOf(postcode).catch(() => null)
-  const at = pos ? osgbToLatLon(pos.e, pos.n) : null
+  const pcAt = pos ? osgbToLatLon(pos.e, pos.n) : null
+  // The house itself, if Mapbox finds its exact address in this postcode; otherwise the postcode's centre.
+  const exact = address ? await geocodeHome(address, postcode).catch(() => null) : null
+  const at = exact ?? pcAt
   const addr = parseHomeAddress(address)
   const [places, sales, epcs, street, demand, ours, council] = await Promise.all([
     at ? placesNear(postcode, at).catch((e) => ({ places: [], source: 'none', error: String(e), pending: false })) : Promise.resolve({ places: [], source: 'none', error: 'postcode not found on the map', pending: false }),
@@ -75,6 +79,15 @@ async function areaAndStory(postcode: string | null, address: string | null, ren
     at ? ourHomesNear(at, rent).catch(() => []) : Promise.resolve([]),
     councilOf(postcode).catch(() => null),
   ])
+  // Real walking times along streets (Mapbox), in place of the estimates from straight-line distance.
+  let walked = false
+  if (at && places.places.length) {
+    const times = await walkingTimes(at, places.places).catch(() => null)
+    if (times) {
+      places.places = places.places.map((p, i) => (times[i] && times[i].minutes > 0 ? { ...p, minutes: times[i].minutes, metres: times[i].metres > 0 ? times[i].metres : p.metres } : p))
+      walked = times.some((x) => x.minutes > 0)
+    }
+  }
   const latestEpc = epcs.certs[epcs.certs.length - 1]
   const tenure = [...sales.sales].reverse().find((s) => s.tenure)?.tenure ?? null
   const facts = [
@@ -86,7 +99,7 @@ async function areaAndStory(postcode: string | null, address: string | null, ren
     { label: 'Council', value: council?.name ?? '' },
   ].filter((f) => f.value)
   return {
-    area: { home: at, postcode, approx: true, places: places.places, source: places.source, error: places.error, pending: places.pending },
+    area: { home: at, postcode, approx: !exact, walked, mapToken: mapboxToken(), places: places.places, source: places.source, error: places.error, pending: places.pending },
     story: {
       sales: sales.sales, epcs: epcs.certs, epcKey: epcConfigured(),
       street: street && addr?.street ? { name: addr.street.toLowerCase().replace(/\b([a-z])/g, (c) => c.toUpperCase()), ...street } : null,

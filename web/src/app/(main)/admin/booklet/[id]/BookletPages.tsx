@@ -152,7 +152,7 @@ export function BookletPages({ data, f }: { data: BookletInput; f: BookletFields
           <div className="bk-in">
             <div className="bk-kicker">{rent ? 'What tenants will love' : 'What buyers will love'}</div>
             <h2>{rent ? 'What tenants will love' : 'What buyers will love'}<br /><em>about where you live.</em></h2>
-            {data.area.home && places.length ? <div className="bk-mapwrap"><BookletMap home={data.area.home} pins={places.map((p, i) => ({ n: i + 1, at: p, kind: p.kind }))} /></div> : null}
+            {data.area.home && places.length ? <div className="bk-mapwrap"><BookletMap home={data.area.home} mapToken={data.area.mapToken} pins={places.map((p, i) => ({ n: i + 1, at: p, kind: p.kind }))} /></div> : null}
             {places.length ? (
               <ol className="bk-places">
                 {places.map((p, i) => (
@@ -163,7 +163,7 @@ export function BookletPages({ data, f }: { data: BookletInput; f: BookletFields
             {data.story.facts.length ? (
               <div className="bk-facts">{data.story.facts.map((x) => <div key={x.label}><b>{x.label}</b><span>{x.value}</span></div>)}</div>
             ) : null}
-            <p className="bk-src">These are the things we’ll lead with when we market your {rent ? 'property' : 'home'}. Walking times are approximate, measured from your postcode. Being near a school doesn’t guarantee a place. Places from OpenStreetMap.</p>
+            <p className="bk-src">These are the things we’ll lead with when we market your {rent ? 'property' : 'home'}. {data.area.walked ? 'Walking times along streets, from your front door' : 'Walking times are approximate, measured from your postcode'}{data.area.walked && data.area.approx ? ' (from your postcode)' : ''}. Being near a school doesn’t guarantee a place. Places from OpenStreetMap{data.area.mapToken ? `; map${data.area.walked ? ' and walking routes' : ''} from Mapbox` : ''}.</p>
           </div>
           <Foot n={4} />
         </section>

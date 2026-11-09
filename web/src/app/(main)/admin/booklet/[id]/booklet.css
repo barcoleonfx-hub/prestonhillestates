@@ -227,3 +227,5 @@
 .bk-status { margin: 10px 0 0; padding: 10px 12px; border-radius: 10px; background: #f6efd9; color: #6b5313; font-size: 13px; line-height: 1.45; }
 .bk-status.warn { background: #fbeaea; color: #8a2b22; }
 .bk-status .btn { margin-left: 4px; }
+
+.bk-map-mapbox img { display: block; width: 100%; height: 100%; object-fit: cover; }
