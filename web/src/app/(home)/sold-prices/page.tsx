@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { PageChrome } from '../PageChrome'
+import { LocalIntel, ValueBanner } from '@/components/LocalIntel'
 import { SoldCredit, SoldList, SoldStats, money } from '@/components/SoldList'
 import { PATCH, patchSummary, salesNear } from '@/lib/sold-prices'
 import '@/components/sold-prices.css'
@@ -85,6 +86,8 @@ export default async function SoldPricesPage({ searchParams }: { searchParams: P
             </div>
           ) : null}
         </section>
+        {valid ? <LocalIntel districts={[raw.split(' ')[0]]} place={raw.split(' ')[0]} /> : null}
+        <ValueBanner />
       </main>
     </PageChrome>
   )

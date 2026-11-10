@@ -12,6 +12,8 @@ import { embedUrl } from '@/lib/video'
 import { Gallery } from './Gallery'
 import { EnquiryForm } from './EnquiryForm'
 import { MortgageBox, PropertyNote } from './MoreTools'
+import { LocalIntel, ValueBanner } from '@/components/LocalIntel'
+import { districtOf } from '@/lib/areas'
 import { listingArea } from '@/lib/listing-area'
 import { distanceText } from '@/lib/geo'
 import type { PlaceKind } from '@/lib/area-facts'
@@ -329,6 +331,8 @@ export default async function PropertyPage({ params }: { params: Params }) {
           </div>
         </aside>
       </div>
+      {districtOf(p.postcode) ? <LocalIntel districts={[districtOf(p.postcode)!]} place={districtOf(p.postcode)!} rent={isLet} boxed /> : null}
+      <ValueBanner rent={isLet} boxed />
       <Reviews site category={isLet ? 'lettings' : 'sales'} title={isLet ? <>What tenants and landlords <em>say</em></> : <>What our clients <em>say</em></>} />
     </div>
   )
