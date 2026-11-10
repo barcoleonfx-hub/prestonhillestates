@@ -89,7 +89,7 @@ html = swap(html, '<a class="link" href="#">Letting with us', '<a class="link" h
 html = swap(html, '<a class="link" href="#">Management service', '<a class="link" href="/landlords#included">Management service')
 html = swap(html, '<li><a href="/valuation?intent=letting">Landlord valuation</a></li>', '<li><a href="/landlords">Letting &amp; management</a></li>\n        <li><a href="/landlords#estimate">Rent estimate</a></li>')
 html = swap(html, '<li><a href="#contact">Contact</a></li>', '<li><a href="/fees">Fees &amp; legal</a></li>\n        <li><a href="#contact">Contact</a></li>')
-html = swap(html, /<a class="area-chip" href="#"><span class="nm">([^<]+)<\/span>/, (_m, nm) => `<a class="area-chip" href="/properties?q=${encodeURIComponent(nm)}"><span class="nm">${nm}</span>`, 8)
+// The area chips link to each area's page (set in the concept file: /areas/kenton etc.).
 html = swap(html, '<li><a href="#listings">Properties for sale</a></li>', '<li><a href="/properties?channel=sale">Properties for sale</a></li>')
 html = swap(html, '<li><a href="#listings">Properties to let</a></li>', '<li><a href="/properties?channel=let">Properties to let</a></li>\n        <li><a href="/renting">Register as a tenant</a></li>')
 html = swap(html, '<span>Design concept · sample data, not the live site</span>', '<span>Independent estate agents in Harrow since 2004</span>')

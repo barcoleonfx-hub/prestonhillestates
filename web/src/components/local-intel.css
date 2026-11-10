@@ -1,0 +1,72 @@
+/* "HA3 at a glance" and the valuation banner. Self-contained: used on pages in both of the site's designs. */
+.li, .li-banner { --li-gold: #C4972F; --li-gold-deep: #A47B1D; --li-ink: #23211A; --li-soft: #5C584A; --li-faint: #8E8975; --li-line: #E7E1CF; --li-cream: #FBF8EE;
+  --li-serif: var(--serif, 'Fraunces', Georgia, serif);
+  font-family: "Helvetica Neue", Helvetica, Arial, -apple-system, "Segoe UI", sans-serif; color: var(--li-ink); }
+.li *, .li-banner * { box-sizing: border-box; }
+.li-inner { width: min(1200px, calc(100% - 40px)); margin: 0 auto; }
+
+.li { background: var(--li-cream); border-top: 1px solid var(--li-line); border-bottom: 1px solid var(--li-line); padding: clamp(48px, 7vw, 80px) 0; margin-top: clamp(40px, 6vw, 64px); }
+.li-label { margin: 0; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: var(--li-gold-deep); }
+.li h2 { margin: 10px 0 0; font-family: var(--li-serif); font-weight: 420; font-size: clamp(1.9rem, 3.6vw, 2.8rem); line-height: 1.08; letter-spacing: -0.015em; }
+.li-sub { margin: 10px 0 0; color: var(--li-soft); max-width: 62ch; }
+.li-cards { margin-top: 28px; display: grid; gap: 18px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.li-cards.n2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.li-cards.n1 { grid-template-columns: minmax(0, 420px); }
+@media (max-width: 900px) { .li-cards, .li-cards.n2 { grid-template-columns: 1fr; } }
+
+.li-card { background: #fff; border: 1px solid var(--li-line); border-radius: 20px; padding: 26px 24px 22px; display: flex; flex-direction: column; align-items: center; text-align: center; }
+.li-card h3 { margin: 0; font-family: var(--li-serif); font-weight: 440; font-size: 1.3rem; line-height: 1.25; letter-spacing: -0.005em; max-width: 24ch; }
+.li-foot { margin: auto 0 0; padding-top: 16px; font-size: 0.76rem; line-height: 1.45; color: var(--li-faint); }
+
+/* people looking */
+.li-ringwrap { position: relative; width: 190px; height: 190px; margin: 20px 0 14px; }
+.li-ring { width: 100%; height: 100%; display: block; }
+.li-ringmid { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+.li-ringmid span { font-size: 0.82rem; color: var(--li-soft); }
+.li-ringmid b { font-family: var(--li-serif); font-weight: 460; font-size: 2.3rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.li-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 18px; }
+.li-legend li { display: grid; grid-template-columns: auto auto; align-items: center; column-gap: 6px; font-size: 0.82rem; color: var(--li-soft); }
+.li-legend i { width: 10px; height: 10px; border-radius: 50%; }
+.li-legend b { grid-column: 1 / -1; font-size: 1.05rem; color: var(--li-ink); font-variant-numeric: tabular-nums; }
+
+/* market */
+.li-big { margin-top: 18px; display: grid; gap: 4px; justify-items: center; }
+.li-big span { font-size: 0.82rem; color: var(--li-soft); }
+.li-big b { font-family: var(--li-serif); font-weight: 460; font-size: 2.5rem; line-height: 1.05; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.li-big em { font-style: normal; font-size: 0.86rem; font-weight: 700; padding: 4px 11px; border-radius: 999px; }
+.li-big em.up { background: #E7F3EA; color: #1E6B3A; }
+.li-big em.down { background: #F7E7E2; color: #9A3B24; }
+.li-big small { font-size: 0.84rem; color: var(--li-soft); }
+.li-bars { list-style: none; margin: 18px 0 0; padding: 0; width: 100%; display: grid; gap: 9px; text-align: left; }
+.li-bars li { display: grid; grid-template-columns: 9.5em 1fr auto; align-items: center; gap: 10px; font-size: 0.82rem; color: var(--li-soft); }
+.li-bar { height: 10px; border-radius: 999px; background: #F1ECDD; overflow: hidden; }
+.li-bar i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #E6CF95, var(--li-gold)); }
+.li-bars b { color: var(--li-ink); font-variant-numeric: tabular-nums; min-width: 4em; text-align: right; }
+
+/* valuation */
+.li-face { width: 112px; height: 112px; border-radius: 50%; object-fit: cover; object-position: 50% 18%; margin-top: 22px; box-shadow: 0 0 0 4px #fff, 0 0 0 6px var(--li-gold); }
+.li-who { margin: 16px 0 0; display: grid; gap: 2px; }
+.li-who b { font-size: 1.02rem; }
+.li-who span { font-size: 0.84rem; color: var(--li-soft); }
+.li-pitch { margin: 12px 0 0; font-size: 0.92rem; color: var(--li-soft); max-width: 30ch; }
+.li-btn { display: inline-flex; align-items: center; justify-content: center; margin-top: 20px; padding: 13px 26px; border-radius: 999px; background: var(--li-gold); color: #FFFDF6; font-weight: 700; font-size: 0.95rem; text-decoration: none; transition: background 0.2s ease, transform 0.2s ease; }
+.li-btn:hover { background: var(--li-gold-deep); transform: translateY(-1px); }
+.li-val .li-btn { margin-top: auto; }
+.li-val .li-pitch { margin-bottom: 20px; }
+.li-credit { margin: 18px 0 0; font-size: 0.72rem; color: var(--li-faint); }
+
+/* the banner */
+.li-banner { background: var(--li-ink); color: #F6F2E4; padding: clamp(52px, 7vw, 84px) 0; text-align: center; position: relative; overflow: hidden; }
+.li-banner::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse 60% 80% at 50% 0%, rgba(196,151,47,0.18), transparent 70%); pointer-events: none; }
+.li-banner .li-inner { position: relative; }
+.li-banner h2 { margin: 0; font-family: var(--li-serif); font-weight: 400; font-size: clamp(1.9rem, 4vw, 3rem); line-height: 1.1; letter-spacing: -0.015em; color: #FBF6E6; }
+.li-banner h2 em { font-style: italic; font-weight: 340; color: #E7C273; }
+.li-banner p { margin: 16px auto 0; max-width: 56ch; color: #CFC9B5; }
+.li-banner p a { color: #E7C273; font-weight: 700; text-decoration: none; white-space: nowrap; }
+.li-banner .li-btn { margin-top: 26px; }
+
+/* inside a page's own column (property pages): rounded panels, not full-width bands */
+.li.boxed, .li-banner.boxed { border-radius: 28px; padding-left: clamp(18px, 3vw, 36px); padding-right: clamp(18px, 3vw, 36px); }
+.li.boxed { border: 1px solid var(--li-line); }
+.li-banner.boxed { margin-top: 18px; }
+.li.boxed .li-inner, .li-banner.boxed .li-inner { width: 100%; }
