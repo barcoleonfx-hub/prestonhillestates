@@ -236,12 +236,17 @@
   @media (max-width: 900px) { .market .mk-grid { grid-template-columns: 1fr; } .market .mk-areas { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
   /* accreditation band */
-  .accredband { margin-top: clamp(56px, 9vh, 84px); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--surface); }
+  .accredband { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--surface); }
   .accredband .row { display: flex; align-items: center; justify-content: center; gap: 14px 30px; flex-wrap: wrap; padding-top: 20px; padding-bottom: 20px; }
   .accredband .lead { font-size: 0.64rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold-deep); font-weight: 700; }
   .accredband .t { font-size: 0.74rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); font-weight: 600; }
   .accredband .lead + .t::before { content: none; }
-  .accredband a.acc { text-decoration: none; transition: color 0.2s ease; }
+  .accredband a.acc { text-decoration: none; transition: color 0.2s ease; display: inline-flex; align-items: center; gap: 7px; }
+  .accredband .hint { font-size: 0.72rem; color: var(--faint); }
+  .accredband a.acc .dl, .accred a.acc .dl { font-size: 0.8rem; font-weight: 700; color: var(--gold-deep); transition: transform 0.2s ease; }
+  .accredband a.acc:hover .dl, .accred a.acc:hover .dl { transform: translateY(2px); }
+  .accred a.acc { display: inline-flex; align-items: center; gap: 6px; }
+  .accred a.acc .dl { color: var(--gold); }
   .accredband a.acc:hover { color: var(--gold-deep); }
   .accredband a.acc img { height: 32px; width: auto; display: block; }
   .accredband a.acc img[alt="myDeposits"] { height: 46px; }
@@ -655,24 +660,6 @@
     </div>
   </section>
 
-  <!-- ————— accreditation band ————— -->
-  <div class="accredband" aria-label="Accreditations">
-    <div class="wide row">
-      <span class="grp">
-      <span class="lead">Regulated &amp; accredited</span>
-      <a class="t acc" data-badge="tpo" href="https://www.tpos.co.uk/" target="_blank" rel="noopener noreferrer" aria-label="The Property Ombudsman (opens in a new tab)">The Property Ombudsman</a>
-      <a class="t acc" data-badge="safeagent" href="https://www.safeagents.co.uk/" target="_blank" rel="noopener noreferrer" aria-label="safeagent (opens in a new tab)">safeagent</a>
-      <a class="t acc" data-badge="prs" href="https://www.theprs.co.uk/" target="_blank" rel="noopener noreferrer" aria-label="Property Redress Scheme (opens in a new tab)">PRS</a>
-      <a class="t acc" data-badge="mydeposits" href="https://www.mydeposits.co.uk/" target="_blank" rel="noopener noreferrer" aria-label="myDeposits (opens in a new tab)">myDeposits</a>
-      </span>
-      <span class="grp">
-      <span class="lead">Find us on</span>
-      <a class="portal" data-badge="zoopla" href="https://www.zoopla.co.uk/find-agents/branch/preston-hill-estates-harrow-middlesex-24845/" target="_blank" rel="noopener noreferrer" aria-label="Preston Hill Estates on Zoopla (opens in a new tab)">Zoopla <span class="go" aria-hidden="true">↗</span></a>
-      <a class="portal" data-badge="onthemarket" href="https://www.onthemarket.com/agents/branch/preston-hill-estates-harrow/" target="_blank" rel="noopener noreferrer" aria-label="Preston Hill Estates on OnTheMarket (opens in a new tab)">OnTheMarket <span class="go" aria-hidden="true">↗</span></a>
-      </span>
-    </div>
-  </div>
-
   <!-- ————— local market (sold prices from HM Land Registry, filled in by the live site) ————— -->
   <!--MARKET-->
 
@@ -854,6 +841,24 @@
       <div class="attr label rv d1">Client review · from the current site</div>
     </div>
   </section>
+  <!-- ————— accreditation band ————— -->
+  <div class="accredband" aria-label="Accreditations">
+    <div class="wide row">
+      <span class="grp">
+      <span class="lead">Regulated &amp; accredited</span>
+      <span class="hint">Click a logo to download our certificate</span>
+      <a class="t acc" data-badge="tpo" href="/certificates/property-ombudsman-certificate-D04905.pdf" download title="The Property Ombudsman: download our certificate (PDF)" aria-label="The Property Ombudsman: download our certificate (PDF)">The Property Ombudsman<span class="dl" aria-hidden="true">↓</span></a>
+      <a class="t acc" data-badge="safeagent" href="/certificates/safeagent-certificate-A4118.pdf" download title="safeagent: download our certificate (PDF)" aria-label="safeagent: download our certificate (PDF)">safeagent<span class="dl" aria-hidden="true">↓</span></a>
+      <a class="t acc" data-badge="prs" href="/certificates/property-redress-scheme-certificate-PRS041838.pdf" download title="Property Redress Scheme: download our certificate (PDF)" aria-label="Property Redress Scheme: download our certificate (PDF)">PRS<span class="dl" aria-hidden="true">↓</span></a>
+      <a class="t acc" data-badge="mydeposits" href="/certificates/mydeposits-certificate.pdf" download title="myDeposits: download our certificate (PDF)" aria-label="myDeposits: download our certificate (PDF)">myDeposits<span class="dl" aria-hidden="true">↓</span></a>
+      </span>
+      <span class="grp">
+      <span class="lead">Find us on</span>
+      <a class="portal" data-badge="zoopla" href="https://www.zoopla.co.uk/find-agents/branch/preston-hill-estates-harrow-middlesex-24845/" target="_blank" rel="noopener noreferrer" aria-label="Preston Hill Estates on Zoopla (opens in a new tab)">Zoopla <span class="go" aria-hidden="true">↗</span></a>
+      <a class="portal" data-badge="onthemarket" href="https://www.onthemarket.com/agents/branch/preston-hill-estates-harrow/" target="_blank" rel="noopener noreferrer" aria-label="Preston Hill Estates on OnTheMarket (opens in a new tab)">OnTheMarket <span class="go" aria-hidden="true">↗</span></a>
+      </span>
+    </div>
+  </div>
 </main>
 
 <footer class="site" id="contact">
@@ -904,7 +909,7 @@
     <div>
       <h4>Accredited</h4>
       <div class="accred">
-        <a class="acc" data-badge="tpo" href="https://www.tpos.co.uk/" target="_blank" rel="noopener noreferrer" aria-label="The Property Ombudsman (opens in a new tab)">The Property Ombudsman</a><a class="acc" data-badge="safeagent" href="https://www.safeagents.co.uk/" target="_blank" rel="noopener noreferrer" aria-label="safeagent (opens in a new tab)">safeagent</a><a class="acc" data-badge="prs" href="https://www.theprs.co.uk/" target="_blank" rel="noopener noreferrer" aria-label="Property Redress Scheme (opens in a new tab)">PRS</a><a class="acc" data-badge="mydeposits" href="https://www.mydeposits.co.uk/" target="_blank" rel="noopener noreferrer" aria-label="myDeposits (opens in a new tab)">myDeposits</a>
+        <a class="acc" data-badge="tpo" href="/certificates/property-ombudsman-certificate-D04905.pdf" download title="The Property Ombudsman: download our certificate (PDF)" aria-label="The Property Ombudsman: download our certificate (PDF)">The Property Ombudsman<span class="dl" aria-hidden="true">↓</span></a><a class="acc" data-badge="safeagent" href="/certificates/safeagent-certificate-A4118.pdf" download title="safeagent: download our certificate (PDF)" aria-label="safeagent: download our certificate (PDF)">safeagent<span class="dl" aria-hidden="true">↓</span></a><a class="acc" data-badge="prs" href="/certificates/property-redress-scheme-certificate-PRS041838.pdf" download title="Property Redress Scheme: download our certificate (PDF)" aria-label="Property Redress Scheme: download our certificate (PDF)">PRS<span class="dl" aria-hidden="true">↓</span></a><a class="acc" data-badge="mydeposits" href="/certificates/mydeposits-certificate.pdf" download title="myDeposits: download our certificate (PDF)" aria-label="myDeposits: download our certificate (PDF)">myDeposits<span class="dl" aria-hidden="true">↓</span></a>
         <span class="find">Find us on</span><a class="portal" data-badge="zoopla" href="https://www.zoopla.co.uk/find-agents/branch/preston-hill-estates-harrow-middlesex-24845/" target="_blank" rel="noopener noreferrer">Zoopla ↗</a><a class="portal" data-badge="onthemarket" href="https://www.onthemarket.com/agents/branch/preston-hill-estates-harrow/" target="_blank" rel="noopener noreferrer">OnTheMarket ↗</a>
       </div>
     </div>

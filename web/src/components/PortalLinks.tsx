@@ -27,14 +27,14 @@ export function PortalLinks({ tone = 'light' }: { tone?: 'light' | 'dark' }) {
   )
 }
 
-/** The schemes the branch belongs to, linked to each scheme's site; logos replace the names once added. */
+/** The schemes the branch belongs to; each one downloads our certificate. Logos replace the names once added. */
 export function AccreditationLinks() {
   return (
     <div className="acc-links">
       {ACCREDITATIONS.map((a) => {
         const logo = logoFor('accreditations', a.key)
         return (
-          <a key={a.key} href={a.url} target="_blank" rel="noopener noreferrer" aria-label={`${a.name} (opens in a new tab)`}>
+          <a key={a.key} href={a.cert} download title={`${a.name}: download our certificate (PDF)`} aria-label={`${a.name}: download our certificate (PDF)`}>
             {logo ? <img src={logo} alt={a.name} /> : a.name}
           </a>
         )

@@ -236,12 +236,17 @@
   @media (max-width: 900px) { .market .mk-grid { grid-template-columns: 1fr; } .market .mk-areas { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
   /* accreditation band */
-  .accredband { margin-top: clamp(56px, 9vh, 84px); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--surface); }
+  .accredband { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--surface); }
   .accredband .row { display: flex; align-items: center; justify-content: center; gap: 14px 30px; flex-wrap: wrap; padding-top: 20px; padding-bottom: 20px; }
   .accredband .lead { font-size: 0.64rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold-deep); font-weight: 700; }
   .accredband .t { font-size: 0.74rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); font-weight: 600; }
   .accredband .lead + .t::before { content: none; }
-  .accredband a.acc { text-decoration: none; transition: color 0.2s ease; }
+  .accredband a.acc { text-decoration: none; transition: color 0.2s ease; display: inline-flex; align-items: center; gap: 7px; }
+  .accredband .hint { font-size: 0.72rem; color: var(--faint); }
+  .accredband a.acc .dl, .accred a.acc .dl { font-size: 0.8rem; font-weight: 700; color: var(--gold-deep); transition: transform 0.2s ease; }
+  .accredband a.acc:hover .dl, .accred a.acc:hover .dl { transform: translateY(2px); }
+  .accred a.acc { display: inline-flex; align-items: center; gap: 6px; }
+  .accred a.acc .dl { color: var(--gold); }
   .accredband a.acc:hover { color: var(--gold-deep); }
   .accredband a.acc img { height: 32px; width: auto; display: block; }
   .accredband a.acc img[alt="myDeposits"] { height: 46px; }
