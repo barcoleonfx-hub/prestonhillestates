@@ -1,4 +1,5 @@
 import Script from 'next/script'
+import { ChatPrompt } from '@/components/ChatPrompt'
 import { listPublished, priceLabel, slugFor, displayAddressFor, statusLabel } from '@/lib/properties'
 import { labelFor, PROPERTY_TYPES } from '@/lib/options'
 import { MARKUP, SCRIPT } from './home-content'
@@ -96,6 +97,7 @@ export default async function HomePage() {
     <>
       <div style={{ display: 'contents' }} dangerouslySetInnerHTML={{ __html: html }} />
       <Script id="home-js" strategy="afterInteractive">{SCRIPT}</Script>
+      <ChatPrompt />
     </>
   )
 }
