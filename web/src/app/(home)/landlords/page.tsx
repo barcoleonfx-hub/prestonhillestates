@@ -3,6 +3,7 @@ import { LETTINGS, feeIncVat, feeText } from '@/lib/site'
 import { tenantDemand } from '@/lib/lettings'
 import { displayAddressFor, headlineFor, listPublished, priceLabel, slugFor } from '@/lib/properties'
 import { AccreditationBand } from '../AccreditationBand'
+import { ChatPrompt } from '@/components/ChatPrompt'
 import { PageChrome } from '../PageChrome'
 import { Reviews } from '../Reviews'
 import { RentEstimate } from './RentEstimate'
@@ -189,6 +190,7 @@ export default async function LandlordsPage() {
         <a className="btn gold" href="#estimate">Rent estimate</a>
         <a className="btn ghost" href="tel:+442089049005">Call us</a>
       </nav>
+      <ChatPrompt />
     </PageChrome>
   )
 }

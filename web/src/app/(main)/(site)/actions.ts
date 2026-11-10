@@ -4,7 +4,7 @@ import { instantEstimate, type InstantEstimate } from '@/lib/instant-estimate'
 
 import { and, eq } from 'drizzle-orm'
 import { db, ready } from '@/db/client'
-import { contacts, enquiries, properties } from '@/db/schema'
+import { contacts, enquiries, notifications, properties } from '@/db/schema'
 import { now, uid } from '@/lib/util'
 import { upsertContact } from '@/lib/contacts'
 
@@ -132,5 +132,48 @@ export async function registerBuyer(_prev: BuyerState, form: FormData): Promise<
     id: uid(), propertyId: null, kind: 'buyer', contactId, name, phone: phone || null, email: email || null,
     message: [summary, areas ? `Areas: ${areas}` : ''].filter(Boolean).join('\n') || null, createdAt: now(),
   })
+  return { ok: true }
+}
+
+export type ChatState = { ok?: boolean; error?: string; field?: string }
+
+const CHAT_GOALS = {
+  sell: { intent: 'selling', role: 'seller', says: 'wants to sell their home' },
+  let: { intent: 'letting', role: 'landlord', says: 'wants to let their property' },
+  manage: { intent: 'letting', role: 'landlord', says: 'wants their property managed' },
+} as const
+
+/**
+ * The website chat ("Selling, letting or management?"): a valuation request like the other forms, plus a
+ * portal alert so the branch sees it straight away.
+ */
+export async function sendChatLead(form: FormData): Promise<ChatState> {
+  if (String(form.get('hp_check') || '')) { console.warn('website chat dropped: anti-spam box was filled in'); return { ok: true } }
+  const goal = CHAT_GOALS[String(form.get('goal') || '') as keyof typeof CHAT_GOALS]
+  const name = String(form.get('name') || '').trim().slice(0, 120)
+  const phone = String(form.get('phone') || '').trim().slice(0, 40)
+  const postcode = String(form.get('postcode') || '').trim().toUpperCase().replace(/\s+/g, ' ').slice(0, 10)
+  const page = String(form.get('page') || '').trim().slice(0, 80)
+
+  if (!goal) return { error: 'Please choose selling, letting or management.' }
+  if (!/^[A-Z]{1,2}[0-9][A-Z0-9]? ?[0-9][A-Z]{2}$/.test(postcode)) return { error: 'Enter the full postcode of the property, e.g. HA3 0PS.', field: 'postcode' }
+  if (!name) return { error: 'Please tell us your name.', field: 'name' }
+  if (!/^[0-9+()\s-]{7,20}$/.test(phone)) return { error: phone ? 'That phone number doesn’t look right.' : 'Add a phone number so we can call you.', field: 'phone' }
+
+  const key = phone.replace(/\D/g, '')
+  const times = (recent.get(key) || []).filter((t) => t > Date.now() - 3600_000)
+  if (times.length >= 5) return { error: 'We’ve already received your request. The branch will be in touch shortly.' }
+  recent.set(key, [...times, Date.now()])
+
+  await ready()
+  const contactId = await upsertContact({ name, phone, role: goal.role, source: 'Our website', address: postcode }).catch(() => null)
+  const at = now()
+  await db.insert(enquiries).values({
+    id: uid(), propertyId: null, kind: 'valuation', name, phone, email: null, contactId, postcode, intent: goal.intent,
+    message: [`Website chat: ${goal.says}.`, page ? `Started on: ${page}` : ''].filter(Boolean).join('\n'), createdAt: at,
+  })
+  await db.insert(notifications).values({
+    id: uid(), kind: 'enquiry', appointmentId: null, title: `${name} ${goal.says}`, body: `From the website chat · ${postcode} · ${phone}`, createdBy: null, createdAt: at,
+  }).catch((e) => console.error('chat alert failed', e))
   return { ok: true }
 }

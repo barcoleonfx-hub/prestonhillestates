@@ -1,0 +1,91 @@
+/* The website chat ("Selling, letting or management?"). Self-contained: it sits on pages with different styles. */
+.phc { --phc-gold: #C4972F; --phc-gold-deep: #A47B1D; --phc-ink: #23211A; --phc-soft: #5C584A; --phc-cream: #FBF8EE; --phc-line: #E7E1CF;
+  position: fixed; right: 20px; bottom: 20px; z-index: 150; display: flex; flex-direction: column; align-items: flex-end; gap: 12px;
+  font-family: "Helvetica Neue", Helvetica, Arial, -apple-system, "Segoe UI", sans-serif; font-size: 15px; line-height: 1.45; color: var(--phc-ink);
+  pointer-events: none; }
+.phc > * { pointer-events: auto; }
+.phc *, .phc *::before, .phc *::after { box-sizing: border-box; }
+
+/* the round button */
+.phc-launch { width: 58px; height: 58px; border-radius: 50%; border: 0; cursor: pointer; display: grid; place-items: center;
+  background: var(--phc-ink); color: var(--phc-gold); box-shadow: 0 10px 30px -8px rgba(35,33,26,0.55), 0 0 0 3px rgba(196,151,47,0.35);
+  opacity: 0; transform: translateY(14px) scale(0.9); transition: opacity 0.35s ease, transform 0.35s ease, box-shadow 0.2s ease; }
+.phc-launch svg { width: 26px; height: 26px; }
+.phc-ready .phc-launch { opacity: 1; transform: none; }
+.phc-launch:hover { box-shadow: 0 12px 32px -8px rgba(35,33,26,0.6), 0 0 0 4px rgba(196,151,47,0.55); }
+.phc-launch:focus-visible, .phc button:focus-visible, .phc a:focus-visible, .phc input:focus-visible { outline: 2px solid var(--phc-gold); outline-offset: 2px; }
+
+/* the "Selling, letting or management?" prompt */
+.phc-teaser { position: relative; max-width: 290px; animation: phc-in 0.35s ease both; }
+.phc-teaser-body { display: block; width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer;
+  background: #fff; border: 1px solid var(--phc-line); border-radius: 18px 18px 4px 18px; padding: 14px 40px 14px 16px;
+  box-shadow: 0 18px 40px -18px rgba(35,33,26,0.45); }
+.phc-teaser-body b { display: block; font-family: 'Fraunces', Georgia, serif; font-weight: 500; font-size: 1.05rem; line-height: 1.3; letter-spacing: -0.005em; }
+.phc-teaser-body span { display: inline-block; margin-top: 8px; font-size: 0.82rem; font-weight: 700; color: var(--phc-gold-deep); }
+.phc-teaser-body span::after { content: ' →'; }
+.phc-teaser-x { position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; border-radius: 50%; border: 0; background: transparent; color: var(--phc-soft); cursor: pointer; display: grid; place-items: center; }
+.phc-teaser-x svg { width: 15px; height: 15px; }
+.phc-teaser-x:hover { background: var(--phc-cream); color: var(--phc-ink); }
+
+/* the chat window */
+.phc-panel { width: min(370px, calc(100vw - 32px)); height: min(560px, calc(100dvh - 40px)); display: flex; flex-direction: column;
+  background: var(--phc-cream); border: 1px solid var(--phc-line); border-radius: 22px; overflow: hidden;
+  box-shadow: 0 30px 70px -24px rgba(35,33,26,0.55); animation: phc-in 0.3s ease both; }
+.phc-head { display: flex; align-items: center; gap: 12px; padding: 14px 14px 14px 16px; background: var(--phc-ink); color: #F6F2E4; }
+.phc-avatar { flex: none; width: 40px; height: 40px; border-radius: 50%; background: rgba(196,151,47,0.14); display: grid; place-items: center; }
+.phc-avatar svg { width: 28px; height: 28px; }
+.phc-title { flex: 1; min-width: 0; display: grid; }
+.phc-title b { font-family: 'Fraunces', Georgia, serif; font-weight: 500; font-size: 1.05rem; letter-spacing: -0.005em; }
+.phc-title small { font-size: 0.74rem; color: #BDB7A1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.phc-x { flex: none; width: 36px; height: 36px; border-radius: 50%; border: 0; background: rgba(255,255,255,0.08); color: #F6F2E4; cursor: pointer; display: grid; place-items: center; }
+.phc-x:hover { background: rgba(255,255,255,0.16); }
+
+.phc-list { flex: 1; overflow-y: auto; padding: 18px 14px 10px; display: flex; flex-direction: column; gap: 8px; overscroll-behavior: contain; }
+.phc-msg { margin: 0; max-width: 85%; padding: 10px 14px; border-radius: 18px; animation: phc-pop 0.25s ease both; white-space: pre-wrap; overflow-wrap: anywhere; }
+.phc-bot { align-self: flex-start; background: #fff; border: 1px solid var(--phc-line); border-bottom-left-radius: 5px; }
+.phc-me { align-self: flex-end; background: var(--phc-ink); color: #F6F2E4; border-bottom-right-radius: 5px; }
+.phc-typing { display: inline-flex; gap: 4px; padding: 14px 16px; }
+.phc-typing i { width: 7px; height: 7px; border-radius: 50%; background: #B9B29C; animation: phc-dot 1s infinite ease-in-out; }
+.phc-typing i:nth-child(2) { animation-delay: 0.15s; } .phc-typing i:nth-child(3) { animation-delay: 0.3s; }
+
+.phc-choices { display: flex; flex-direction: column; align-items: flex-end; gap: 7px; margin-top: 4px; animation: phc-pop 0.25s ease both; }
+.phc-choices button, .phc-choices a { font: inherit; font-size: 0.92rem; font-weight: 700; color: var(--phc-ink); text-decoration: none; cursor: pointer;
+  background: #fff; border: 1.5px solid var(--phc-gold); border-radius: 999px; padding: 9px 16px; display: inline-flex; align-items: center; gap: 8px;
+  transition: background 0.15s ease, color 0.15s ease; }
+.phc-choices button:hover, .phc-choices a:hover { background: var(--phc-gold); color: #fff; }
+.phc-choices .phc-quiet { border-color: var(--phc-line); font-weight: 600; color: var(--phc-soft); }
+.phc-choices .phc-quiet:hover { background: var(--phc-line); color: var(--phc-ink); }
+.phc-choices .phc-wa { background: #1F8F4E; border-color: #1F8F4E; color: #fff; }
+.phc-choices .phc-wa:hover { background: #18773F; color: #fff; }
+
+.phc-form { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 12px 12px; border-top: 1px solid var(--phc-line); background: #fff; }
+.phc-form input:not(.phc-hp) { flex: 1; min-width: 0; font: inherit; font-size: 16px; color: var(--phc-ink); background: var(--phc-cream);
+  border: 1.5px solid var(--phc-line); border-radius: 999px; padding: 10px 16px; }
+.phc-form input:not(.phc-hp):focus { outline: none; border-color: var(--phc-gold); }
+.phc-form input[aria-invalid="true"] { border-color: #A8442E; }
+.phc-form button { flex: none; width: 44px; height: 44px; border-radius: 50%; border: 0; background: var(--phc-gold); color: #fff; cursor: pointer; display: grid; place-items: center; }
+.phc-form button:disabled { opacity: 0.5; cursor: default; }
+.phc-err { width: 100%; margin: 0 4px; font-size: 0.82rem; color: #A8442E; }
+.phc-hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+.phc-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.phc-foot { margin: 0; padding: 10px 14px 14px; text-align: center; border-top: 1px solid var(--phc-line); background: #fff; }
+.phc-foot a { display: inline-flex; align-items: center; gap: 7px; font-size: 0.86rem; font-weight: 700; color: #1F8F4E; text-decoration: none; }
+.phc-foot a:hover { text-decoration: underline; }
+
+@keyframes phc-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes phc-pop { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes phc-dot { 0%, 80%, 100% { opacity: 0.35; transform: none; } 40% { opacity: 1; transform: translateY(-3px); } }
+
+/* phones: a sheet along the bottom */
+@media (max-width: 520px) {
+  .phc { right: 14px; bottom: 14px; }
+  .phc-panel { position: fixed; left: 8px; right: 8px; bottom: 8px; width: auto; height: min(78dvh, 600px); }
+  .phc-teaser { max-width: calc(100vw - 28px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .phc-launch, .phc-teaser, .phc-panel, .phc-msg, .phc-choices { animation: none; transition: none; }
+  .phc-typing i { animation: none; }
+}
+/* the back-to-top button moves aside for the chat button */
+body:has(.phc-ready) .to-top { right: 92px; }
+@media print { .phc { display: none; } }
