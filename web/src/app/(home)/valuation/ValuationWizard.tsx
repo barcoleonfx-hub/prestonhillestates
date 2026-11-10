@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
+import { postJson, SEND_FAILED } from '@/lib/post-json'
 import { SoldPanel } from './SoldPanel'
 
 type Intent = 'selling' | 'letting'
@@ -50,6 +51,7 @@ export function ValuationWizard({ initialIntent, initialPostcode }: { initialInt
   const [notes, setNotes] = useState('')
   const [error, setError] = useState<{ field?: Field; text: string } | null>(null)
   const [sending, setSending] = useState(false)
+  const [waiting, setWaiting] = useState(false)
   const [done, setDone] = useState(false)
   type Estimate = { kind: 'sale' | 'rent'; low: number; high: number; basis: string; onMarket: { address: string; price: string; beds: number | null; url: string }[] }
   const [estimate, setEstimate] = useState<Estimate | null>(null)
@@ -123,11 +125,8 @@ export function ValuationWizard({ initialIntent, initialPostcode }: { initialInt
     setSending(true)
     const hp_check = (e.currentTarget as HTMLFormElement).querySelector<HTMLInputElement>('input[name=hp_check]')?.value ?? ''
     try {
-      const res = await fetch('/api/public/valuation', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), phone: phone.trim(), email: email.trim(), postcode: pc, intent, address: address.trim(), propertyType: type, bedrooms: beds, timescale: when, contactTime: time, notes: notes.trim(), hp_check }),
-      })
-      const r = (await res.json()) as { ok: boolean; error?: string; field?: Field; estimate?: Estimate | null }
+      const r = await postJson<{ ok: boolean; error?: string; field?: Field; estimate?: Estimate | null }>('/api/public/valuation', { name: name.trim(), phone: phone.trim(), email: email.trim(), postcode: pc, intent, address: address.trim(), propertyType: type, bedrooms: beds, timescale: when, contactTime: time, notes: notes.trim(), hp_check }, setWaiting)
+      if (!r) { setSending(false); setError({ text: SEND_FAILED }); return }
       if (!r.ok) {
         setSending(false)
         return r.field && r.field in STEP_OF ? fail(r.field, r.error ?? 'Please check this.') : setError({ text: r.error ?? 'Something went wrong. Please call us on 020 8904 9005.' })
@@ -143,7 +142,7 @@ export function ValuationWizard({ initialIntent, initialPostcode }: { initialInt
           .catch(() => {}).finally(() => setEstimating(false))
       }
     } catch {
-      setError({ text: 'We couldn’t send that. Please check your connection or call us on 020 8904 9005.' })
+      setError({ text: SEND_FAILED })
     }
     setSending(false)
   }
@@ -259,7 +258,7 @@ export function ValuationWizard({ initialIntent, initialPostcode }: { initialInt
         {error ? <p className="vx-error" role="alert">{error.text}</p> : null}
         <div className="vx-actions">
           {step > 0 ? <button type="button" className="vx-back" onClick={() => go(step - 1)}>Back</button> : <span />}
-          <button type="submit" className="btn gold" disabled={sending}>{sending ? 'Sending…' : step < 2 ? 'Continue' : 'Book my free valuation'}</button>
+          <button type="submit" className="btn gold" disabled={sending}>{sending ? (waiting ? 'Still sending…' : 'Sending…') : step < 2 ? 'Continue' : 'Book my free valuation'}</button>
         </div>
       </form>
       {step >= 1 && intent === 'selling' ? <SoldPanel postcode={postcode} type={type} address={address} /> : null}

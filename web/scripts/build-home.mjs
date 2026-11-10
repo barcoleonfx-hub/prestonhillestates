@@ -184,10 +184,19 @@ js = swap(js, "      err.hidden = true; form.hidden = true; done.hidden = false;
 
 const extra = `
 /* ---------- live site: shared sender, search and valuation section ---------- */
+// If the site is restarting (about a minute during each update) or the connection drops, try again every 5 seconds
+// for about half a minute before giving up.
 window.pheSendValuation = function (data) {
-  return fetch('/api/public/valuation', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
-    .then(function (r) { return r.json(); })
-    .catch(function () { return { ok: false, error: 'We couldn’t send that. Please check your connection or call us on 020 8904 9005.' }; });
+  var body = JSON.stringify(data), tries = 0;
+  function attempt() {
+    return fetch('/api/public/valuation', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body })
+      .then(function (r) { if (r.status >= 500) throw new Error('busy'); return r.json(); })
+      .catch(function () {
+        if (++tries < 7) return new Promise(function (ok) { setTimeout(ok, 5000); }).then(attempt);
+        return { ok: false, error: 'We couldn’t send that just now. Please try again in a minute, or call us on 020 8904 9005.' };
+      });
+  }
+  return attempt();
 };
 (function () {
   var channel = document.getElementById('q-channel'), price = document.getElementById('q-price');
