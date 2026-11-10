@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
-import { ACCREDITATIONS, PORTALS } from '@/lib/site'
+import { PORTALS } from '@/lib/site'
 import { GuideCards } from '../GuideCards'
+import { AccreditationBand } from '../AccreditationBand'
 import { PageChrome } from '../PageChrome'
 import { Reviews } from '../Reviews'
 import { ValuationWizard } from './ValuationWizard'
@@ -10,9 +11,6 @@ export const metadata: Metadata = {
   title: 'Free property valuation in Harrow · Preston Hill Estates',
   description: 'Book a free, no-obligation sales or rental valuation with Preston Hill Estates, independent estate agents on Preston Road since 2004. Harrow, Kenton, Wembley and North West London.',
 }
-
-// Logos we hold; the rest show their names until the files arrive.
-const LOGOS: Record<string, string> = { safeagent: '/accreditations/safeagent.png', mydeposits: '/accreditations/mydeposits.jpg' }
 
 const FAQS: [string, string][] = [
   ['Is the valuation really free?', 'Yes. There’s no charge, and no obligation to sell or let with us afterwards.'],
@@ -63,25 +61,6 @@ export default async function ValuationPage({ searchParams }: { searchParams: Pr
             </div>
           </div>
         </section>
-
-        <div className="accredband" aria-label="Accreditations">
-          <div className="wide row">
-            <span className="grp">
-              <span className="lead">Regulated &amp; accredited</span>
-              {ACCREDITATIONS.map((a) => (
-                <a key={a.key} className="t acc" href={a.url} target="_blank" rel="noopener noreferrer" aria-label={`${a.name} (opens in a new tab)`}>
-                  {LOGOS[a.key] ? <img src={LOGOS[a.key]} alt={a.name} /> : a.name}
-                </a>
-              ))}
-            </span>
-            <span className="grp">
-              <span className="lead">Marketed on</span>
-              {PORTALS.map((p) => (
-                <a key={p.key} className="portal" href={p.url} target="_blank" rel="noopener noreferrer" aria-label={`Preston Hill Estates on ${p.name} (opens in a new tab)`}>{p.name} <span className="go" aria-hidden="true">↗</span></a>
-              ))}
-            </span>
-          </div>
-        </div>
 
         <section className="wide vx-how">
           <div className="rv">
@@ -207,6 +186,7 @@ export default async function ValuationPage({ searchParams }: { searchParams: Pr
             <a className="btn gold" href="#val-start">Book my free valuation</a>
           </div>
         </section>
+        <AccreditationBand />
       </main>
 
       <nav className="vx-mobilebar" aria-label="Quick actions">

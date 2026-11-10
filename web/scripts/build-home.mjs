@@ -146,7 +146,7 @@ html = html.replace(/(<a [^>]*data-badge="([a-z]+)"[^>]*>)(.*?)<\/a>/g, (m, tag,
   const url = logoFor(key)
   if (!url) return m
   const label = /aria-label="([^"]*)"/.exec(tag)
-  const alt = label ? label[1].replace(/\s*\(opens in a new tab\)/, '') : key
+  const alt = label ? label[1].replace(/\s*\(opens in a new tab\)/, '').replace(/: download our certificate \(PDF\)$/, '') : key
   return `${tag}${inner.replace(/^[^<]+/, `<img src="${url}" alt="${alt}"> `)}</a>`
 })
 

@@ -12,12 +12,16 @@ export const PORTALS = [
   },
 ] as const
 
-/** Redress, client-money and deposit schemes. Logos go in public/accreditations/<key>.svg or .png. */
+/**
+ * Redress, client-money and deposit schemes. Logos go in public/accreditations/<key>.svg or .png.
+ * `cert` is our current certificate (public/certificates): clicking a scheme's logo downloads it.
+ * Swap the PDF when a scheme sends a renewal; keep the file name, or update it here and in concept/homepage_src.html.
+ */
 export const ACCREDITATIONS = [
-  { key: 'tpo', name: 'The Property Ombudsman', url: 'https://www.tpos.co.uk/' },
-  { key: 'safeagent', name: 'safeagent', url: 'https://www.safeagents.co.uk/' },
-  { key: 'prs', name: 'Property Redress Scheme', url: 'https://www.theprs.co.uk/' },
-  { key: 'mydeposits', name: 'myDeposits', url: 'https://www.mydeposits.co.uk/' },
+  { key: 'tpo', name: 'The Property Ombudsman', url: 'https://www.tpos.co.uk/', cert: '/certificates/property-ombudsman-certificate-D04905.pdf' },
+  { key: 'safeagent', name: 'safeagent', url: 'https://www.safeagents.co.uk/', cert: '/certificates/safeagent-certificate-A4118.pdf' },
+  { key: 'prs', name: 'Property Redress Scheme', url: 'https://www.theprs.co.uk/', cert: '/certificates/property-redress-scheme-certificate-PRS041838.pdf' },
+  { key: 'mydeposits', name: 'myDeposits', url: 'https://www.mydeposits.co.uk/', cert: '/certificates/mydeposits-certificate.pdf' },
 ] as const
 
 /**

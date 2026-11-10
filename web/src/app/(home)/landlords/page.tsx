@@ -1,7 +1,8 @@
 import type { Metadata } from 'next'
-import { ACCREDITATIONS, LETTINGS, PORTALS, feeIncVat, feeText } from '@/lib/site'
+import { LETTINGS, feeIncVat, feeText } from '@/lib/site'
 import { tenantDemand } from '@/lib/lettings'
 import { displayAddressFor, headlineFor, listPublished, priceLabel, slugFor } from '@/lib/properties'
+import { AccreditationBand } from '../AccreditationBand'
 import { PageChrome } from '../PageChrome'
 import { Reviews } from '../Reviews'
 import { RentEstimate } from './RentEstimate'
@@ -13,8 +14,6 @@ export const metadata: Metadata = {
   title: 'Letting agents in Harrow · fully managed for 6% · Preston Hill Estates',
   description: `Let your property with Preston Hill Estates: full management, maintenance, tenant referencing and a rent guarantee for ${LETTINGS.percent}% + VAT of the rent. Independent letting agents on Preston Road, Harrow, since 2004.`,
 }
-
-const LOGOS: Record<string, string> = { safeagent: '/accreditations/safeagent.png', mydeposits: '/accreditations/mydeposits.jpg' }
 
 const STEPS: [string, string][] = [
   ['Rental valuation', 'We visit, tell you what rent to expect and what (if anything) needs doing before it’s let. Free, no obligation.'],
@@ -64,25 +63,6 @@ export default async function LandlordsPage() {
             </div>
           </div>
         </section>
-
-        <div className="accredband" aria-label="Accreditations">
-          <div className="wide row">
-            <span className="grp">
-              <span className="lead">Regulated &amp; accredited</span>
-              {ACCREDITATIONS.map((a) => (
-                <a key={a.key} className="t acc" href={a.url} target="_blank" rel="noopener noreferrer" aria-label={`${a.name} (opens in a new tab)`}>
-                  {LOGOS[a.key] ? <img src={LOGOS[a.key]} alt={a.name} /> : a.name}
-                </a>
-              ))}
-            </span>
-            <span className="grp">
-              <span className="lead">Marketed on</span>
-              {PORTALS.map((p) => (
-                <a key={p.key} className="portal" href={p.url} target="_blank" rel="noopener noreferrer" aria-label={`Preston Hill Estates on ${p.name} (opens in a new tab)`}>{p.name} <span className="go" aria-hidden="true">↗</span></a>
-              ))}
-            </span>
-          </div>
-        </div>
 
         <section className="wide lx-included" id="included" aria-labelledby="inc-h">
           <div className="rv">
@@ -202,6 +182,7 @@ export default async function LandlordsPage() {
             <a className="btn gold" href="#estimate">Value my rental</a>
           </div>
         </section>
+        <AccreditationBand />
       </main>
 
       <nav className="vx-mobilebar" aria-label="Quick actions">
