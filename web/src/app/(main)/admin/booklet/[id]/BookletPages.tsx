@@ -370,7 +370,7 @@ export function BookletPages({ data, f }: { data: BookletInput; f: BookletFields
         <div className="bk-in">
           <div className="bk-kicker">Peace of mind</div>
           <h2>Regulated, protected<br /><em>and straightforward.</em></h2>
-          <div className="bk-logos"><div>The Property<br />Ombudsman</div><div><img src="/accreditations/safeagent.png" alt="safeagent" /></div><div>Property Redress<br />Scheme</div><div><img src="/accreditations/mydeposits.jpg" alt="myDeposits" /></div></div>
+          <div className="bk-logos"><div><img src="/accreditations/tpo.png" alt="The Property Ombudsman" /></div><div><img src="/accreditations/safeagent.png" alt="safeagent" /></div><div><img src="/accreditations/prs.png" alt="Property Redress Scheme" /></div><div><img src="/accreditations/mydeposits.jpg" alt="myDeposits" /></div></div>
           <div className="bk-cols">
             {rent ? (
               <>

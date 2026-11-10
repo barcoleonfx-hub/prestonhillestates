@@ -1,6 +1,8 @@
 import { ACCREDITATIONS, PORTALS } from '@/lib/site'
 
-const LOGOS: Record<string, string> = { safeagent: '/accreditations/safeagent.png', mydeposits: '/accreditations/mydeposits.jpg' }
+const LOGOS: Record<string, string> = {
+  tpo: '/accreditations/tpo.png', safeagent: '/accreditations/safeagent.png', prs: '/accreditations/prs.png', mydeposits: '/accreditations/mydeposits.jpg',
+}
 
 /** The schemes we belong to (each logo downloads our certificate) and the portals we're on. Sits at the foot of the page. */
 export function AccreditationBand() {
