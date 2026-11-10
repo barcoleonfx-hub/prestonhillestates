@@ -241,3 +241,84 @@
 .tenant-box p { color: var(--ink-soft); font-size: 0.9rem; line-height: 1.5; margin: 0; }
 .tenant-box .btn { justify-self: start; }
 .tenant-box .tb-link { font-size: 0.86rem; color: var(--ink); font-weight: 600; }
+
+/* ---------- property page: "Add a note", "Further details", "Mortgage", "Nearest stations", EPC, "Local life" ---------- */
+.more { margin-top: 38px; display: grid; gap: 14px; }
+.acc { background: #FBF8EE; border: 1px solid var(--line); border-radius: 18px; overflow: hidden; }
+.acc > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 14px; padding: 22px 26px; }
+.acc > summary::-webkit-details-marker { display: none; }
+.acc > summary h2 { flex: 1; min-width: 0; font-family: var(--serif); font-weight: 420; font-size: 1.5rem; letter-spacing: -0.01em; margin: 0; }
+.acc > summary:hover h2 { color: var(--gold-deep); }
+.acc > summary:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; border-radius: 18px; }
+.acc-sum { margin-left: auto; font-size: 0.86rem; color: var(--ink-soft); text-align: right; }
+.acc-ic { position: relative; flex: none; width: 22px; height: 22px; margin-left: auto; }
+.acc-sum + .acc-ic { margin-left: 10px; }
+.acc-ic::before, .acc-ic::after { content: ''; position: absolute; left: 2px; right: 2px; top: 50%; height: 2px; margin-top: -1px; background: var(--ink); border-radius: 2px; transition: transform 0.2s ease; }
+.acc-ic::after { transform: rotate(90deg); }
+.acc[open] .acc-ic::after { transform: rotate(0deg); }
+.acc[open] > summary { padding-bottom: 14px; }
+.acc-body { padding: 0 26px 24px; }
+.acc-body .kv { background: #fff; }
+.acc-p { color: var(--ink-soft); }
+.acc-p a, .acc-small a { color: var(--gold-deep); font-weight: 600; }
+.acc-small { margin-top: 12px; font-size: 0.8rem; color: var(--faint); }
+@media (max-width: 640px) {
+  .acc > summary { padding: 18px 18px; flex-wrap: wrap; row-gap: 4px; }
+  .acc > summary h2 { font-size: 1.3rem; }
+  .acc-sum { order: 3; width: 100%; margin: 0; text-align: left; }
+  .acc-sum + .acc-ic, .acc-ic { margin-left: auto; }
+  .acc-body { padding: 0 18px 20px; }
+}
+
+/* the note */
+.pn-box { width: 100%; resize: vertical; min-height: 64px; background: #fff; }
+.pn-row { margin-top: 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.pn-hint { font-size: 0.82rem; color: var(--faint); }
+.pn-btns { display: flex; gap: 10px; }
+.pn-btns .btn { min-width: 110px; justify-content: center; }
+.pn-saved { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; white-space: pre-wrap; }
+.pn-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* mortgage */
+.mg-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.mg-fields .input { background: #fff; }
+.mg-out { margin-top: 16px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.mg-out > div { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: grid; gap: 2px; }
+.mg-out span { font-size: 0.78rem; color: var(--faint); }
+.mg-out b { font-family: var(--serif); font-weight: 460; font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+.mg-out > div:first-child b { color: var(--gold-deep); }
+.mg-out small { font-size: 0.78rem; color: var(--ink-soft); }
+.mg-note { margin-top: 14px; font-size: 0.86rem; color: var(--ink-soft); }
+.mg-note a { color: var(--gold-deep); font-weight: 600; }
+.mg-warn { margin-top: 6px; font-size: 0.78rem; font-weight: 600; color: var(--ink); }
+@media (max-width: 640px) { .mg-fields { grid-template-columns: 1fr 1fr; } .mg-out { grid-template-columns: 1fr; } }
+
+/* stations and local life */
+.near { list-style: none; margin: 0; padding: 0; background: #fff; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+.near li { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 14px; padding: 13px 18px; border-top: 1px solid var(--line-soft); }
+.near li:first-child { border-top: 0; }
+.near-ic { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: var(--gold-tint); color: var(--gold-deep); }
+.near-ic.st { background: #23211A; color: #E7C273; }
+.near-what, .near-far { display: grid; }
+.near-what b { font-weight: 600; }
+.near-what small, .near-far small { font-size: 0.8rem; color: var(--faint); }
+.near-far { text-align: right; }
+.near-far b { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* EPC chart */
+.epc { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px; display: grid; gap: 5px; max-width: 560px; }
+.epc-head, .epc-row { display: grid; grid-template-columns: 1fr 74px 74px; gap: 10px; align-items: center; }
+.epc-head b { font-size: 0.74rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); text-align: center; }
+.epc-bar { height: 30px; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; border-radius: 4px 15px 15px 4px; font-weight: 700; }
+.epc-bar small { font-size: 0.72rem; font-weight: 600; opacity: 0.9; }
+.epc-mark { display: flex; justify-content: center; }
+.epc-mark i { font-style: normal; font-weight: 800; min-width: 48px; height: 30px; display: grid; place-items: center; border-radius: 15px 4px 4px 15px; box-shadow: 0 2px 6px rgba(35,33,26,0.2); }
+@media (max-width: 640px) {
+  .epc { padding: 14px; }
+  .epc-head, .epc-row { grid-template-columns: 1fr 58px 58px; gap: 6px; }
+  .epc-bar small { display: none; }
+  .epc-bar { justify-content: flex-end; }
+  .epc-head b { font-size: 0.6rem; letter-spacing: 0.02em; }
+  .epc-mark i { min-width: 40px; }
+  .near li { gap: 10px; padding: 12px 14px; }
+}
