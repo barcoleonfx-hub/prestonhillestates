@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { sendChatLead } from '@/app/(main)/(site)/actions'
+import { postJson, SEND_FAILED } from '@/lib/post-json'
 import { LogoMark } from './Logo'
 import './chat-prompt.css'
 
@@ -178,10 +178,10 @@ export function ChatPrompt() {
     } else if (stage === 'phone') {
       if (!PHONE.test(v)) { setError(v ? 'That phone number doesn’t look right.' : 'Add a phone number so we can call you.'); return }
       answers.current.phone = v; say('me', v); setValue(''); setStage('sending')
-      const fd = new FormData()
-      fd.set('goal', goal ?? ''); fd.set('postcode', answers.current.postcode); fd.set('name', answers.current.name); fd.set('phone', v)
-      fd.set('page', window.location.pathname); fd.set('hp_check', (document.getElementById('phc-hp') as HTMLInputElement | null)?.value ?? '')
-      const r = await sendChatLead(fd).catch(() => ({ ok: false, error: 'Something went wrong sending that. Please call us on 020 8904 9005.', field: undefined }))
+      const hp = (document.getElementById('phc-hp') as HTMLInputElement | null)?.value ?? ''
+      const r = (await postJson<{ ok: boolean; error?: string; field?: string }>('/api/public/chat', {
+        goal: goal ?? '', postcode: answers.current.postcode, name: answers.current.name, phone: v, page: window.location.pathname, hp_check: hp,
+      }, setTyping)) ?? { ok: false, error: SEND_FAILED, field: undefined }
       if (!r.ok) {
         const back: Stage = r.field === 'postcode' ? 'postcode' : r.field === 'name' ? 'name' : 'phone'
         setStage(back); await botSay(r.error ?? 'Something went wrong. Please try again.'); return
