@@ -1008,3 +1008,29 @@ kbd { font: 600 0.68rem/1 var(--sans, inherit); padding: 3px 6px; border-radius:
 .ew-report-note { margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; background: #f6efd9; color: #6b5313; font-size: 13px; line-height: 1.5; }
 .ew-report-note a { color: #a47b1d; font-weight: 600; }
 .ew-files { display: block; margin-top: 4px; font-size: 12px; color: #59554a; }
+
+/* Tailored emails: pictures, people, toggles and results. */
+.notice.warn { background: var(--gold-wash); color: var(--gold-deep); }
+.te-add { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.te-err { color: var(--danger); font-size: 0.8rem; }
+.te-people { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 0; }
+.te-people span { font-size: 0.78rem; padding: 4px 10px; border-radius: 999px; background: var(--gold-wash); color: var(--ink-soft); }
+.te-people b { color: var(--ink); font-weight: 600; }
+.te-pics { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.te-pics figure { position: relative; margin: 0; width: 120px; height: 84px; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); background: var(--line-soft); }
+.te-pics figure:only-child { width: 100%; max-width: 360px; height: 140px; }
+.te-pics img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.te-x { all: unset; cursor: pointer; position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; border-radius: 50%; background: rgba(35,33,26,0.75); color: #fff; display: grid; place-items: center; font-size: 0.9rem; line-height: 1; }
+.te-main, .te-first { position: absolute; left: 4px; bottom: 4px; font-size: 0.66rem; font-weight: 700; padding: 2px 7px; border-radius: 999px; background: rgba(255,255,255,0.92); color: var(--gold-deep); }
+.te-first { all: unset; cursor: pointer; position: absolute; left: 4px; bottom: 4px; font-size: 0.66rem; font-weight: 700; padding: 2px 7px; border-radius: 999px; background: rgba(35,33,26,0.7); color: #fff; }
+.te-toggle { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.te-toggle .cmp-h { margin: 0; }
+.te-toggle input { width: 18px; height: 18px; accent-color: var(--gold-deep); }
+.te-toggle + * { margin-top: 12px; }
+.te-results { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 0.84rem; }
+.te-results li b { display: inline-block; min-width: 64px; }
+.te-results li.ok b { color: var(--ok); }
+.te-results li.bad b { color: var(--danger); }
+.te-results small { color: var(--danger); }
+.cmp-left .card-pad > .field + .field, .cmp-left .card-pad > .field + .cmp-two, .cmp-left .card-pad > .cmp-two + .field, .cmp-left .card-pad > .cmp-two + .cmp-two { margin-top: 12px; }
+.te-list td .pill { white-space: nowrap; }
