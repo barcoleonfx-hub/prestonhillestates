@@ -550,3 +550,35 @@ export const postcodeGeo = sqliteTable('postcode_geo', {
   e: integer('e').notNull(), // OS grid easting, metres
   n: integer('n').notNull(), // OS grid northing, metres
 })
+
+/** One-off emails staff write and address themselves (another agent, an investor, a solicitor). */
+export const tailoredEmails = sqliteTable('tailored_emails', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  template: text('template'),
+  recipients: text('recipients').notNull().default(''),
+  content: text('content').notNull(),
+  status: text('status').notNull().default('draft'), // draft, sent
+  sent: integer('sent').notNull().default(0),
+  failed: integer('failed').notNull().default(0),
+  /** Who it went to and whether each worked: [{ email, name, ok, error, at }]. */
+  results: text('results'),
+  createdBy: text('created_by'),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+  sentAt: text('sent_at'),
+})
+export type TailoredEmail = typeof tailoredEmails.$inferSelect
+
+/** Pictures in those emails, served at /email-img/<id>. */
+export const emailImages = sqliteTable('email_images', {
+  id: text('id').primaryKey(),
+  storageKey: text('storage_key').notNull(),
+  contentType: text('content_type').notNull(),
+  width: integer('width'),
+  height: integer('height'),
+  sizeBytes: integer('size_bytes'),
+  originalName: text('original_name'),
+  createdBy: text('created_by'),
+  createdAt: text('created_at').notNull(),
+})

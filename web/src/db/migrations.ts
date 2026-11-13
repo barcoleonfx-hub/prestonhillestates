@@ -849,4 +849,37 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       `CREATE UNIQUE INDEX booklet_shares_booklet_idx ON booklet_shares (booklet_id)`,
     ],
   },
+  {
+    id: '041_tailored_emails',
+    sql: [
+      // One-off emails staff write and address themselves (another agent, an investor, a solicitor), with pictures.
+      `CREATE TABLE tailored_emails (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        template TEXT,
+        recipients TEXT NOT NULL DEFAULT '',
+        content TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'draft',
+        sent INTEGER NOT NULL DEFAULT 0,
+        failed INTEGER NOT NULL DEFAULT 0,
+        results TEXT,
+        created_by TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        sent_at TEXT
+      )`,
+      // Pictures added to those emails, served publicly at /email-img/<id> so they show in people's inboxes.
+      `CREATE TABLE email_images (
+        id TEXT PRIMARY KEY,
+        storage_key TEXT NOT NULL,
+        content_type TEXT NOT NULL,
+        width INTEGER,
+        height INTEGER,
+        size_bytes INTEGER,
+        original_name TEXT,
+        created_by TEXT,
+        created_at TEXT NOT NULL
+      )`,
+    ],
+  },
 ]

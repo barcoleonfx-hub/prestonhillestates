@@ -1,12 +1,14 @@
 import Link from 'next/link'
 import { desc } from 'drizzle-orm'
 import { db, ready } from '@/db/client'
-import { campaigns } from '@/db/schema'
+import { campaigns, tailoredEmails } from '@/db/schema'
 import { requireAdmin } from '@/lib/auth'
 import { TEMPLATES } from '@/lib/campaign'
 import { audienceSummary, campaignLimits, sentToday } from '@/lib/campaign-data'
 import { mailboxStatus } from '@/lib/mailbox'
 import { createCampaign, saveLimits } from '../../campaign-actions'
+import { createTailored } from '../../tailored-actions'
+import { TAILORED_TEMPLATES, parseRecipients } from '@/lib/tailored-email'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Email campaigns' }
@@ -20,16 +22,17 @@ const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('en-
 export default async function CampaignsPage() {
   const me = await requireAdmin()
   await ready()
-  const [list, limits, today, box, everyone] = await Promise.all([
+  const [list, limits, today, box, everyone, tailored] = await Promise.all([
     db.select().from(campaigns).orderBy(desc(campaigns.updatedAt)).limit(100), campaignLimits(), sentToday(), mailboxStatus(),
     audienceSummary({ roles: ['buyer', 'tenant', 'landlord', 'seller', 'other'], areas: '', activeMonths: null }),
+    db.select().from(tailoredEmails).orderBy(desc(tailoredEmails.updatedAt)).limit(50),
   ])
   return (
     <>
       <div className="page-head">
         <div>
           <h1>Email campaigns</h1>
-          <p className="sub">Newsletters, new listings, landlord and market updates to your contacts. Each person gets their own version: buyers see homes for sale in their budget, tenants see rentals, landlords get the landlord news.</p>
+          <p className="sub">Newsletters, new listings, landlord and market updates to your contacts, and <a href="#tailored">tailored one-off emails</a> to anyone else. Each person gets their own version: buyers see homes for sale in their budget, tenants see rentals, landlords get the landlord news.</p>
         </div>
       </div>
       {!box?.hasPassword ? <div className="notice err" style={{ marginBottom: 16 }}>Connect the office mailbox in <Link href="/admin/email-inbox">Email settings</Link> first. Campaigns are sent from it.</div> : null}
@@ -51,6 +54,45 @@ export default async function CampaignsPage() {
             </form>
           ))}
         </div>
+      </section>
+
+      <section className="card card-pad" style={{ marginBottom: 18 }} id="tailored">
+        <div className="today-head">
+          <div>
+            <h2>Tailored emails</h2>
+            <p className="card-sub">A one-off email to anyone you choose: another agent, an investor, a solicitor. Type their email address, add a banner picture, a property spotlight with photos and a terms box, and send it from the office mailbox. Each person gets their own copy.</p>
+          </div>
+        </div>
+        <div className="cmp-templates">
+          {TAILORED_TEMPLATES.map((t) => (
+            <form key={t.key} action={createTailored} className="cmp-template">
+              <input type="hidden" name="template" value={t.key} />
+              <h3>{t.name}</h3>
+              <p>{t.about}</p>
+              <button className={`btn btn-sm ${t.key === 'agent-split' ? 'btn-gold' : 'btn-ghost'}`} type="submit">Write one</button>
+            </form>
+          ))}
+        </div>
+        {tailored.length ? (
+          <div className="table-wrap" style={{ marginTop: 16 }}>
+            <table className="list te-list">
+              <thead><tr><th>Email</th><th>Status</th><th>To</th><th>Last change</th></tr></thead>
+              <tbody>
+                {tailored.map((t) => {
+                  const people = parseRecipients(t.recipients).list
+                  return (
+                    <tr key={t.id}>
+                      <td><Link className="addr-main" href={`/admin/campaigns/tailored/${t.id}`}>{t.name}</Link></td>
+                      <td><span className={`pill ${t.status === 'sent' ? 'live' : 'draft'}`}>{t.status === 'sent' ? `Sent${t.failed ? ` · ${t.failed} not sent` : ''}` : 'Draft'}</span></td>
+                      <td className="addr-sub">{people.length ? `${people[0].name || people[0].email}${people.length > 1 ? ` and ${people.length - 1} more` : ''}` : '—'}</td>
+                      <td className="addr-sub">{day(t.sentAt ?? t.updatedAt)}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
       </section>
 
       <section className="card" style={{ marginBottom: 18 }}>
