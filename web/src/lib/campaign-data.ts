@@ -1,7 +1,7 @@
 import 'server-only'
 import { and, asc, eq, gte, inArray, isNotNull, sql } from 'drizzle-orm'
 import { db, getClient, ready } from '@/db/client'
-import { campaignRecipients, campaigns, contacts, enquiries, propertyEmails, settings, soldPrices, type Campaign, type Contact } from '@/db/schema'
+import { campaignRecipients, campaigns, contacts, enquiries, letterRecipients, propertyEmails, settings, soldPrices, type Campaign, type Contact } from '@/db/schema'
 import { enquiryLabel } from './enquiry-labels'
 import { ALL_ROLES, renderCampaign, type Audience, type Content, type Listing, type Reader, type Role, type Shared, type Snapshot, type Spotlight } from './campaign'
 import { GUIDES } from './guides'
@@ -227,7 +227,8 @@ export async function sentToday(): Promise<number> {
   const since = londonMidnight()
   const [a] = await db.select({ n: sql<number>`count(*)` }).from(campaignRecipients).where(and(eq(campaignRecipients.status, 'sent'), gte(campaignRecipients.sentAt, since)))
   const [b] = await db.select({ n: sql<number>`count(*)` }).from(propertyEmails).where(and(eq(propertyEmails.status, 'sent'), gte(propertyEmails.sentAt, since)))
-  return Number(a?.n ?? 0) + Number(b?.n ?? 0)
+  const [c] = await db.select({ n: sql<number>`count(*)` }).from(letterRecipients).where(and(eq(letterRecipients.status, 'sent'), gte(letterRecipients.sentAt, since)))
+  return Number(a?.n ?? 0) + Number(b?.n ?? 0) + Number(c?.n ?? 0)
 }
 
 export const parseContent = (c: Campaign) => JSON.parse(c.content) as Content

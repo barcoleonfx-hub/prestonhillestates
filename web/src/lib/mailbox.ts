@@ -428,7 +428,7 @@ export async function sendFromMailbox(m: OutgoingMail): Promise<{ ok: true; mess
   return { ok: true, messageId: built.messageId ?? null }
 }
 
-export type BulkMail = { to: string; subject: string; text: string; html: string; headers?: Record<string, string> }
+export type BulkMail = { to: string; subject: string; text: string; html: string; headers?: Record<string, string>; attachments?: { filename: string; content: Buffer; contentType: string }[] }
 
 /**
  * One SMTP connection for sending a batch of campaign emails from the office mailbox. Unlike sendFromMailbox,
@@ -446,7 +446,7 @@ export async function bulkSender(): Promise<{ from: string; user: string; send: 
     from, user: s.user,
     async send(m) {
       try {
-        await t.sendMail({ from, to: m.to, subject: m.subject, text: m.text, html: m.html, headers: m.headers })
+        await t.sendMail({ from, to: m.to, subject: m.subject, text: m.text, html: m.html, headers: m.headers, attachments: m.attachments?.length ? m.attachments : undefined })
         return { ok: true }
       } catch (e) {
         const err = e as { code?: string; responseCode?: number; message?: string }

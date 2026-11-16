@@ -13,6 +13,7 @@ import { repairPortalSmallPrint, repairZooplaValuations } from '@/lib/enquiry-re
 import { refreshAreaPlaces } from '@/lib/area-places'
 import { runFollowups } from '@/lib/followups'
 import { runReconnects } from '@/lib/reconnect'
+import { runLetters } from '@/lib/letters'
 import { markDormant } from '@/lib/leads'
 import { after } from 'next/server'
 
@@ -40,6 +41,7 @@ export async function GET(req: Request) {
     // so the server never does two memory-hungry things back to back.
     // Campaign emails are light (a dozen per run): always send them.
     await runCampaigns().catch((e) => console.error('campaign sending failed', e))
+    await runLetters().catch((e) => console.error('property emails failed', e))
     // Leads nobody has heard from in 60 days go dormant (once a day, light).
     await markDormant().catch((e) => console.error('marking dormant leads failed', e))
     await runFollowups().catch((e) => console.error('follow-ups failed', e))
