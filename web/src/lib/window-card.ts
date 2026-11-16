@@ -3,10 +3,13 @@
 // the wording and the photos before printing.
 
 export type CardLayout = 'portrait' | 'landscape'
+/** A3 is A4 scaled up by √2: the same design, printed bigger. */
+export type CardPaper = 'a4' | 'a3'
 export type BadgeKind = 'auto' | 'none' | 'just-listed' | 'new-instruction' | 'reduced' | 'custom'
 export type CardPhoto = { id: string; x: number; y: number }
 export type CardData = {
   layout: CardLayout
+  paper: CardPaper
   badge: BadgeKind
   badgeText: string
   headline: string
@@ -35,6 +38,12 @@ export type CardProperty = {
   epc: string | null
   publishedAt: string | null
   photos: { id: string; url: string; isCover: boolean; position: number }[]
+}
+
+/** Page size in millimetres, and how much the A4-sized sheet is scaled up to fill it. */
+export function paperSize(paper: CardPaper, layout: CardLayout): { w: number; h: number; scale: number } {
+  const [short, long] = paper === 'a3' ? [297, 420] : [210, 297]
+  return { w: layout === 'landscape' ? long : short, h: layout === 'landscape' ? short : long, scale: paper === 'a3' ? Math.SQRT2 : 1 }
 }
 
 export const MAX_PHOTOS = 4
@@ -89,7 +98,7 @@ export function orderedPhotos(p: Pick<CardProperty, 'photos'>) {
 
 export function cardDefaults(p: CardProperty): CardData {
   return {
-    layout: 'portrait', badge: 'auto', badgeText: '', headline: defaultHeadline(p), description: shortDescription(p.summary, p.description),
+    layout: 'portrait', paper: 'a4', badge: 'auto', badgeText: '', headline: defaultHeadline(p), description: shortDescription(p.summary, p.description),
     highlights: defaultHighlights(p), photos: orderedPhotos(p).slice(0, MAX_PHOTOS).map((x) => ({ id: x.id, x: 50, y: 50 })), showQr: true,
   }
 }

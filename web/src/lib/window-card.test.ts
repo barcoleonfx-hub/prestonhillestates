@@ -58,3 +58,17 @@ describe('the ribbon', () => {
     expect(badgeFor(p, { badge: 'none', badgeText: '' }, NOW)).toBeNull()
   })
 })
+
+describe('paper size', () => {
+  it('A3 is the same sheet scaled up by √2', async () => {
+    const { paperSize } = await import('./window-card')
+    expect(paperSize('a4', 'portrait')).toEqual({ w: 210, h: 297, scale: 1 })
+    expect(paperSize('a3', 'portrait')).toEqual({ w: 297, h: 420, scale: Math.SQRT2 })
+    expect(paperSize('a3', 'landscape')).toEqual({ w: 420, h: 297, scale: Math.SQRT2 })
+    // A4 × √2 ≈ A3, to within a millimetre.
+    expect(Math.abs(210 * Math.SQRT2 - 297)).toBeLessThan(1)
+  })
+  it('older saved sheets default to A4', () => {
+    expect(mergeCard(p, { headline: 'x' }).paper).toBe('a4')
+  })
+})
