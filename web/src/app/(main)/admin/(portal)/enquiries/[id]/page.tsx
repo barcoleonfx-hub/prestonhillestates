@@ -17,6 +17,8 @@ import { LeadControls } from './LeadPanel'
 import { activeStaff } from '@/lib/appointments'
 import { LEAD_MAGNETS, LEAD_STATUSES, isUkMobile, statusLabel } from '@/lib/lead-rules'
 import { leadTimeline } from '@/lib/leads'
+import { waFor, waHomes } from '@/lib/whatsapp-data'
+import { WhatsAppButton } from '../../WhatsAppButton'
 import { homeFrom, portalLinks } from '@/lib/valuation-check'
 import { landRegistryEstimate, rentCheck } from '@/lib/valuation-check-data'
 
@@ -32,7 +34,7 @@ function speed(from: string, to: string) {
 const KIND_TITLE = { 'sales-valuation': 'Sales valuation', 'lettings-valuation': 'Rental valuation', buyer: 'Buyer enquiry', tenant: 'Tenant enquiry' } as const
 
 /** One enquiry, as a place to act on it: what they asked, the next steps, and ready-made emails to send. */
-export default async function EnquiryPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ back?: string; tpl?: string }> }) {
+export default async function EnquiryPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ back?: string; tpl?: string; wa?: string }> }) {
   const me = await requireAdmin()
   const { id } = await params
   const sp = await searchParams
@@ -47,6 +49,7 @@ export default async function EnquiryPage({ params, searchParams }: { params: Pr
   const lr = !valuation || !ctx.postcode ? null : rent
     ? await rentCheck(ctx.postcode, home.beds).then((r) => r && { low: r.low, mid: r.mid, high: r.high, count: Math.max(r.count, 1), label: `from ${r.basis}${home.beds != null ? `, ${home.beds} bed` : ''}`, rows: r.nearby.map((n) => ({ where: n.area, what: `${n.beds} bed · ${n.km} km away`, price: n.rent })) })
     : await landRegistryEstimate(ctx.postcode, home.type, home.beds).then((r) => r && { low: r.low, mid: r.mid, high: r.high, count: r.count, label: `${r.count} sales ${r.where}, last 2 years${r.typed ? `, ${home.typeLabel?.toLowerCase() ?? 'same type'}` : ', all types of home'}`, rows: r.comps.map((c) => ({ where: [c.street, c.postcode].filter(Boolean).join(', '), what: `${c.typeLabel} · ${month(c.soldOn)}${c.metres != null ? ` · ${c.metres < 1000 ? `${c.metres} m` : `${(c.metres / 1000).toFixed(1)} km`} away` : ''}`, price: c.price })) })
+  const wa = await waFor({ enquiry: e, contact, me: me.name, address: p ? displayAddressFor(p) : ctx.address ?? null, isLet: sorted.side === 'lettings', homes: contact?.whatsappOptInAt && !valuation ? await waHomes() : [] })
   const back = sp.back && sp.back.startsWith('/admin/enquiries') ? sp.back : `/admin/enquiries?side=${sorted.side ?? 'unsorted'}&type=${valuation ? 'valuations' : 'enquiries'}`
   const dnc = !!contact?.doNotContact
   const callerType = valuation ? (sorted.side === 'lettings' ? 'landlord' : 'seller') : sorted.side === 'lettings' ? 'tenant' : 'buyer'
@@ -83,6 +86,7 @@ export default async function EnquiryPage({ params, searchParams }: { params: Pr
         </div>
         <div className="ew-head-actions">
           {!dnc && e.phone ? <LogCallButton label="Call them" className="btn btn-dark" prefill={{ name: e.name, phone: e.phone ?? undefined, email: e.email ?? undefined, enquiryId: e.id, direction: 'out', propertyId: e.propertyId ?? undefined, callerType, ...(e.contactId ? { contactId: e.contactId } : {}) }} /> : null}
+          {!dnc && wa.e164 ? <WhatsAppButton wa={wa} className="btn btn-wa" autoOpen={sp.wa === '1'} /> : null}
           {!dnc ? <Link className="btn btn-gold" href={`/admin/diary/new?enquiry=${e.id}${valuation ? '&kind=valuation' : ''}`}>{valuation ? 'Book valuation' : 'Book viewing'}</Link> : null}
           {valuation ? <Link className="btn btn-ghost" href={`/admin/booklet/${e.id}`}>Valuation booklet</Link> : null}
         </div>

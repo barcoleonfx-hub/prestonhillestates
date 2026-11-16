@@ -411,7 +411,7 @@ kbd { font: 600 0.68rem/1 var(--sans, inherit); padding: 3px 6px; border-radius:
 .tl-task_done .tl-dot { border-color: var(--ok); background: var(--ok); }
 .tl-title { font-weight: 600; font-size: 0.92rem; }
 .tl-title a { color: var(--ink); }
-.tl-body { font-size: 0.88rem; color: var(--ink-soft); margin-top: 3px; }
+.tl-body { font-size: 0.88rem; color: var(--ink-soft); margin-top: 3px; overflow-wrap: anywhere; }
 .tl-meta { font-size: 0.76rem; color: var(--faint); margin-top: 3px; }
 .det-sum, .cb-add summary { cursor: pointer; font-weight: 700; font-size: 0.95rem; }
 .cb-add { margin-top: 14px; }
@@ -1061,3 +1061,29 @@ kbd { font: 600 0.68rem/1 var(--sans, inherit); padding: 3px 6px; border-radius:
 .lead-filters a.on { background: var(--ink, #1f1d17); border-color: var(--ink, #1f1d17); color: #fff; }
 .lead-filters .sep { width: 1px; height: 18px; background: var(--line, #e7e2d3); margin: 0 4px; }
 @media (max-width: 640px) { .lead-ctl { grid-template-columns: 1fr; } .lead-src > div, .consent-line { grid-template-columns: 1fr; gap: 2px; } }
+.tl-whatsapp .tl-dot { border-color: #25A35A; background: #E8F7EE; }
+.tl-lead .tl-dot { border-color: var(--faint); }
+
+/* ---------- WhatsApp (sent by staff from their own WhatsApp; see lib/whatsapp) ---------- */
+.btn-wa { background: #1F8F4E; border-color: #1F8F4E; color: #fff; gap: 6px; }
+.btn-wa:hover { background: #187A41; border-color: #187A41; color: #fff; }
+.btn-wa[disabled], .btn-wa[aria-disabled='true'] { opacity: 0.55; }
+.wa-scrim { position: fixed; inset: 0; z-index: 90; background: rgba(33,31,25,0.55); display: flex; padding: 16px; overflow-y: auto; }
+.wa-box { margin: auto; width: min(560px, 100%); background: var(--surface, #fff); border-radius: 18px; box-shadow: 0 20px 60px rgba(0,0,0,0.25); overflow: hidden; }
+.wa-head { display: flex; align-items: center; gap: 10px; padding: 16px 20px; border-bottom: 1px solid var(--line); }
+.wa-head h2 { font-size: 1.15rem; display: flex; align-items: center; gap: 8px; margin: 0; }
+.wa-head h2 svg { color: #1F8F4E; width: 20px; height: 20px; }
+.wa-num { color: var(--faint); font-size: 0.85rem; margin-right: auto; }
+.wa-x { background: none; border: 0; font-size: 1.05rem; cursor: pointer; color: var(--faint); width: 34px; height: 34px; border-radius: 50%; }
+.wa-x:hover { background: var(--line-soft); color: var(--ink); }
+.wa-tabs { margin: 14px 20px 0; }
+.wa-body { padding: 14px 20px 20px; display: grid; gap: 12px; }
+.wa-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.wa-chips button { font: inherit; font-size: 0.82rem; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface, #fff); cursor: pointer; color: var(--ink); }
+.wa-chips button.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+.wa-field { display: grid; gap: 5px; font-size: 0.82rem; color: var(--ink-soft); }
+.wa-field textarea { font-size: 0.95rem; line-height: 1.45; }
+.wa-opt { color: var(--faint); }
+.wa-hint { font-size: 0.8rem; color: var(--faint); margin: 0; }
+.wa-check { display: flex; gap: 8px; align-items: flex-start; font-size: 0.88rem; }
+.wa-actions { display: flex; gap: 8px; flex-wrap: wrap; }

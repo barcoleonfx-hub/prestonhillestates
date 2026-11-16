@@ -944,4 +944,23 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       `CREATE INDEX consents_contact_idx ON consents (contact_id, created_at)`,
     ],
   },
+  {
+    id: '043_whatsapp',
+    sql: [
+      // When someone said STOP to WhatsApp (or asked us not to message them there): no WhatsApp at all after that,
+      // until they tick the WhatsApp box on a form again.
+      `ALTER TABLE contacts ADD COLUMN whatsapp_stopped_at TEXT`,
+      `UPDATE contacts SET whatsapp_stopped_at = (SELECT k.created_at FROM consents k WHERE k.contact_id = contacts.id AND k.channel = 'whatsapp' ORDER BY k.created_at DESC LIMIT 1)
+        WHERE (SELECT k.granted FROM consents k WHERE k.contact_id = contacts.id AND k.channel = 'whatsapp' ORDER BY k.created_at DESC LIMIT 1) = 0`,
+      // Anonymous counts of things people do on the website (e.g. tapping a WhatsApp button): no names, no ids.
+      `CREATE TABLE site_events (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        page TEXT,
+        detail TEXT,
+        created_at TEXT NOT NULL
+      )`,
+      `CREATE INDEX site_events_kind_idx ON site_events (kind, created_at)`,
+    ],
+  },
 ]

@@ -55,6 +55,10 @@ export async function runRetention(opts: { force?: boolean } = {}): Promise<Rete
     { sql: `UPDATE appointments SET contact_name = 'Details removed', contact_phone = NULL, contact_email = NULL, notes = NULL, outcome_notes = NULL
             WHERE starts_at < ? AND status <> 'scheduled' AND coalesce(contact_name, '') <> 'Details removed'`, args: [cutoff] },
     { sql: 'DELETE FROM audit_log WHERE at < ?', args: [cutoff] },
+    // The lead history (stage changes, WhatsApp notes) and consent records go with the person and their enquiries.
+    { sql: `DELETE FROM lead_events WHERE created_at < ? OR (contact_id IS NOT NULL AND contact_id NOT IN (SELECT id FROM contacts) AND (enquiry_id IS NULL OR enquiry_id NOT IN (SELECT id FROM enquiries)))`, args: [cutoff] },
+    { sql: 'DELETE FROM consents WHERE contact_id IS NULL OR contact_id NOT IN (SELECT id FROM contacts)', args: [] },
+    { sql: 'DELETE FROM site_events WHERE created_at < ?', args: [cutoff] },
     { sql: 'DELETE FROM email_log WHERE created_at < ?', args: [cutoff] },
     { sql: 'DELETE FROM notification_reads WHERE notification_id IN (SELECT id FROM notifications WHERE created_at < ?)', args: [new Date(Date.now() - 30 * 86400000).toISOString()] },
     { sql: 'DELETE FROM notifications WHERE created_at < ?', args: [new Date(Date.now() - 30 * 86400000).toISOString()] },

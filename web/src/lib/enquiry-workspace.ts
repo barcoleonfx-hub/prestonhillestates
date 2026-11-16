@@ -12,6 +12,7 @@ import type { Review } from './reviews'
 import { salesNear } from './sold-prices'
 import { shareFor } from './booklet-share'
 import { figureText, homeFrom, parseSaved } from './valuation-check'
+import { isBoilerplate } from './email-import'
 
 const PHONE = '020 8904 9005'
 const POSTCODE = /\b([A-Z]{1,2}\d[A-Z\d]?)\s*(\d[A-Z]{2})\b/i
@@ -64,9 +65,16 @@ export async function enquiryWorkspace(id: string, me: { name: string }) {
   const lines = detailLines(e.message)
   const field = (re: RegExp) => lines.find((l) => l.label && re.test(l.label))?.value ?? null
   // Their home (valuations) or the listing they asked about.
-  const named = field(/^(address|property)$/i) ?? (() => { const a = field(/^about$/i); return a && !/^£/.test(a) ? a : null })()
+  // Never a portal's small print (it has the portal's own postcode in it). For a valuation, their own address is
+  // the home to value.
+  const ok = (v: string | null) => (v && !isBoilerplate(v) ? v : null)
+  const junk = [field(/^(address|property)$/i), field(/^about$/i)].find((v) => v && isBoilerplate(v)) ?? null
+  const named = ok(field(/^(address|property)$/i)) ?? (() => { const a = ok(field(/^about$/i)); return a && !/^£/.test(a) ? a : null })()
+    ?? (valuation ? ok(field(/^their address$/i)) : null)
   const address = (p ? null : named?.replace(/,?\s*[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\s*$/i, '').trim()) || null
-  const pcMatch = (e.postcode ?? named ?? '').match(POSTCODE)
+  // A postcode saved from the small print is ignored too.
+  const savedPc = e.postcode && !(junk && junk.toUpperCase().replace(/\s+/g, '').includes(e.postcode.toUpperCase().replace(/\s+/g, ''))) ? e.postcode : null
+  const pcMatch = (savedPc ?? named ?? '').match(POSTCODE)
   const postcode = pcMatch ? `${pcMatch[1]} ${pcMatch[2]}`.toUpperCase() : null
   const kind = emailKindFor(sorted.side, valuation)
   const ep = p ? emailProperty(p, base) : null

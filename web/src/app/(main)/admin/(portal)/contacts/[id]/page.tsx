@@ -2,7 +2,9 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { and, desc, eq } from 'drizzle-orm'
 import { db } from '@/db/client'
-import { admins, auditLog, consents } from '@/db/schema'
+import { admins, auditLog, consents, enquiries } from '@/db/schema'
+import { waFor, waHomes } from '@/lib/whatsapp-data'
+import { WhatsAppButton } from '../../WhatsAppButton'
 import { requireAdmin } from '@/lib/auth'
 import { activeStaff } from '@/lib/appointments'
 import { audit, getContact, openTasks, timelineFor } from '@/lib/contacts'
@@ -34,6 +36,9 @@ export default async function ContactPage({ params, searchParams }: { params: Pr
       : Promise.resolve([]),
     db.select().from(consents).where(eq(consents.contactId, c.id)).orderBy(desc(consents.createdAt)).limit(20),
   ])
+  // WhatsApp from their record: about their latest enquiry, if they have one.
+  const [latest] = await db.select().from(enquiries).where(eq(enquiries.contactId, c.id)).orderBy(desc(enquiries.createdAt)).limit(1)
+  const wa = await waFor({ enquiry: latest ?? null, contact: c, me: me.name, address: latest?.postcode ?? null, homes: c.whatsappOptInAt ? await waHomes() : [] })
   const roles = rolesOf(c.roles)
   const today = todayLondon()
   const wants = [c.minBeds != null ? (c.minBeds === 0 ? 'Studio' : `${c.minBeds}+ bedrooms`) : '', c.areas ? `in ${c.areas}` : '', c.maxPrice ? `up to ${moneyShort(c.maxPrice)}` : ''].filter(Boolean).join(' ')
@@ -59,6 +64,7 @@ export default async function ContactPage({ params, searchParams }: { params: Pr
             <button className={`btn ${c.doNotContact ? 'btn-ghost' : 'btn-danger'}`} type="submit">{c.doNotContact ? 'Allow calls again' : 'Do not call back'}</button>
           </form>
           <LogCallButton prefill={{ contactId: c.id, direction: 'out' }} className="btn btn-gold" />
+          {!c.doNotContact && wa.e164 ? <WhatsAppButton wa={wa} className="btn btn-wa" /> : null}
           <Link className="btn btn-ghost" href={`/admin/diary/new?contact=${c.id}&kind=viewing`}>Book viewing</Link>
           <Link className="btn btn-ghost" href={`/admin/diary/new?contact=${c.id}&kind=valuation`}>Book valuation</Link>
         </div>
@@ -130,12 +136,12 @@ export default async function ContactPage({ params, searchParams }: { params: Pr
             <dl className="consent-facts">
               {(['email', 'whatsapp'] as const).map((ch) => {
                 const at = ch === 'email' ? c.emailOptInAt : c.whatsappOptInAt
-                const stopped = ch === 'email' && !at && c.marketingOptOut
+                const stopped = !at && (ch === 'email' ? c.marketingOptOut : !!c.whatsappStoppedAt)
                 return (
                   <div key={ch} className="consent-line">
                     <dt>{ch === 'email' ? 'Marketing emails' : 'WhatsApp'}</dt>
                     <dd>
-                      {at ? <>Agreed {dayLabel(isoToLondon(at).date, today)}{c.consentSource ? <small> · {c.consentSource}</small> : null}</> : stopped ? 'Unsubscribed' : 'Not agreed'}
+                      {at ? <>Agreed {dayLabel(isoToLondon(at).date, today)}{c.consentSource ? <small> · {c.consentSource}</small> : null}</> : stopped ? (ch === 'email' ? 'Unsubscribed' : `Said STOP${c.whatsappStoppedAt ? ` ${dayLabel(isoToLondon(c.whatsappStoppedAt).date, today)}` : ''}: no WhatsApp`) : 'Not agreed'}
                       {at ? (
                         <form action={stopConsent} style={{ display: 'inline', marginLeft: 8 }}>
                           <input type="hidden" name="contactId" value={c.id} />

@@ -174,6 +174,38 @@ export function parseZoopla(lines: string[]): Lead | null {
 }
 
 /** OnTheMarket "Arrange viewing" emails: a contact block, then enquiry details and the property. */
+/**
+ * The small print at the bottom of portal emails ("OnTheMarket.com and the associated logos are trade marks of...
+ * Registered Office: ... 5 Churchill Place, London E14 5HU"). It has a postcode in it, so it must never be taken
+ * for an address.
+ */
+export function isBoilerplate(line: string | null | undefined): boolean {
+  const l = (line ?? '').trim()
+  if (!l) return false
+  return l.length > 160 || /trade ?marks?|registered (office|in england)|company (no|number|registration)|agents'? mutual|all rights reserved|unsubscribe|privacy (policy|notice)|this (e-?mail|message) (was|has been|is) sent|churchill place|zpg ltd|zoopla limited|onthemarket (plc|limited)/i.test(l)
+}
+
+/**
+ * An enquiry saved before small print was recognised: its "Property:" (or "About:") line is the portal's small print.
+ * Returns the message with that line replaced by their own address (a valuation is about their home) or removed, and
+ * the postcode to keep; or null if there's nothing to fix.
+ */
+export function fixSmallPrint(message: string | null, postcode: string | null): { message: string; postcode: string | null } | null {
+  if (!message) return null
+  const lines = message.split('\n')
+  const bad = lines.findIndex((l) => /^(property|about|address):\s*/i.test(l) && isBoilerplate(l.replace(/^[^:]+:\s*/, '')))
+  if (bad < 0) return null
+  const junk = lines[bad].replace(/^[^:]+:\s*/, '')
+  const theirs = lines.find((l) => /^their address:\s*/i.test(l))?.replace(/^[^:]+:\s*/, '') ?? null
+  const valuation = /valuation|apprais/i.test(message)
+  const out = [...lines]
+  if (valuation && theirs) out[bad] = `Property: ${theirs}`
+  else out.splice(bad, 1)
+  const squash = (x: string) => x.toUpperCase().replace(/\s+/g, '')
+  const keepPc = postcode && !squash(junk).includes(squash(postcode)) ? postcode : (valuation ? fullPostcode(theirs) : null)
+  return { message: out.join('\n'), postcode: keepPc }
+}
+
 export function parseOnTheMarket(lines: string[]): Lead | null {
   const from = lines.map((l) => /received an?\s+(.+?)\s+(?:request|enquiry)\s+from\s+(.+?)\.?$/i.exec(l)).find(Boolean)
   const ci = lines.findIndex((l) => /^contact information$/i.test(l))
@@ -184,14 +216,19 @@ export function parseOnTheMarket(lines: string[]): Lead | null {
   const phone = tidyPhone(block.find((l) => (l.match(PHONE) ?? []).length > 0) ?? labelled(lines, ['Telephone', 'Phone']))
   const name = (from?.[2] ?? block.find((l) => !EMAIL1.test(l) && !(l.match(PHONE) ?? []).length && !fullPostcode(l)) ?? '').trim()
   const applicantAddress = block.find((l) => fullPostcode(l) && !EMAIL1.test(l)) ?? null
-  const after = ei >= 0 ? lines.slice(ei + 1) : lines
+  // Everything up to the small print at the bottom.
+  const tail = ei >= 0 ? lines.slice(ei + 1) : lines
+  const foot = tail.findIndex((l) => isBoilerplate(l))
+  const after = foot >= 0 ? tail.slice(0, foot) : tail
   const wants = labelled(after, ['I would like'])
   const situation = labelled(after, ['Situation', 'My situation'])
   const comments = labelled(after, ['Comments', 'Message'])
   const whatsapp = after.some((l) => /whatsapp/i.test(l))
   // The property is the first line after the details that carries a postcode and isn't their own address.
-  const property = after.find((l) => fullPostcode(l) && l !== applicantAddress && !/^(comments|situation|i would like)\s*:/i.test(l)) ?? null
   const what = from?.[1] ?? wants ?? ''
+  // A valuation request is about their own home, which OnTheMarket gives as their address.
+  const property = after.find((l) => fullPostcode(l) && l !== applicantAddress && !isBoilerplate(l) && !/^(comments|situation|i would like)\s*:/i.test(l))
+    ?? (/valuation|apprais/i.test(what) ? applicantAddress : null)
   const details = [
     `OnTheMarket ${(from?.[1] ?? 'enquiry').toLowerCase()}${from?.[1] && !/request|enquiry/i.test(from[1]) ? ' request' : ''}`,
     wants ? `Wants: ${wants}` : '',
