@@ -3,12 +3,15 @@ import { and, asc, eq, gte, inArray, isNotNull, sql } from 'drizzle-orm'
 import { db, getClient, ready } from '@/db/client'
 import { campaignRecipients, campaigns, contacts, enquiries, propertyEmails, settings, soldPrices, type Campaign, type Contact } from '@/db/schema'
 import { enquiryLabel } from './enquiry-labels'
-import { ALL_ROLES, renderCampaign, type Audience, type Content, type Listing, type Reader, type Role, type Shared, type Snapshot } from './campaign'
+import { ALL_ROLES, renderCampaign, type Audience, type Content, type Listing, type Reader, type Role, type Shared, type Snapshot, type Spotlight } from './campaign'
 import { GUIDES } from './guides'
 import { bulkSender } from './mailbox'
 import { PROPERTY_TYPES, FURNISHING, labelFor } from './options'
-import { displayAddressFor, headlineFor, listPublished, priceLabel, slugFor } from './properties'
-import { LR_CREDIT, PATCH, TYPE_LABEL } from './sold-prices'
+import { displayAddressFor, getProperty, headlineFor, listPublished, priceLabel, slugFor } from './properties'
+import { distanceText } from './geo'
+import { listingArea } from './listing-area'
+import { emailProperty } from './property-email-data'
+import { LR_CREDIT, PATCH, TYPE_LABEL, lrTypeFor, salesOnStreet, typePlural } from './sold-prices'
 import { knownBase, oneClickUrl, unsubscribeUrl } from './property-email-data'
 import { now } from './util'
 
@@ -43,7 +46,42 @@ async function marketSnapshots(): Promise<Record<string, Snapshot>> {
   return out
 }
 
-export async function campaignShared(base: string): Promise<Shared> {
+/**
+ * The property of the week: its photos, best features, the nearest stations and places, and what the same kind of
+ * home nearby has sold for (houses with houses of the same type; bedrooms where we know them).
+ */
+export async function spotlightFor(id: string, base: string): Promise<Spotlight | null> {
+  const p = await getProperty(id).catch(() => null)
+  if (!p || !p.published) return null
+  const ep = emailProperty(p, base)
+  const photos = p.media.filter((m) => m.kind === 'photo' && m.status === 'ready').sort((a, b) => Number(b.isCover) - Number(a.isCover) || a.position - b.position)
+    .slice(0, 4).map((m) => (m.url.startsWith('/') ? `${base}${m.url}` : m.url))
+  // Its own key features first, then facts (parking, garden, size); room-by-room detail is too much for an email.
+  // A fact that covers the same ground as one of its key features (parking, garden...) would repeat it.
+  const keys = ep.features.filter((f) => f.from === 'key')
+  const covered = new Set(keys.flatMap((f) => f.tags))
+  const facts = ep.features.filter((f) => f.from === 'fact' && (/sq ft/.test(f.text) || !f.tags.some((t) => covered.has(t))))
+  const features = [...keys, ...facts].map((f) => f.text).slice(0, 6)
+  const [area, sold] = await Promise.all([
+    listingArea(p).catch(() => null),
+    p.channel !== 'let' && p.postcode ? salesOnStreet(p.street ?? p.addressLine1 ?? null, p.postcode, lrTypeFor(p.propertyType), p.bedrooms).catch(() => null) : Promise.resolve(null),
+  ])
+  const lr = lrTypeFor(p.propertyType)
+  const sales = sold ? [...sold.onStreet, ...(sold.near?.recent ?? []).filter((x) => !sold.onStreet.some((y) => y.postcode === x.postcode && y.soldOn === x.soldOn && y.price === x.price))].slice(0, 3) : []
+  const typical = sold?.near?.stats.byType.find((t) => t.type === lr)?.median ?? null
+  return {
+    id: p.id, url: ep.url, channel: ep.channel, address: ep.address, headline: headlineFor(p), priceText: ep.priceText, place: p.locality || p.town || null,
+    photos, specs: ep.specs, summary: p.summary?.trim() || null, features,
+    stations: (area?.stations ?? []).slice(0, 2).map((x) => ({ name: x.name, lines: x.lines.join(', '), minutes: x.minutes, distance: distanceText(x.metres) })),
+    places: (area?.places ?? []).filter((x) => x.kind === 'school' || x.kind === 'shop' || x.kind === 'park').slice(0, 3).map((x) => ({ name: x.name, detail: x.detail, minutes: x.minutes })),
+    sold: sales.length && lr ? {
+      what: typePlural(lr), typical,
+      sales: sales.map((x) => ({ where: x.street ?? x.postcode, price: x.price, beds: x.beds ?? null, when: new Date(`${x.soldOn}T12:00:00Z`).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }) })),
+    } : null,
+  }
+}
+
+export async function campaignShared(base: string, content?: Content | null): Promise<Shared> {
   await ready()
   const live = (await listPublished({})).filter((p) => p.status === 'available' || p.status === 'under_offer')
   const listings: Listing[] = live.map((p) => {
@@ -55,8 +93,12 @@ export async function campaignShared(base: string): Promise<Shared> {
       beds: p.bedrooms, outward: outwardIn(p.postcode) ?? outwardIn(p.displayAddress), place: p.locality || p.town || null, publishedAt: p.publishedAt,
     }
   })
+  // Details for the property of the week, when the email has one.
+  const ids = [...new Set((content?.blocks ?? []).flatMap((b) => (b.kind === 'spotlight' && b.propertyId ? [b.propertyId] : [])))]
+  const spotlights: Record<string, Spotlight> = {}
+  for (const id of ids) { const h = await spotlightFor(id, base); if (h) spotlights[id] = h }
   return {
-    base, listings, market: await marketSnapshots(), credit: LR_CREDIT,
+    base, listings, market: await marketSnapshots(), credit: LR_CREDIT, spotlights,
     guides: GUIDES.map((g) => ({ slug: g.slug, title: g.title, summary: g.summary, url: `${base}/guides/${g.slug}` })),
   }
 }
@@ -239,8 +281,8 @@ export async function runCampaigns(): Promise<{ ran: boolean; sent?: number; err
     if ('error' in tx) stop = tx.error
     else {
       try {
-        const shared = await campaignShared(base)
         const content = parseContent(c), month = monthLabel()
+        const shared = await campaignShared(base, content)
         const people = new Map((await db.select().from(contacts).where(inArray(contacts.id, batch.map((b) => b.contactId)))).map((p) => [p.id, p]))
         for (const r of batch) {
           const p = people.get(r.contactId)

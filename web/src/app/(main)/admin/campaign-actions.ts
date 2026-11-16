@@ -7,7 +7,7 @@ import { db, ready } from '@/db/client'
 import { campaigns } from '@/db/schema'
 import { requireAdmin, requireRole } from '@/lib/auth'
 import { TEMPLATES, renderCampaign, type Audience, type Content, type Reader } from '@/lib/campaign'
-import { audienceList, recipientList, audienceSummary, campaignLimits, campaignProgress, campaignShared, monthLabel, parseContent, queueCampaign, readerFor, setCampaignLimits } from '@/lib/campaign-data'
+import { audienceList, recipientList, audienceSummary, campaignLimits, campaignProgress, campaignShared, monthLabel, parseContent, queueCampaign, readerFor, setCampaignLimits, spotlightFor } from '@/lib/campaign-data'
 import { audit } from '@/lib/contacts'
 import { bulkSender, mailboxStatus } from '@/lib/mailbox'
 import { siteBase } from '@/lib/property-email-data'
@@ -79,7 +79,7 @@ export async function testCampaign(id: string, content: Content, reader: Reader 
   if ('error' in tx) return { error: tx.error }
   try {
     const r: Reader = reader ?? { contactId: null, name: me.name, email: me.email, roles: ['other'], outward: null, areas: null, budget: null, minBeds: null, position: null, unsubscribeUrl: `${base}/unsubscribe` }
-    const m = renderCampaign(content, { ...r, unsubscribeUrl: `${base}/unsubscribe` }, await campaignShared(base), { campaign: c.name, sender: { email: tx.user }, month: monthLabel() })
+    const m = renderCampaign(content, { ...r, unsubscribeUrl: `${base}/unsubscribe` }, await campaignShared(base, content), { campaign: c.name, sender: { email: tx.user }, month: monthLabel() })
     const res = await tx.send({ to: me.email, subject: `[Test${reader ? ` as ${reader.name}` : ''}] ${m.subject}`, text: m.text, html: m.html })
     return res.ok ? { ok: true, to: me.email } : { error: res.error }
   } finally { tx.close() }
@@ -93,6 +93,11 @@ export async function startCampaign(id: string): Promise<{ ok?: boolean; error?:
   if (c.status !== 'draft') return { error: 'It has already been started.' }
   const content = parseContent(c)
   if (!content.subject.trim()) return { error: 'Add a subject line first.' }
+  for (const b of content.blocks) {
+    if (b.kind !== 'spotlight') continue
+    if (!b.propertyId) return { error: 'Choose the property of the week first.' }
+    if (!(await spotlightFor(b.propertyId, await siteBase()))) return { error: 'The property of the week isn’t on the website any more. Choose another.' }
+  }
   const box = await mailboxStatus()
   if (!box?.hasPassword) return { error: 'Connect the office mailbox in Email settings first. Campaigns are sent from it.' }
   const total = await queueCampaign(c, me.id, await siteBase())
@@ -148,4 +153,11 @@ export async function listRecipients(id: string, status: string, q: string, page
   await requireAdmin()
   await ready()
   return recipientList(id, ['queued', 'sent', 'failed', 'skipped'].includes(status) ? status : '', q.slice(0, 100), Math.max(0, Math.floor(page)))
+}
+
+/** The property of the week's details, when staff choose a listing in the editor (for the live preview). */
+export async function loadSpotlight(propertyId: string) {
+  await requireAdmin()
+  await ready()
+  return spotlightFor(propertyId, await siteBase())
 }
