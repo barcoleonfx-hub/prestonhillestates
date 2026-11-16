@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useMemo, useState } from 'react'
 import { ENQUIRY_TEMPLATES, renderEnquiryEmail, type EnquiryEmailContext, type EnquiryEmailKind } from '@/lib/enquiry-email'
+import type { ListingOption } from '@/lib/property-email-data'
 import { sendEnquiryEmail, type SendState } from '../../../enquiry-email-actions'
 
 const KIND_LABEL: Record<EnquiryEmailKind, string> = {
@@ -12,8 +13,10 @@ const KIND_LABEL: Record<EnquiryEmailKind, string> = {
  * Pick a ready-made email, adjust the wording, see exactly what they'll get, and send it from the office mailbox.
  * `chooseKind` lets staff say what the enquiry is when it couldn't be sorted.
  */
-export function EmailComposer({ id, ctx, to, canSend, blocked, chooseKind, start }: {
+export function EmailComposer({ id, ctx, to, canSend, blocked, chooseKind, start, listings = [], linkedId = null, suggested = null }: {
   id: string; ctx: EnquiryEmailContext; to: string | null; canSend: boolean; blocked: string | null; chooseKind: boolean; start?: string
+  /** Our live listings, to put one in a buyer or tenant email; the one the enquiry is linked to; one its text names. */
+  listings?: ListingOption[]; linkedId?: string | null; suggested?: string | null
 }) {
   const [kind, setKind] = useState<EnquiryEmailKind>(ctx.kind)
   const templates = ENQUIRY_TEMPLATES[kind]
@@ -22,7 +25,15 @@ export function EmailComposer({ id, ctx, to, canSend, blocked, chooseKind, start
   const [when, setWhen] = useState('')
   const [times, setTimes] = useState('')
   const [figure, setFigure] = useState(ctx.figure ?? '')
-  const c = useMemo(() => ({ ...ctx, kind }), [ctx, kind])
+  // The property in the email: the linked listing, one the enquiry names, any other listing, or none (general).
+  const [propertyId, setPropertyId] = useState<string>(linkedId ?? suggested ?? '')
+  const forListing = kind === 'buyer' || kind === 'tenant'
+  const c = useMemo(() => {
+    if (!forListing) return { ...ctx, kind }
+    const chosen = listings.find((l) => l.id === propertyId)
+    return { ...ctx, kind, property: chosen ? chosen.card : propertyId && propertyId === linkedId ? ctx.property : null }
+  }, [ctx, kind, forListing, listings, propertyId, linkedId])
+  const order: ('sale' | 'let')[] = kind === 'tenant' ? ['let', 'sale'] : ['sale', 'let']
   const [subject, setSubject] = useState(() => t.subject(c, { figure }))
   const [message, setMessage] = useState(() => t.message(c, { figure }))
   const [edited, setEdited] = useState(false)
@@ -61,6 +72,29 @@ export function EmailComposer({ id, ctx, to, canSend, blocked, chooseKind, start
 
       <form action={send} className="ew-form">
         <input type="hidden" name="id" value={id} />
+        {forListing ? <input type="hidden" name="propertyId" value={propertyId} /> : null}
+        {forListing && (listings.length || linkedId) ? (
+          <div className="field ew-prop">
+            <label htmlFor="ew-prop">Property in this email</label>
+            <select id="ew-prop" className="select" value={propertyId} onChange={(e) => setPropertyId(e.target.value)}>
+              <option value="">None: keep the email general</option>
+              {linkedId && !listings.some((l) => l.id === linkedId) && ctx.property ? <option value={linkedId}>{ctx.property.address} · {ctx.property.priceText} (the one they asked about)</option> : null}
+              {order.map((ch) => {
+                const group = listings.filter((l) => l.channel === ch)
+                return group.length ? (
+                  <optgroup key={ch} label={ch === 'sale' ? 'For sale' : 'To let'}>
+                    {group.map((l) => <option key={l.id} value={l.id}>{l.label}{l.id === linkedId ? ' (the one they asked about)' : l.id === suggested ? ' (named in their enquiry)' : ''}</option>)}
+                  </optgroup>
+                ) : null
+              })}
+            </select>
+            <span className="hint">{propertyId
+              ? propertyId === linkedId ? 'The listing this enquiry came in for. Its photo, price and a button to see it on our website are in the email.'
+                : propertyId === suggested ? 'Picked because their enquiry names this address. Check it’s the right one, or choose another.'
+                  : 'Its photo, price and a button to see it on our website are in the email. Sending also links this enquiry to it.'
+              : 'No property: the email stays general. Choose one of our listings to show it with a link to our website.'}</span>
+          </div>
+        ) : null}
         <input type="hidden" name="kind" value={kind} />
         <input type="hidden" name="template" value={t.key} />
         <input type="hidden" name="when" value={when} />

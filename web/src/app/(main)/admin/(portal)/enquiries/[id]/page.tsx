@@ -28,7 +28,7 @@ export default async function EnquiryPage({ params, searchParams }: { params: Pr
   const sp = await searchParams
   const w = await enquiryWorkspace(id, me)
   if (!w) notFound()
-  const { e, p, contact, sorted, valuation, kind, ctx, lines } = w
+  const { e, p, contact, sorted, valuation, kind, ctx, lines, listings, suggested } = w
   const [trail, thread] = await Promise.all([trailFor([e]).then((t) => t[e.id] ?? []), conversation(e.id)])
   // The valuation check: our estimate, the portal searches, comparables and the figure.
   const rent = kind === 'lettings-valuation'
@@ -154,7 +154,7 @@ export default async function EnquiryPage({ params, searchParams }: { params: Pr
         <section className="card card-pad ew-email" id="email">
           <h2>Email {e.name.split(/\s+/)[0]}</h2>
           <p className="card-sub">Choose an email, check the wording, and send it. It goes from the office mailbox and is noted here.</p>
-          <EmailComposer key={`${sp.tpl ?? ''}|${ctx.figure ?? ''}`} start={sp.tpl} id={e.id} ctx={ctx} to={e.email} canSend={!blocked} blocked={blocked} chooseKind={!sorted.side} />
+          <EmailComposer key={`${sp.tpl ?? ''}|${ctx.figure ?? ''}`} start={sp.tpl} id={e.id} ctx={ctx} to={e.email} canSend={!blocked} blocked={blocked} chooseKind={!sorted.side} listings={listings} linkedId={p?.id ?? null} suggested={suggested} />
         </section>
         </div>
       </div>

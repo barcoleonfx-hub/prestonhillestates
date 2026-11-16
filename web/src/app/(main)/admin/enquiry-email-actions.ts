@@ -11,6 +11,8 @@ import { enquiryWorkspace } from '@/lib/enquiry-workspace'
 import { conversation, recordOutgoing } from '@/lib/enquiry-thread'
 import { renderReply } from '@/lib/enquiry-email'
 import { sendFromMailbox } from '@/lib/mailbox'
+import { getProperty } from '@/lib/properties'
+import { emailProperty } from '@/lib/property-email-data'
 import { now, uid } from '@/lib/util'
 import { figureText, type CheckComp, type SavedValuation } from '@/lib/valuation-check'
 
@@ -47,7 +49,22 @@ export async function sendEnquiryEmail(_prev: SendState, form: FormData): Promis
   if (files.reduce((n, f) => n + f.size, 0) > 15 * 1024 * 1024) return { error: 'The attachments are over 15 MB. Many mailboxes refuse emails that big: send a smaller PDF.' }
   if (files.some((f) => !/\.(pdf|jpe?g|png)$/i.test(f.name))) return { error: 'Attach PDFs or photos (JPEG or PNG) only.' }
   const attachments = await Promise.all(files.map(async (f) => ({ filename: f.name.replace(/[^\w .()-]/g, '_').slice(0, 120), content: Buffer.from(await f.arrayBuffer()), contentType: f.type || 'application/octet-stream' })))
-  const { html, text } = renderEnquiryEmail({ ...w.ctx, kind }, t, subject, message, { ...extra, attached: attachments.length > 0 })
+  // The property in a buyer or tenant email, as chosen in the composer: none (a general email), the one the
+  // enquiry is linked to, or another of our live listings.
+  let ctx = { ...w.ctx, kind }
+  let linkTo: string | null = null
+  if ((kind === 'buyer' || kind === 'tenant') && form.has('propertyId')) {
+    const pid = String(form.get('propertyId') ?? '')
+    if (!pid) ctx = { ...ctx, property: null }
+    else if (pid !== w.p?.id) {
+      const chosen = await getProperty(pid).catch(() => null)
+      if (!chosen || !chosen.published) return { error: 'That property isn’t on the website any more. Choose another, or none.' }
+      const ep = emailProperty(chosen, w.ctx.base)
+      ctx = { ...ctx, property: { url: ep.url, address: ep.address, priceText: ep.priceText, photo: ep.photos[0] ?? null, specs: ep.specs.slice(0, 3) } }
+      if (!w.p) linkTo = chosen.id
+    }
+  }
+  const { html, text } = renderEnquiryEmail(ctx, t, subject, message, { ...extra, attached: attachments.length > 0 })
   // The design around the message (headline, figure box) uses the boxes above it, so they must be filled in too.
   if (/\[your valuation\]/i.test(html)) return { error: 'Type your valuation in the “Your valuation” box first.' }
   if (/\[day and time\]/i.test(html)) return { error: 'Type the day and time in the box first.' }
@@ -59,7 +76,8 @@ export async function sendEnquiryEmail(_prev: SendState, form: FormData): Promis
   await db.insert(enquiryNotes).values({ id: uid(), enquiryId: id, body: `Email sent: ${subject}${attachments.length ? ` (attached: ${attachments.map((a) => a.filename).join(', ')})` : ''}`, createdBy: me.id, createdAt: at })
   // Sending a sales or lettings email settles which list an unsorted enquiry belongs on.
   const side = kind === 'lettings-valuation' || kind === 'tenant' ? 'lettings' : 'sales'
-  await db.update(enquiries).set({ handled: true, ...(w.sorted.side ? {} : { side }) }).where(eq(enquiries.id, id))
+  // An enquiry that wasn't linked to a listing is linked to the one sent to them, so it shows on the enquiry.
+  await db.update(enquiries).set({ handled: true, ...(w.sorted.side ? {} : { side }), ...(linkTo ? { propertyId: linkTo } : {}) }).where(eq(enquiries.id, id))
   if (w.e.contactId) await db.update(contacts).set({ lastContactAt: at, updatedAt: at }).where(eq(contacts.id, w.e.contactId))
   await audit(me.id, 'enquiry_email', 'enquiry', id, `${kind}/${key}: ${subject}`.slice(0, 120))
   revalidatePath('/admin', 'layout')

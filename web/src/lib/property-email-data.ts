@@ -187,3 +187,35 @@ const rank = (tags: Interest[]) => [...new Set(tags)]
 export async function sentHistory(propertyId: string) {
   return db.select().from(propertyEmails).where(eq(propertyEmails.propertyId, propertyId)).orderBy(propertyEmails.sentAt)
 }
+
+// ---------- choosing a listing for an enquiry email ----------
+
+export type ListingCard = { url: string; address: string; priceText: string; photo: string | null; specs: string[] }
+export type ListingOption = { id: string; channel: 'sale' | 'let'; label: string; status: string; card: ListingCard }
+
+/** Our live listings as the property card in an enquiry email (photo, price, address, a few specs, link). */
+export function listingOptions(rows: (Property & { cover: { url: string } | null })[], base: string): ListingOption[] {
+  return rows.map((p) => {
+    const specs = [p.bedrooms ? `${p.bedrooms} bed` : p.bedrooms === 0 ? 'Studio' : '', p.bathrooms ? `${p.bathrooms} bath` : '', typeText(p) ?? ''].filter(Boolean)
+    const photo = p.cover ? (p.cover.url.startsWith('/') ? `${base}${p.cover.url}` : p.cover.url) : null
+    const card = { url: `${base}/properties/${slugFor(p)}`, address: displayAddressFor(p), priceText: priceLabel(p), photo, specs }
+    return { id: p.id, channel: p.channel === 'let' ? 'let' as const : 'sale' as const, status: p.status, label: `${card.address} · ${card.priceText}`, card }
+  })
+}
+
+const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\b(road|rd|avenue|ave|street|st|lane|ln|close|cl|drive|dr|gardens|gdns|way|crescent|cres)\b/g, (w) => w.slice(0, 2)).replace(/\s+/g, ' ').trim()
+
+/**
+ * The listing an enquiry is about, when its text names one clearly: the street and the postcode district of exactly
+ * one of our listings (Zoopla and OnTheMarket put the address in the email). Null when unsure.
+ */
+export function listingNamedIn(text: string, rows: Pick<Property, 'id' | 'street' | 'addressLine1' | 'postcode' | 'displayAddress'>[]): string | null {
+  const t = ` ${norm(text)} `
+  const hits = rows.filter((p) => {
+    const street = norm(p.street || p.addressLine1?.replace(/^\s*(flat\s+\w+,?\s*)?\d+[a-z]?\s+/i, '') || '')
+    const out = (p.postcode ?? '').trim().split(/\s+/)[0]?.toLowerCase()
+    if (street.length < 4) return false
+    return t.includes(` ${street} `) && (!out || t.includes(` ${out} `) || t.includes(` ${out}`))
+  })
+  return hits.length === 1 ? hits[0].id : null
+}
