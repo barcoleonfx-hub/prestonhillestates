@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { attributionJson, ConsentBoxes, type Consent } from '@/components/LeadCapture'
 
 const RENTS = [1000, 1250, 1500, 1750, 2000, 2250, 2500, 3000, 3500, 4000]
 const BEDS: [string, number | ''][] = [['Any', ''], ['Studio', 0], ['1+', 1], ['2+', 2], ['3+', 3], ['4+', 4]]
@@ -16,6 +17,7 @@ export function TenantSignup({ areas }: { areas: string[] }) {
   const [furnishing, setFurnishing] = useState('')
   const [pets, setPets] = useState(false)
   const [name, setName] = useState(''), [email, setEmail] = useState(''), [phone, setPhone] = useState(''), [notes, setNotes] = useState(''), [hp, setHp] = useState('')
+  const [consent, setConsent] = useState<Consent>({ email: false, whatsapp: false })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<{ text: string; field?: string } | null>(null)
   const [done, setDone] = useState(false)
@@ -24,7 +26,7 @@ export function TenantSignup({ areas }: { areas: string[] }) {
   async function send(e: React.FormEvent) {
     e.preventDefault()
     setError(null); setBusy(true)
-    const r = await fetch('/api/public/tenant', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, email, phone, maxRent, minBeds, areas: picked, moveBy, furnishing, pets, notes, hp_check: hp }) })
+    const r = await fetch('/api/public/tenant', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, email, phone, maxRent, minBeds, areas: picked, moveBy, furnishing, pets, notes, hp_check: hp, magnet: 'tenant-register', attribution: attributionJson(), consent_email: consent.email, consent_whatsapp: consent.whatsapp }) })
       .then((x) => x.json()).catch(() => null) as { ok?: boolean; error?: string; field?: string } | null
     setBusy(false)
     if (!r?.ok) return setError({ text: r?.error ?? 'That didn’t send. Please call us on 020 8904 9005.', field: r?.field })
@@ -88,9 +90,10 @@ export function TenantSignup({ areas }: { areas: string[] }) {
         <div className="vx-field"><label htmlFor="tx-phone">Phone <span className="vx-opt">(optional)</span></label><input id="tx-phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" aria-invalid={error?.field === 'phone' || undefined} /></div>
         <div className="vx-field"><label htmlFor="tx-notes">Anything else? <span className="vx-opt">(optional)</span></label><input id="tx-notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. need parking, near Kenton station" /></div>
       </div>
+      <ConsentBoxes value={consent} onChange={setConsent} />
       {error ? <p className="vx-error" role="alert">{error.text}</p> : null}
       <div className="vx-actions">
-        <span className="vx-fine">We’ll only use your details to send you homes and help you find one.</span>
+        <span className="vx-fine">We’ll use your details to send you the homes you asked for and help you find one.</span>
         <button type="submit" className="btn gold" disabled={busy}>{busy ? 'Sending…' : 'Send me matching homes'}</button>
       </div>
     </form>

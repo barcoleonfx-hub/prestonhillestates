@@ -1,0 +1,12 @@
+/* Consent boxes on every website form: quiet, readable, and in whichever design the form uses. The selectors are
+   deliberately specific so the forms' own label and input styles (uppercase labels, full-width inputs) don't apply. */
+.cbx { display: grid; gap: 8px; margin: 4px 0 2px; text-align: left; }
+.cbx label.cbx-row { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; margin: 0; padding: 0;
+  font-size: 0.82rem; line-height: 1.45; color: inherit; opacity: 0.88; cursor: pointer; font-weight: 400; letter-spacing: 0; text-transform: none; }
+.cbx label.cbx-row input[type='checkbox'] { appearance: auto; width: 16px; height: 16px; min-height: 0; margin: 2px 0 0; padding: 0; border: 0;
+  border-radius: 0; background: none; box-shadow: none; accent-color: #A47B1D; flex: none; }
+.cbx label.cbx-row span { font: inherit; color: inherit; letter-spacing: 0; text-transform: none; }
+.cbx p.cbx-note { margin: 0; font-size: 0.74rem; line-height: 1.4; opacity: 0.7; color: inherit; }
+.cbx p.cbx-note a { color: inherit; text-decoration: underline; }
+.cbx.compact { gap: 6px; }
+.cbx.compact label.cbx-row { font-size: 0.76rem; }

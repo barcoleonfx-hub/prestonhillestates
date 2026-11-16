@@ -4,6 +4,7 @@ import { db } from '@/db/client'
 import { enquiries, enquiryMessages, mailMessages, notifications } from '@/db/schema'
 import type { ImportRow } from './email-import'
 import { now, uid } from './util'
+import { leadEvent } from './leads'
 
 // The email conversation on an enquiry. Everything we send from an enquiry is recorded with its email ID; when
 // an email arrives, it's checked against those first, so a reply joins its enquiry (and puts it back under
@@ -18,6 +19,7 @@ export async function recordOutgoing(enquiryId: string, m: { messageId: string |
     id: uid(), enquiryId, messageId: m.messageId, direction: 'out', subject: m.subject, body: m.body.replace(/\r/g, '').slice(0, 8000), fromAddr: null,
     via: m.via ?? 'portal', sentBy: m.by, sentAt: m.sentAt ?? now(), createdAt: now(),
   }).onConflictDoNothing()
+  await leadEvent(enquiryId, 'outbound', { by: m.by, at: m.sentAt ?? now(), detail: 'email sent' }).catch((e) => console.error('lead status (sent email) failed', e))
 }
 
 /**
@@ -70,6 +72,7 @@ export async function attachReply(enquiryId: string, row: ImportRow, how: string
   }).onConflictDoNothing()
   if (!res.rowsAffected) return false // already in the conversation
   await db.update(enquiries).set({ handled: false, lastReplyAt: row.date > (e.lastReplyAt ?? '') ? row.date : e.lastReplyAt }).where(eq(enquiries.id, enquiryId))
+  await leadEvent(enquiryId, 'inbound', { at: row.date, detail: 'they replied by email' }).catch((x) => console.error('lead status (reply) failed', x))
   await db.insert(notifications).values({
     id: uid(), kind: 'enquiry', appointmentId: null, title: `${e.name} replied`,
     body: [row.subject, row.reply.text.split('\n').find((l) => l.trim())?.slice(0, 140) ?? ''].filter(Boolean).join('\n'), createdBy: null, createdAt: now(),
@@ -97,7 +100,7 @@ export async function linkSentReplies(): Promise<number> {
       id: uid(), enquiryId, messageId: m.messageId, direction: 'out', subject: m.subject, body: (m.body ?? '').slice(0, 8000), fromAddr: m.fromAddr,
       via: 'mailbox', sentBy: null, sentAt: m.sentAt, createdAt: now(),
     }).onConflictDoNothing()
-    if (r.rowsAffected) n++
+    if (r.rowsAffected) { n++; await leadEvent(enquiryId, 'outbound', { at: m.sentAt, detail: 'email sent from the mailbox' }).catch(() => {}) }
   }
   return n
 }

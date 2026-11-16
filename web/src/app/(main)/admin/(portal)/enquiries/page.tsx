@@ -11,6 +11,7 @@ import { removeNotEnquiry, setEnquiryHandled, setEnquirySide } from '../../actio
 import { EnquiryOutcome } from '../EnquiryOutcome'
 import { LogCallButton } from '../LogCallButton'
 import { AutoRefresh } from '../AutoRefresh'
+import { LEAD_STATUSES, isLeadStatus, statusLabel } from '@/lib/lead-rules'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Enquiries' }
@@ -22,8 +23,8 @@ const HEAD: Record<EnquirySide | 'unsorted' | 'all', [string, string]> = {
   all: ['All enquiries', 'Sales and lettings together. Click a person to call, book or email them.'],
 }
 
-export default async function EnquiriesPage({ searchParams }: { searchParams: Promise<{ q?: string; source?: string; outcome?: string; imported?: string; show?: string; property?: string; side?: string; type?: string }> }) {
-  await requireAdmin()
+export default async function EnquiriesPage({ searchParams }: { searchParams: Promise<{ q?: string; source?: string; outcome?: string; imported?: string; show?: string; property?: string; side?: string; type?: string; stage?: string; mine?: string }> }) {
+  const me = await requireAdmin()
   await ready()
   const sp = await searchParams
   const q = (sp.q ?? '').trim().slice(0, 80)
@@ -37,6 +38,8 @@ export default async function EnquiriesPage({ searchParams }: { searchParams: Pr
   const linkTo = props.map((p) => ({ id: p.id, label: `${p.ref} · ${displayAddressFor(p)}` }))
   const property = sp.property === 'none' || props.some((p) => p.id === sp.property) ? sp.property! : ''
   const show = sp.show ?? ''
+  const stage = isLeadStatus(sp.stage) ? sp.stage : ''
+  const mine = sp.mine === '1'
   const where: SQL[] = []
   if (imported) where.push(isNotNull(enquiries.externalId))
   if (property === 'none') where.push(isNull(enquiries.propertyId))
@@ -46,6 +49,7 @@ export default async function EnquiriesPage({ searchParams }: { searchParams: Pr
     where.push(or(like(sql`lower(${enquiries.name})`, t), like(sql`lower(coalesce(${enquiries.email}, ''))`, t), like(sql`replace(coalesce(${enquiries.phone}, ''), ' ', '')`, `%${q.replace(/\s/g, '')}%`), like(sql`lower(coalesce(${enquiries.message}, ''))`, t))!)
   }
   if (source) where.push(eq(enquiries.source, source))
+  if (mine) where.push(eq(enquiries.ownerId, me.id))
   if (outcome === 'none') where.push(sql`${enquiries.outcome} IS NULL`)
   else if (outcome) where.push(eq(enquiries.outcome, outcome))
   const found: Row[] = await db
@@ -65,13 +69,15 @@ export default async function EnquiriesPage({ searchParams }: { searchParams: Pr
     return { all: list.length, fresh: list.filter((r) => !r.e.handled).length }
   }
   // Everything shows until a card is chosen, so nothing new is ever out of sight.
-  const rows = found.filter((r) => (!side || sideOf.get(r.e.id) === side) && (!type || (type === 'valuations') === valOf.get(r.e.id)))
+  const inView = found.filter((r) => (!side || sideOf.get(r.e.id) === side) && (!type || (type === 'valuations') === valOf.get(r.e.id)))
+  const stageCount = (v: string) => inView.filter((r) => r.e.status === v).length
+  const rows = stage ? inView.filter((r) => r.e.status === stage) : inView
 
   const recentFrom = new Date(Date.now() - RECENT_DAYS * 86400000).toISOString()
   const open = rows.filter((r) => !r.e.handled)
   const recent = rows.filter((r) => r.e.handled && r.e.createdAt >= recentFrom)
   const older = rows.filter((r) => r.e.handled && r.e.createdAt < recentFrom)
-  const keep = { ...(q ? { q } : {}), ...(source ? { source } : {}), ...(outcome ? { outcome } : {}), ...(imported ? { imported: '1' } : {}), ...(property ? { property } : {}), ...(side ? { side } : {}), ...(type ? { type } : {}), ...(sp.show ? { show: sp.show } : {}) }
+  const keep = { ...(q ? { q } : {}), ...(source ? { source } : {}), ...(outcome ? { outcome } : {}), ...(imported ? { imported: '1' } : {}), ...(property ? { property } : {}), ...(side ? { side } : {}), ...(type ? { type } : {}), ...(stage ? { stage } : {}), ...(mine ? { mine: '1' } : {}), ...(sp.show ? { show: sp.show } : {}) }
   const href = (p: Record<string, string>) => `/admin/enquiries?${new URLSearchParams(Object.entries({ ...keep, ...p }).filter(([, v]) => v))}`
   const here = href({})
   const filtersOn = !!(source || outcome || imported || property)
@@ -104,7 +110,7 @@ export default async function EnquiriesPage({ searchParams }: { searchParams: Pr
             <Link href={`/admin/enquiries/${r.e.id}?back=${encodeURIComponent(here)}`} className="enq-link">
               <span className="enq-av" aria-hidden="true">{r.e.name.trim()[0]?.toUpperCase() ?? '?'}</span>
               <span className="enq-main">
-                <span className="enq-name">{r.e.name}{!r.e.handled ? <span className="pill gold">{r.e.lastReplyAt ? 'Replied' : 'New'}</span> : null}{!type && valOf.get(r.e.id) ? <span className="pill">{sideOf.get(r.e.id) === 'lettings' ? 'Rental valuation' : 'Valuation'}</span> : null}{r.e.outcome ? <span className="pill">{outcomeText(r.e.outcome)}</span> : null}{r.dnc ? <span className="pill warn">Do not contact</span> : null}</span>
+                <span className="enq-name">{r.e.name}{!r.e.handled ? <span className="pill gold">{r.e.lastReplyAt ? 'Replied' : 'New'}</span> : null}{!type && valOf.get(r.e.id) ? <span className="pill">{sideOf.get(r.e.id) === 'lettings' ? 'Rental valuation' : 'Valuation'}</span> : null}{r.e.status !== 'new' ? <span className={`pill ${LEAD_STATUSES.find((x) => x.value === r.e.status)?.tone ?? ''}`}>{statusLabel(r.e.status)}</span> : null}{r.e.outcome ? <span className="pill">{outcomeText(r.e.outcome)}</span> : null}{r.dnc ? <span className="pill warn">Do not contact</span> : null}</span>
                 <span className="enq-what">{whatOf(r)}</span>
               </span>
               <span className="enq-src">{enquiryLabel(r.e).replace(/ (enquiry|request|registration|viewing request|valuation request)$/i, '')}<small>{ago(r.e.createdAt)}</small></span>
@@ -183,6 +189,13 @@ export default async function EnquiriesPage({ searchParams }: { searchParams: Pr
       {side !== 'unsorted' && unsortedCount.all ? (
         <p className="enq-unsorted"><Link href={href({ side: 'unsorted', type: '', show: '' })}>{unsortedCount.all} enquir{unsortedCount.all === 1 ? 'y doesn’t' : 'ies don’t'} say whether {unsortedCount.all === 1 ? 'it’s' : 'they’re'} sales or lettings{unsortedCount.fresh ? ` (${unsortedCount.fresh} new)` : ''} →</Link></p>
       ) : null}
+
+      <nav className="lead-filters" aria-label="Stage">
+        <Link className={mine ? 'on' : undefined} href={href({ mine: mine ? '' : '1', show: '' })}>{mine ? '✓ ' : ''}My leads</Link>
+        <span className="sep" aria-hidden="true" />
+        <Link className={!stage ? 'on' : undefined} href={href({ stage: '', show: '' })}>Every stage</Link>
+        {LEAD_STATUSES.map((x) => <Link key={x.value} className={stage === x.value ? 'on' : undefined} href={href({ stage: x.value, show: '' })}>{x.label} {stageCount(x.value)}</Link>)}
+      </nav>
 
       <form className="enq-search" action="/admin/enquiries">
         {Object.entries(keep).filter(([k]) => k !== 'q' && k !== 'show').map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}

@@ -1,5 +1,6 @@
 'use client'
 import { useActionState } from 'react'
+import { AttributionField, ConsentBoxes } from '@/components/LeadCapture'
 import { sendEnquiry, type EnquiryState } from '../../actions'
 
 export function EnquiryForm({ propertyId, isLet }: { propertyId: string; isLet: boolean }) {
@@ -13,6 +14,7 @@ export function EnquiryForm({ propertyId, isLet }: { propertyId: string; isLet: 
       ) : (
         <form action={action}>
           <input type="hidden" name="propertyId" value={propertyId} />
+          <AttributionField />
           <div style={{ position: 'absolute', left: '-9999px' }} aria-hidden="true">
             <label htmlFor="enq-hp">Leave this box empty</label>
             <input id="enq-hp" name="hp_check" tabIndex={-1} autoComplete="off" />
@@ -24,6 +26,7 @@ export function EnquiryForm({ propertyId, isLet }: { propertyId: string; isLet: 
             <label htmlFor="enq-message">Message</label>
             <textarea id="enq-message" name="message" placeholder={isLet ? 'When would you like to move in?' : 'When would suit you to view?'} />
           </div>
+          <ConsentBoxes />
           {state.error ? <p className="err" role="alert">{state.error}</p> : null}
           <button className="btn btn-gold" type="submit" disabled={pending}>{pending ? 'Sending…' : 'Request a viewing'}</button>
         </form>

@@ -152,6 +152,19 @@ export const enquiries = sqliteTable('enquiries', {
   /** When they last replied to an email we sent (see enquiryMessages). */
   lastReplyAt: text('last_reply_at'),
   createdAt: text('created_at').notNull(),
+  /** The pipeline: new, contacted, engaged, viewing, offer, won, lost, dormant (see lib/lead-rules). */
+  status: text('status').notNull().default('new'),
+  ownerId: text('owner_id'),
+  firstContactedAt: text('first_contacted_at'),
+  lastInboundAt: text('last_inbound_at'),
+  lastOutboundAt: text('last_outbound_at'),
+  /** Where it came from: the advert or link (UTM), the page that sent them, the page they landed on, which form. */
+  utmSource: text('utm_source'),
+  utmMedium: text('utm_medium'),
+  utmCampaign: text('utm_campaign'),
+  referrer: text('referrer'),
+  landingPage: text('landing_page'),
+  leadMagnet: text('lead_magnet'),
 })
 
 /** The email conversation on an enquiry: what we sent ('out') and what they replied ('in'). */
@@ -307,6 +320,12 @@ export const contacts = sqliteTable(
     marketingOptOut: integer('marketing_opt_out', { mode: 'boolean' }).notNull().default(false),
     wantedType: text('wanted_type'),
     lastContactAt: text('last_contact_at'),
+    /** +447700900123: worked out from their phone number. */
+    phoneE164: text('phone_e164'),
+    /** When they ticked "email me" / "WhatsApp me", and on which form. Null: not given (or withdrawn). */
+    emailOptInAt: text('email_opt_in_at'),
+    whatsappOptInAt: text('whatsapp_opt_in_at'),
+    consentSource: text('consent_source'),
     createdBy: text('created_by'),
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
@@ -580,5 +599,28 @@ export const emailImages = sqliteTable('email_images', {
   sizeBytes: integer('size_bytes'),
   originalName: text('original_name'),
   createdBy: text('created_by'),
+  createdAt: text('created_at').notNull(),
+})
+
+/** Status changes, consent, WhatsApp messages opened from the portal, imports: the rest of a lead's timeline. */
+export const leadEvents = sqliteTable('lead_events', {
+  id: text('id').primaryKey(),
+  enquiryId: text('enquiry_id'),
+  contactId: text('contact_id'),
+  kind: text('kind').notNull(),
+  detail: text('detail'),
+  createdBy: text('created_by'),
+  createdAt: text('created_at').notNull(),
+})
+
+/** Every consent given or withdrawn, with the wording shown and where. */
+export const consents = sqliteTable('consents', {
+  id: text('id').primaryKey(),
+  contactId: text('contact_id'),
+  enquiryId: text('enquiry_id'),
+  channel: text('channel').notNull(), // email | whatsapp
+  granted: integer('granted', { mode: 'boolean' }).notNull(),
+  wording: text('wording'),
+  source: text('source'),
   createdAt: text('created_at').notNull(),
 })

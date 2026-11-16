@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { attributionJson, ConsentBoxes, type Consent } from '@/components/LeadCapture'
 
 type Est = {
   ok: boolean; error?: string; postcode: string; beds: number; basis: 'nearby' | 'ons' | null; range: [number, number] | null
@@ -20,6 +21,7 @@ export function RentEstimate({ feePct }: { feePct: number }) {
   const [error, setError] = useState('')
   const [name, setName] = useState(''), [phone, setPhone] = useState(''), [email, setEmail] = useState(''), [hp, setHp] = useState('')
   const [sent, setSent] = useState(false)
+  const [consent, setConsent] = useState<Consent>({ email: false, whatsapp: false })
 
   async function look(e: React.FormEvent) {
     e.preventDefault()
@@ -33,7 +35,7 @@ export function RentEstimate({ feePct }: { feePct: number }) {
     e.preventDefault()
     setError(''); setBusy(true)
     const note = est?.range ? `Rent estimate on the website: ${gbp(est.range[0])} to ${gbp(est.range[1])} pcm for a ${bedWord(est.beds)}.` : `Asked for a rent figure for a ${bedWord(est?.beds ?? beds)}.`
-    const r = await fetch('/api/public/valuation', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim(), phone: phone.trim(), email: email.trim(), postcode: est?.postcode ?? postcode, intent: 'letting', bedrooms: beds === 0 ? 'Studio' : beds >= 5 ? '5+' : String(beds), notes: note, hp_check: hp }) }).then((x) => x.json()).catch(() => null) as { ok?: boolean; error?: string } | null
+    const r = await fetch('/api/public/valuation', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.trim(), phone: phone.trim(), email: email.trim(), postcode: est?.postcode ?? postcode, intent: 'letting', bedrooms: beds === 0 ? 'Studio' : beds >= 5 ? '5+' : String(beds), notes: note, hp_check: hp, magnet: 'rent-estimate', attribution: attributionJson(), consent_email: consent.email, consent_whatsapp: consent.whatsapp }) }).then((x) => x.json()).catch(() => null) as { ok?: boolean; error?: string } | null
     setBusy(false)
     if (!r?.ok) return setError(r?.error ?? 'That didn’t send. Please call us on 020 8904 9005.')
     setSent(true)
@@ -95,6 +97,7 @@ export function RentEstimate({ feePct }: { feePct: number }) {
               <div className="vx-field"><label htmlFor="lx-phone">Phone number</label><input id="lx-phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" /></div>
             </div>
             <div className="vx-field"><label htmlFor="lx-email">Email <span className="vx-opt">(optional)</span></label><input id="lx-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" /></div>
+            <ConsentBoxes value={consent} onChange={setConsent} />
             {error ? <p className="vx-error" role="alert">{error}</p> : null}
             <div className="vx-actions"><span className="vx-fine">Free, no obligation. A call back within one working day.</span><button type="submit" className="btn gold" disabled={busy}>{busy ? 'Sending…' : 'Get my rental valuation'}</button></div>
           </form>

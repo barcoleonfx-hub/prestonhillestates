@@ -134,6 +134,22 @@ html = swap(html, /<form class="val-card rv d2" onsubmit="return false;">[\s\S]*
 // Honeypot for the pop-up form too.
 html = swap(html, '<p class="vp-error" role="alert" hidden></p>', '<input type="text" name="hp_check" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px"/>\n          <p class="vp-error" role="alert" hidden></p>')
 
+// Consent boxes (never ticked to start with), in the same words the portal stores: read from src/lib/lead-rules.ts.
+const rules = readFileSync(path.join(web, 'src/lib/lead-rules.ts'), 'utf8')
+const wording = (k) => {
+  const m = new RegExp(`${k}: '([^']+)'`).exec(rules.slice(rules.indexOf('CONSENT_WORDING')))
+  if (!m) throw new Error(`build-home: couldn't find the ${k} consent wording in lead-rules.ts`)
+  return m[1].replace(/&/g, '&amp;').replace(/</g, '&lt;')
+}
+const consent = (compact) => `<div class="cbx${compact ? ' compact' : ''}">
+          <label class="cbx-row"><input type="checkbox" name="consent_email" value="true"/><span>${wording('email')}</span></label>
+          <label class="cbx-row"><input type="checkbox" name="consent_whatsapp" value="true"/><span>${wording('whatsapp')}</span></label>
+          <p class="cbx-note">Optional. We’ll use your details to deal with your enquiry either way. <a href="/privacy" target="_blank" rel="noopener">Privacy policy</a></p>
+        </div>`
+html = swap(html, '<p class="val-msg err" role="alert" hidden></p>', `${consent(true)}\n        <p class="val-msg err" role="alert" hidden></p>`)
+html = swap(html, '<p class="vp-small">We&rsquo;ll only use your details to arrange your valuation.</p>', consent(true))
+html = swap(html, '<span>Independent estate agents in Harrow since 2004</span>', '<span><a href="/privacy">Privacy policy</a> · Independent estate agents in Harrow since 2004</span>')
+
 // Accreditation and portal logos where we have them; otherwise the name stays as text.
 const LOGO_DIRS = ['public/accreditations', 'public/portals']
 function logoFor(key) {
@@ -173,7 +189,7 @@ js = swap(js, "function close() {\n      try { sessionStorage.setItem(KEY, '1');
 js = swap(js, "root.querySelector('.vp-done-close').addEventListener('click', close);", "root.querySelector('.vp-done-close').addEventListener('click', function () { close(365); });")
 js = swap(js, "      err.hidden = true; form.hidden = true; done.hidden = false;\n      done.querySelector('button').focus();",
   `      var btn = form.querySelector('button[type=submit]'); btn.disabled = true; btn.textContent = 'Sending…';
-      window.pheSendValuation({ name: name, phone: tel, email: mail, postcode: pc, intent: (form.querySelector('input[name=intent]:checked') || {}).value, hp_check: form.hp_check.value })
+      window.pheSendValuation({ name: name, phone: tel, email: mail, postcode: pc, intent: (form.querySelector('input[name=intent]:checked') || {}).value, hp_check: form.hp_check.value, magnet: 'valuation-popup' }, form)
         .then(function (r) {
           btn.disabled = false; btn.textContent = 'Request my free valuation';
           if (!r.ok) { var map = { name: 'vp-name', phone: 'vp-phone', email: 'vp-email', postcode: 'vp-postcode' }; return fail(map[r.field] || 'vp-name', r.error || 'Something went wrong. Please call us on 020 8904 9005.'); }
@@ -186,7 +202,10 @@ const extra = `
 /* ---------- live site: shared sender, search and valuation section ---------- */
 // If the site is restarting (about a minute during each update) or the connection drops, try again every 5 seconds
 // for about half a minute before giving up.
-window.pheSendValuation = function (data) {
+// It also sends how the visitor arrived (remembered by the site for 90 days) and the consent boxes on the form.
+window.pheSendValuation = function (data, form) {
+  try { var v = JSON.parse(localStorage.getItem('phe_attr') || 'null'); data.attribution = JSON.stringify(v || { landing: location.pathname }); } catch (e) {}
+  if (form) { data.consent_email = !!(form.consent_email && form.consent_email.checked); data.consent_whatsapp = !!(form.consent_whatsapp && form.consent_whatsapp.checked); }
   var body = JSON.stringify(data), tries = 0;
   function attempt() {
     return fetch('/api/public/valuation', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body })
@@ -219,7 +238,7 @@ window.pheSendValuation = function (data) {
     if (!name) return fail('v-name', 'Please tell us your name.');
     if (!/^[0-9+()\\s-]{7,20}$/.test(tel)) return fail('v-phone', tel ? 'That phone number doesn’t look right.' : 'Add a phone number so the branch can call you.');
     var btn = form.querySelector('button[type=submit]'); btn.disabled = true; btn.textContent = 'Sending…';
-    window.pheSendValuation({ name: name, phone: tel, postcode: pc, intent: 'unsure', hp_check: form.hp_check.value }).then(function (r) {
+    window.pheSendValuation({ name: name, phone: tel, postcode: pc, intent: 'unsure', hp_check: form.hp_check.value, magnet: 'home-valuation' }, form).then(function (r) {
       btn.disabled = false; btn.textContent = 'Request my valuation';
       if (!r.ok) { var map = { name: 'v-name', phone: 'v-phone', postcode: 'v-postcode' }; return fail(map[r.field] || 'v-name', r.error || 'Something went wrong. Please call us on 020 8904 9005.'); }
       try { localStorage.setItem('phe_valuation_popup', String(Date.now() + 365 * 864e5)); } catch (e) {}

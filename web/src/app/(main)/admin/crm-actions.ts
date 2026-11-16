@@ -10,6 +10,7 @@ import { CALL_NEXT, CALLER_TYPES, DIRECTIONS, addRole, normEmail, normPhone, par
 import { londonToIso } from '@/lib/time'
 import { now, uid } from '@/lib/util'
 import { unlinkedFor } from '@/lib/enquiry-links'
+import { contactLeadEvent, leadEvent, syncPhoneE164 } from '@/lib/leads'
 
 const str = (form: FormData, k: string, max = 500) => String(form.get(k) ?? '').trim().slice(0, max)
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -85,6 +86,9 @@ export async function logCall(_prev: CallState, form: FormData): Promise<CallSta
 
   const callId = uid()
   await db.insert(calls).values({ id: callId, contactId, direction, callerType, propertyId, notes, nextStep: next, createdBy: me.id, createdAt: now() })
+  // A call counts as contact: we rang them (contacted), or they rang us (engaged).
+  await contactLeadEvent(contactId, direction === 'out' ? 'outbound' : 'inbound', { by: me.id, detail: direction === 'out' ? 'we called them' : 'they called us' }).catch(() => {})
+  await syncPhoneE164(contactId).catch(() => {})
 
   // Ticking "this was the callback" closes those tasks.
   const closeIds = form.getAll('closeTask').map(String).filter(Boolean).slice(0, 20)
@@ -203,6 +207,7 @@ export async function setEnquiryOutcome(form: FormData) {
   const e = await db.query.enquiries.findFirst({ where: eq(enquiries.id, id) })
   if (!e) return
   await db.update(enquiries).set({ outcome, outcomeAt: outcome ? now() : null, outcomeBy: outcome ? me.id : null, handled: true }).where(eq(enquiries.id, id))
+  if (outcome === 'not_interested' || outcome === 'do_not_call') await leadEvent(id, 'lost', { by: me.id, detail: outcome === 'do_not_call' ? 'asked not to be called' : 'not interested' }).catch(() => {})
   if (e.contactId) {
     if (outcome === 'do_not_call') await db.update(contacts).set({ doNotContact: true, updatedAt: now() }).where(eq(contacts.id, e.contactId))
     else if (e.outcome === 'do_not_call') await db.update(contacts).set({ doNotContact: false, updatedAt: now() }).where(eq(contacts.id, e.contactId))

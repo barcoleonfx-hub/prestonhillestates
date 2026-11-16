@@ -3,6 +3,7 @@ import { and, desc, eq, inArray, isNotNull } from 'drizzle-orm'
 import { db, getClient, ready } from '@/db/client'
 import { contacts, enquiries, properties, propertyEmails, settings, tenantAlerts, type Property, type TenantAlert } from '@/db/schema'
 import { upsertContact } from './contacts'
+import { captureLead } from './leads'
 import { mailboxStatus, sendFromMailbox } from './mailbox'
 import { getProperty } from './properties'
 import { draftFor, firstName, interestsIn, renderEmail, type EmailRecipient, type Sender } from './property-email'
@@ -28,7 +29,7 @@ export type TenantInput = {
 }
 
 /** Saves the tenant (contact, an enquiry for the branch to follow up, and their alert). */
-export async function registerTenant(t: TenantInput): Promise<string> {
+export async function registerTenant(t: TenantInput, field: (k: string) => unknown = () => null): Promise<string> {
   await ready()
   const contactId = await upsertContact({ name: t.name, phone: t.phone || null, email: t.email, role: 'tenant', source: 'Our website' })
   const areas = t.areas.filter((a) => a in TENANT_AREAS)
@@ -39,10 +40,12 @@ export async function registerTenant(t: TenantInput): Promise<string> {
     t.maxRent ? `Up to ${gbp(t.maxRent)} pcm` : 'Any rent', t.minBeds != null ? (t.minBeds === 0 ? 'studio or larger' : `${t.minBeds}+ bedrooms`) : '',
     areas.length ? areas.join(', ') : 'any area', t.moveBy ? `moving ${t.moveBy.toLowerCase()}` : '', t.pets ? 'has a pet' : '', t.furnishing ? t.furnishing.replace('_', ' ') : '',
   ].filter(Boolean).join(' · ')
+  const enquiryId = uid()
   await db.insert(enquiries).values({
-    id: uid(), propertyId: null, kind: 'tenant', intent: 'rent', contactId, name: t.name, phone: t.phone || null, email: t.email,
+    id: enquiryId, propertyId: null, kind: 'tenant', intent: 'rent', contactId, name: t.name, phone: t.phone || null, email: t.email,
     message: [`Registered for homes to rent: ${summary}`, t.notes].filter(Boolean).join('\n'), createdAt: now(),
   })
+  await captureLead({ enquiryId, contactId, field, magnet: 'tenant-register' })
   return contactId
 }
 

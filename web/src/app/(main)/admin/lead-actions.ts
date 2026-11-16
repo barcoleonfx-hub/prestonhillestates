@@ -1,0 +1,56 @@
+'use server'
+
+import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
+import { requireAdmin, requireRole } from '@/lib/auth'
+import { audit } from '@/lib/contacts'
+import { isLeadStatus } from '@/lib/lead-rules'
+import { setLeadOwner, setLeadStatus, withdrawConsent } from '@/lib/leads'
+import { erasePerson } from '@/lib/personal-data'
+
+/** Staff move a lead along (or back) by hand. */
+export async function updateLeadStatus(form: FormData) {
+  const me = await requireAdmin()
+  const id = String(form.get('id') ?? '')
+  const status = String(form.get('status') ?? '')
+  if (!id || !isLeadStatus(status)) return
+  await setLeadStatus(id, status, me.id)
+  revalidatePath(`/admin/enquiries/${id}`)
+  revalidatePath('/admin/enquiries')
+}
+
+/** Who looks after a lead ('' for nobody). "Take it" sends the person's own id. */
+export async function updateLeadOwner(form: FormData) {
+  const me = await requireAdmin()
+  const id = String(form.get('id') ?? '')
+  const owner = String(form.get('owner') ?? '')
+  if (!id) return
+  await setLeadOwner(id, owner || null, me.id)
+  revalidatePath(`/admin/enquiries/${id}`)
+  revalidatePath('/admin/enquiries')
+}
+
+/** They asked us (by phone, in person) to stop emails or WhatsApp messages. */
+export async function stopConsent(form: FormData) {
+  const me = await requireAdmin()
+  const contactId = String(form.get('contactId') ?? '')
+  const channel = String(form.get('channel') ?? '')
+  if (!contactId || (channel !== 'email' && channel !== 'whatsapp')) return
+  await withdrawConsent(contactId, channel, `asked us (noted by ${me.name})`, me.id)
+  await audit(me.id, `stopped ${channel} consent`, 'contact', contactId)
+  revalidatePath(`/admin/contacts/${contactId}`)
+}
+
+/** Erase someone completely (their right to erasure). Admins only, and they must type DELETE to confirm. */
+export async function erasePersonAction(form: FormData) {
+  const me = await requireRole('admin')
+  const contactId = String(form.get('contactId') ?? '')
+  if (!contactId) return
+  if (String(form.get('confirm') ?? '').trim().toUpperCase() !== 'DELETE') redirect(`/admin/contacts/${contactId}?erase=confirm#privacy`)
+  const r = await erasePerson(contactId)
+  // The audit log keeps only that it happened, not who it was.
+  if (r.ok) await audit(me.id, 'erased personal data', 'contact', contactId, Object.entries(r.counts ?? {}).map(([k, v]) => `${k}: ${v}`).join(', '))
+  revalidatePath('/admin/contacts')
+  revalidatePath('/admin/enquiries')
+  redirect('/admin/contacts?erased=1')
+}

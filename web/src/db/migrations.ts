@@ -882,4 +882,66 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       )`,
     ],
   },
+  {
+    id: '042_lead_pipeline',
+    sql: [
+      // Where each lead is in the pipeline, who looks after it, when we first and last spoke, and where it came from.
+      `ALTER TABLE enquiries ADD COLUMN status TEXT NOT NULL DEFAULT 'new'`,
+      `ALTER TABLE enquiries ADD COLUMN owner_id TEXT`,
+      `ALTER TABLE enquiries ADD COLUMN first_contacted_at TEXT`,
+      `ALTER TABLE enquiries ADD COLUMN last_inbound_at TEXT`,
+      `ALTER TABLE enquiries ADD COLUMN last_outbound_at TEXT`,
+      `ALTER TABLE enquiries ADD COLUMN utm_source TEXT`,
+      `ALTER TABLE enquiries ADD COLUMN utm_medium TEXT`,
+      `ALTER TABLE enquiries ADD COLUMN utm_campaign TEXT`,
+      `ALTER TABLE enquiries ADD COLUMN referrer TEXT`,
+      `ALTER TABLE enquiries ADD COLUMN landing_page TEXT`,
+      `ALTER TABLE enquiries ADD COLUMN lead_magnet TEXT`,
+      `CREATE INDEX enquiries_status_idx ON enquiries (status, created_at)`,
+      // Fill in what we already know about existing leads.
+      `UPDATE enquiries SET last_outbound_at = (SELECT max(m.sent_at) FROM enquiry_messages m WHERE m.enquiry_id = enquiries.id AND m.direction = 'out'),
+        first_contacted_at = (SELECT min(m.sent_at) FROM enquiry_messages m WHERE m.enquiry_id = enquiries.id AND m.direction = 'out'),
+        last_inbound_at = coalesce(last_reply_at, (SELECT max(m.sent_at) FROM enquiry_messages m WHERE m.enquiry_id = enquiries.id AND m.direction = 'in'))`,
+      `UPDATE enquiries SET first_contacted_at = coalesce(first_contacted_at, outcome_at) WHERE handled = 1`,
+      `UPDATE enquiries SET owner_id = (SELECT c.owner_id FROM contacts c WHERE c.id = enquiries.contact_id) WHERE contact_id IS NOT NULL`,
+      `UPDATE enquiries SET status = CASE
+          WHEN outcome IN ('not_interested', 'do_not_call') THEN 'lost'
+          WHEN EXISTS (SELECT 1 FROM appointments a WHERE a.enquiry_id = enquiries.id AND a.status != 'cancelled') THEN 'viewing'
+          WHEN last_inbound_at IS NOT NULL THEN 'engaged'
+          WHEN handled = 1 OR first_contacted_at IS NOT NULL THEN 'contacted'
+          ELSE 'new' END`,
+      // Phone numbers in international format (+447...), and consent to email and WhatsApp, with when and where given.
+      `ALTER TABLE contacts ADD COLUMN phone_e164 TEXT`,
+      `ALTER TABLE contacts ADD COLUMN email_opt_in_at TEXT`,
+      `ALTER TABLE contacts ADD COLUMN whatsapp_opt_in_at TEXT`,
+      `ALTER TABLE contacts ADD COLUMN consent_source TEXT`,
+      `UPDATE contacts SET phone_e164 = '+44' || substr(phone_norm, 2) WHERE phone_norm LIKE '0%' AND length(phone_norm) IN (10, 11)`,
+      `CREATE INDEX contacts_e164_idx ON contacts (phone_e164)`,
+      // Everything that happens to a lead that isn't an email, note, call or appointment: status changes, consent,
+      // WhatsApp messages opened from the portal, imports.
+      `CREATE TABLE lead_events (
+        id TEXT PRIMARY KEY,
+        enquiry_id TEXT,
+        contact_id TEXT,
+        kind TEXT NOT NULL,
+        detail TEXT,
+        created_by TEXT,
+        created_at TEXT NOT NULL
+      )`,
+      `CREATE INDEX lead_events_enquiry_idx ON lead_events (enquiry_id, created_at)`,
+      `CREATE INDEX lead_events_contact_idx ON lead_events (contact_id, created_at)`,
+      // Every consent given or withdrawn, with the exact wording shown and where: the record the ICO expects.
+      `CREATE TABLE consents (
+        id TEXT PRIMARY KEY,
+        contact_id TEXT,
+        enquiry_id TEXT,
+        channel TEXT NOT NULL,
+        granted INTEGER NOT NULL,
+        wording TEXT,
+        source TEXT,
+        created_at TEXT NOT NULL
+      )`,
+      `CREATE INDEX consents_contact_idx ON consents (contact_id, created_at)`,
+    ],
+  },
 ]

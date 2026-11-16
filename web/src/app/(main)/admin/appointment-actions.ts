@@ -9,6 +9,7 @@ import { requireAdmin } from '@/lib/auth'
 import { APPT_KINDS, DURATIONS, INTEREST, NEXT_STEPS, OUTCOMES, REMINDERS } from '@/lib/appointment-options'
 import { announce, clashesFor, getAppointment } from '@/lib/appointments'
 import { upsertContact } from '@/lib/contacts'
+import { contactLeadEvent, leadEvent } from '@/lib/leads'
 import { contacts } from '@/db/schema'
 import { durationLabel, fmtTime, fmtWhen, londonToIso } from '@/lib/time'
 import { now, uid } from '@/lib/util'
@@ -99,6 +100,9 @@ export async function saveAppointment(_prev: BookingState, form: FormData): Prom
     apptId = uid()
     await db.insert(appointments).values({ id: apptId, ...values, status: 'scheduled', remindedAt: reminderDue ? ts : null, enquiryId, createdBy: me.id, createdAt: ts })
     if (enquiryId) await db.update(enquiries).set({ handled: true }).where(eq(enquiries.id, enquiryId))
+    // A viewing or valuation visit booked moves the lead on.
+    if (enquiryId) await leadEvent(enquiryId, 'booked', { by: me.id }).catch(() => {})
+    else if (values.contactId) await contactLeadEvent(values.contactId, 'booked', { by: me.id }).catch(() => {})
     await announce('booked', apptId, me.id)
   }
 

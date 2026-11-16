@@ -7,6 +7,7 @@ import { db, ready } from '@/db/client'
 import { contacts, enquiries, notifications, properties } from '@/db/schema'
 import { now, uid } from '@/lib/util'
 import { upsertContact } from '@/lib/contacts'
+import { captureLead } from '@/lib/leads'
 
 export type EnquiryState = { ok?: boolean; error?: string }
 
@@ -39,10 +40,12 @@ export async function sendEnquiry(_prev: EnquiryState, form: FormData): Promise<
 
   // Every website enquiry lands on the person's contact record, so a later phone call shows it.
   const contactId = await upsertContact({ name, phone, email, role: property?.channel === 'let' ? 'tenant' : 'buyer', source: 'Our website' }).catch(() => null)
+  const enquiryId = uid()
   await db.insert(enquiries).values({
-    id: uid(), propertyId: property?.id ?? null, kind: 'viewing', contactId,
+    id: enquiryId, propertyId: property?.id ?? null, kind: 'viewing', contactId,
     name, phone: phone || null, email: email || null, message: message || null, createdAt: now(),
   })
+  await captureLead({ enquiryId, contactId, field: (k) => form.get(k), magnet: 'property-enquiry' })
   return { ok: true }
 }
 
@@ -91,10 +94,12 @@ export async function sendValuationRequest(_prev: ValuationState, form: FormData
     new Promise<null>((ok) => setTimeout(() => ok(null), 7000)),
   ]).catch(() => null)
   const shown = estimate ? `Website estimate shown: £${estimate.low.toLocaleString('en-GB')} to £${estimate.high.toLocaleString('en-GB')}${estimate.kind === 'rent' ? ' a month' : ''} (${estimate.basis})` : ''
+  const enquiryId = uid()
   await db.insert(enquiries).values({
-    id: uid(), propertyId: null, kind: 'valuation', name, phone, email: email || null, contactId,
+    id: enquiryId, propertyId: null, kind: 'valuation', name, phone, email: email || null, contactId,
     postcode, intent, message: [details, shown].filter(Boolean).join('\n') || null, createdAt: now(),
   })
+  await captureLead({ enquiryId, contactId, field: (k) => form.get(k), magnet: 'valuation-popup' })
   return { ok: true, estimate }
 }
 
@@ -128,10 +133,12 @@ export async function registerBuyer(_prev: BuyerState, form: FormData): Promise<
     if (areas) patch.areas = areas
     if (Object.keys(patch).length) await db.update(contacts).set(patch).where(eq(contacts.id, contactId)).catch(() => {})
   }
+  const enquiryId = uid()
   await db.insert(enquiries).values({
-    id: uid(), propertyId: null, kind: 'buyer', contactId, name, phone: phone || null, email: email || null,
+    id: enquiryId, propertyId: null, kind: 'buyer', contactId, name, phone: phone || null, email: email || null,
     message: [summary, areas ? `Areas: ${areas}` : ''].filter(Boolean).join('\n') || null, createdAt: now(),
   })
+  await captureLead({ enquiryId, contactId, field: (k) => form.get(k), magnet: 'buyer-calculator' })
   return { ok: true }
 }
 
@@ -168,12 +175,14 @@ export async function sendChatLead(form: FormData): Promise<ChatState> {
   await ready()
   const contactId = await upsertContact({ name, phone, role: goal.role, source: 'Our website', address: postcode }).catch(() => null)
   const at = now()
+  const enquiryId = uid()
   await db.insert(enquiries).values({
-    id: uid(), propertyId: null, kind: 'valuation', name, phone, email: null, contactId, postcode, intent: goal.intent,
+    id: enquiryId, propertyId: null, kind: 'valuation', name, phone, email: null, contactId, postcode, intent: goal.intent,
     message: [`Website chat: ${goal.says}.`, page ? `Started on: ${page}` : ''].filter(Boolean).join('\n'), createdAt: at,
   })
   await db.insert(notifications).values({
     id: uid(), kind: 'enquiry', appointmentId: null, title: `${name} ${goal.says}`, body: `From the website chat · ${postcode} · ${phone}`, createdBy: null, createdAt: at,
   }).catch((e) => console.error('chat alert failed', e))
+  await captureLead({ enquiryId, contactId, field: (k) => form.get(k), magnet: 'chat' })
   return { ok: true }
 }

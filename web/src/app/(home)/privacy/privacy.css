@@ -1,0 +1,9 @@
+.pv-body { max-width: 820px; }
+.pv-body h2.sect { margin-top: 38px; font-size: clamp(1.4rem, 2.4vw, 1.8rem); }
+.pv-body h2.sect:first-child { margin-top: 0; }
+.pv-body p, .pv-body li { color: var(--ink-soft); line-height: 1.65; max-width: 70ch; }
+.pv-body p { margin-top: 12px; }
+.pv-body ul { margin: 12px 0 0; padding-left: 20px; display: grid; gap: 8px; }
+.pv-body b { color: var(--ink); }
+.pv-body a { color: var(--ink); font-weight: 700; }
+.pv-body blockquote { margin: 12px 0 0; padding: 12px 16px; border-left: 3px solid #A47B1D; background: rgba(247,240,222,0.6); color: var(--ink); font-size: 0.95rem; line-height: 1.5; }

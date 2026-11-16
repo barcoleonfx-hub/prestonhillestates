@@ -3,6 +3,7 @@ import { startTransition, useActionState, useCallback, useEffect, useRef, useSta
 import { usePathname } from 'next/navigation'
 import { sendValuationRequest, type ValuationState } from '@/app/(main)/(site)/actions'
 import { LogoMark } from './Logo'
+import { AttributionField, ConsentBoxes } from './LeadCapture'
 
 const STORE_KEY = 'phe_valuation_popup'
 const DAY = 24 * 3600 * 1000
@@ -152,6 +153,8 @@ export function ValuationPopup({ paths = DEFAULT_PATHS }: { paths?: string[] }) 
                   <label htmlFor="vp-hp">Leave this box empty</label>
                   <input id="vp-hp" name="hp_check" tabIndex={-1} autoComplete="off" />
                 </div>
+                <AttributionField />
+                <input type="hidden" name="magnet" value="valuation-popup" />
                 <div className="vp-grid">
                   <div className="field">
                     <label htmlFor="vp-name">Your name</label>
@@ -183,7 +186,7 @@ export function ValuationPopup({ paths = DEFAULT_PATHS }: { paths?: string[] }) 
                   <button className="btn btn-gold" type="submit" disabled={pending}>{pending ? 'Sending…' : 'Request my free valuation'}</button>
                   <button type="button" className="vp-later" onClick={() => close()}>Maybe later</button>
                 </div>
-                <p className="vp-small">We’ll only use your details to arrange your valuation.</p>
+                <ConsentBoxes compact />
               </form>
             )}
           </div>
