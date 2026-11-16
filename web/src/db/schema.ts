@@ -664,3 +664,37 @@ export const reconnects = sqliteTable('reconnects', {
   createdAt: text('created_at').notNull(),
   sentAt: text('sent_at'),
 })
+
+/** Property emails: a letter on our letterhead, with an optional property box and attachments (lib/letter-email). */
+export const letters = sqliteTable('letters', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  content: text('content').notNull(),
+  toMode: text('to_mode').notNull().default('one'), // one | list | groups
+  oneContactId: text('one_contact_id'),
+  oneEmail: text('one_email'),
+  oneName: text('one_name'),
+  recipients: text('recipients').notNull().default(''),
+  audience: text('audience'),
+  attachments: text('attachments').notNull().default('[]'),
+  status: text('status').notNull().default('draft'), // draft | sending | sent
+  total: integer('total').notNull().default(0),
+  sent: integer('sent').notNull().default(0),
+  failed: integer('failed').notNull().default(0),
+  lastError: text('last_error'),
+  createdBy: text('created_by'),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+  sentAt: text('sent_at'),
+})
+export type Letter = typeof letters.$inferSelect
+
+export const letterRecipients = sqliteTable('letter_recipients', {
+  letterId: text('letter_id').notNull(),
+  email: text('email').notNull(),
+  name: text('name').notNull().default(''),
+  contactId: text('contact_id'),
+  status: text('status').notNull().default('queued'), // queued | sent | failed | skipped
+  error: text('error'),
+  sentAt: text('sent_at'),
+}, (t) => [primaryKey({ columns: [t.letterId, t.email] })])

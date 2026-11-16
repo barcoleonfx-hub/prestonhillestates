@@ -1,13 +1,15 @@
 import Link from 'next/link'
 import { desc } from 'drizzle-orm'
 import { db, ready } from '@/db/client'
-import { campaigns, tailoredEmails } from '@/db/schema'
+import { campaigns, letters, tailoredEmails } from '@/db/schema'
 import { requireAdmin } from '@/lib/auth'
 import { TEMPLATES } from '@/lib/campaign'
 import { audienceSummary, campaignLimits, sentToday } from '@/lib/campaign-data'
 import { mailboxStatus } from '@/lib/mailbox'
 import { createCampaign, saveLimits } from '../../campaign-actions'
 import { createTailored } from '../../tailored-actions'
+import { createLetter } from '../../letter-actions'
+import { letterPropertyOptions } from '@/lib/letters'
 import { TAILORED_TEMPLATES, parseRecipients } from '@/lib/tailored-email'
 
 export const dynamic = 'force-dynamic'
@@ -22,10 +24,11 @@ const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('en-
 export default async function CampaignsPage() {
   const me = await requireAdmin()
   await ready()
-  const [list, limits, today, box, everyone, tailored] = await Promise.all([
+  const [list, limits, today, box, everyone, tailored, letterList, homes] = await Promise.all([
     db.select().from(campaigns).orderBy(desc(campaigns.updatedAt)).limit(100), campaignLimits(), sentToday(), mailboxStatus(),
     audienceSummary({ roles: ['buyer', 'tenant', 'landlord', 'seller', 'other'], areas: '', activeMonths: null }),
     db.select().from(tailoredEmails).orderBy(desc(tailoredEmails.updatedAt)).limit(50),
+    db.select().from(letters).orderBy(desc(letters.updatedAt)).limit(50), letterPropertyOptions(),
   ])
   return (
     <>
@@ -54,6 +57,39 @@ export default async function CampaignsPage() {
             </form>
           ))}
         </div>
+      </section>
+
+      <section className="card card-pad" style={{ marginBottom: 18 }} id="letters">
+        <div className="today-head">
+          <div>
+            <h2>Property emails</h2>
+            <p className="card-sub">A letter on your letterhead in your own words, about one of your homes (a short box with its address, price and key details, no photos) or nothing in particular. Attach the brochure or floorplan, and send it to one client, a list of addresses or groups of contacts.</p>
+          </div>
+        </div>
+        <form action={createLetter} className="lt-new">
+          <select name="propertyId" className="select" defaultValue="">
+            <option value="">No property: just a letter</option>
+            {(['sale', 'let'] as const).map((ch) => { const l = homes.filter((h) => h.channel === ch); return l.length ? <optgroup key={ch} label={ch === 'sale' ? 'For sale' : 'To let'}>{l.map((h) => <option key={h.id} value={h.id}>{h.label}</option>)}</optgroup> : null })}
+          </select>
+          <button className="btn btn-gold" type="submit">Write a property email</button>
+        </form>
+        {letterList.length ? (
+          <div className="table-wrap" style={{ marginTop: 16 }}>
+            <table className="list te-list">
+              <thead><tr><th>Email</th><th>Status</th><th>To</th><th>Last change</th></tr></thead>
+              <tbody>
+                {letterList.map((l) => (
+                  <tr key={l.id}>
+                    <td><Link href={`/admin/campaigns/letter/${l.id}`}><b>{l.name}</b></Link></td>
+                    <td><span className={`pill ${l.status === 'sent' ? 'live' : l.status === 'sending' ? 'gold' : 'draft'}`}>{l.status === 'sent' ? 'Sent' : l.status === 'sending' ? 'Sending' : 'Draft'}</span></td>
+                    <td>{l.status === 'draft' ? (l.toMode === 'one' ? (l.oneName || l.oneEmail || '—') : l.toMode === 'groups' ? 'Groups of contacts' : 'Typed addresses') : `${l.sent} of ${l.total}`}</td>
+                    <td>{day(l.updatedAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
       </section>
 
       <section className="card card-pad" style={{ marginBottom: 18 }} id="tailored">

@@ -1006,4 +1006,43 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       `CREATE INDEX reconnects_enquiry_idx ON reconnects (enquiry_id, created_at)`,
     ],
   },
+  {
+    id: '046_letters',
+    sql: [
+      // "Property emails": a letter on our letterhead in staff's own words, with an optional property box and files.
+      // to: one (a person), list (typed addresses) or groups (contacts by role, plus any typed addresses).
+      `CREATE TABLE letters (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        content TEXT NOT NULL,
+        to_mode TEXT NOT NULL DEFAULT 'one',
+        one_contact_id TEXT,
+        one_email TEXT,
+        one_name TEXT,
+        recipients TEXT NOT NULL DEFAULT '',
+        audience TEXT,
+        attachments TEXT NOT NULL DEFAULT '[]',
+        status TEXT NOT NULL DEFAULT 'draft',
+        total INTEGER NOT NULL DEFAULT 0,
+        sent INTEGER NOT NULL DEFAULT 0,
+        failed INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT,
+        created_by TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        sent_at TEXT
+      )`,
+      `CREATE TABLE letter_recipients (
+        letter_id TEXT NOT NULL,
+        email TEXT NOT NULL,
+        name TEXT NOT NULL DEFAULT '',
+        contact_id TEXT,
+        status TEXT NOT NULL DEFAULT 'queued',
+        error TEXT,
+        sent_at TEXT,
+        PRIMARY KEY (letter_id, email)
+      )`,
+      `CREATE INDEX letter_recipients_status_idx ON letter_recipients (status, letter_id)`,
+    ],
+  },
 ]
