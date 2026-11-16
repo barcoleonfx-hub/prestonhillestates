@@ -33,6 +33,7 @@ export default async function EditPropertyPage({ params }: { params: Promise<{ i
           </p>
         </div>
         <div className="actions">
+          <a className="btn btn-gold" href={`/admin/window/${p.id}`}>Window display sheet</a>
           {p.published ? (
             <a className="btn btn-ghost" href={`/properties/${slugFor(p)}`} target="_blank" rel="noreferrer">View on website</a>
           ) : null}

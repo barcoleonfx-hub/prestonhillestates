@@ -1045,4 +1045,16 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       `CREATE INDEX letter_recipients_status_idx ON letter_recipients (status, letter_id)`,
     ],
   },
+  {
+    id: '047_window_cards',
+    sql: [
+      // Shop window display sheets: what staff changed on a property's card (lib/window-card), as JSON.
+      `CREATE TABLE window_cards (
+        property_id TEXT PRIMARY KEY,
+        data TEXT NOT NULL,
+        updated_by TEXT,
+        updated_at TEXT NOT NULL
+      )`,
+    ],
+  },
 ]

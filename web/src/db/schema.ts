@@ -698,3 +698,11 @@ export const letterRecipients = sqliteTable('letter_recipients', {
   error: text('error'),
   sentAt: text('sent_at'),
 }, (t) => [primaryKey({ columns: [t.letterId, t.email] })])
+
+/** Shop window display sheets: what staff changed on a property's card (see lib/window-card). */
+export const windowCards = sqliteTable('window_cards', {
+  propertyId: text('property_id').primaryKey(),
+  data: text('data').notNull(),
+  updatedBy: text('updated_by'),
+  updatedAt: text('updated_at').notNull(),
+})

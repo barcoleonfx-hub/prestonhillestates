@@ -45,6 +45,7 @@ export function NavLinks({ newSales, newLettings, today, outcomes, callbacks, fo
         {outcomes > 0 ? <span className="count warn" title="Outcomes waiting">{outcomes}</span> : today > 0 ? <span className="count" title="Today">{today}</span> : null}
       </Link>
       <Link href="/admin/properties" className={on('/admin/properties')}><Icon name="homes" />Properties</Link>
+      <Link href="/admin/window-cards" className={on('/admin/window-cards')}><Icon name="homes" />Window sheets</Link>
       <Link href="/admin/tenants" className={on('/admin/tenants')}><Icon name="people" />Tenants</Link>
       <Link href="/admin/reviews" className={on('/admin/reviews')}><Icon name="star" />Reviews</Link>
       <Link href="/admin/enquiries?side=sales" className={onSide('sales')}>
