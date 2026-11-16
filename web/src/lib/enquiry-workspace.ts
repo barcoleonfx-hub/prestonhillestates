@@ -5,8 +5,8 @@ import { contacts, enquiries } from '@/db/schema'
 import { isValuation, sortEnquiry, type SideResult } from './enquiry-labels'
 import type { EnquiryEmailContext, EnquiryEmailKind } from './enquiry-email'
 import { mailboxStatus } from './mailbox'
-import { getProperty, type FullProperty } from './properties'
-import { emailProperty, knownBase } from './property-email-data'
+import { getProperty, listPublished, type FullProperty } from './properties'
+import { emailProperty, knownBase, listingNamedIn, listingOptions } from './property-email-data'
 import { googleSummary, reviewsFor } from './reviews-data'
 import type { Review } from './reviews'
 import { salesNear } from './sold-prices'
@@ -98,5 +98,10 @@ export async function enquiryWorkspace(id: string, me: { name: string }) {
       what: `${c.kind === 'sold' ? 'Sold' : c.kind === 'rent' ? 'Let' : rent ? 'Asking rent' : 'Asking price'}${c.beds ? ` · ${c.beds} bed` : ''}`,
     }))
   }
-  return { e, p, contact: contact ?? null, sorted, valuation, kind, ctx, lines, saved, mailboxReady: !!box?.hasPassword }
+  // Our live listings, to put one in a buyer or tenant email. When the enquiry isn't linked to one but its text
+  // clearly names one (Zoopla and OnTheMarket emails give the address), that one is suggested.
+  const live = valuation ? [] : await listPublished({}).catch(() => [])
+  const listings = listingOptions(live, base)
+  const suggested = !p && live.length ? listingNamedIn(`${e.message ?? ''}\n${e.postcode ?? ''}`, live) : null
+  return { e, p, contact: contact ?? null, sorted, valuation, kind, ctx, lines, saved, mailboxReady: !!box?.hasPassword, listings, suggested }
 }

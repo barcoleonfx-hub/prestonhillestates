@@ -436,7 +436,8 @@ ${c.address ? `<p style="margin:8px 0 0; font-family:${SANS}; font-size:13px; co
 <p style="margin:0; font-family:${SERIF}; font-size:26px; line-height:32px; color:${C.ink};">${esc(c.property.priceText)}</p>
 <p style="margin:4px 0 0; font-family:${SANS}; font-size:15px; line-height:22px; color:${C.body};">${esc(c.property.address)}</p>
 ${c.property.specs.length ? `<p style="margin:8px 0 0; font-family:${SANS}; font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:${C.faint};">${c.property.specs.map(esc).join(' &middot; ')}</p>` : ''}
-<p style="margin:12px 0 0; font-family:${SANS}; font-size:13px; font-weight:bold;"><a href="${esc(link)}" target="_blank" style="color:${C.gold}; text-decoration:none;">See all the photos &amp; details &rarr;</a></p>
+<div style="height:16px; line-height:16px; font-size:0;">&nbsp;</div>${btn(link, 'View this property')}
+<p style="margin:10px 0 0; font-family:${SANS}; font-size:12px; color:${C.faint};">All the photos and the full details on our website.</p>
 </td></tr></table>`, 8)
     }
     case 'buyer-help':
@@ -551,7 +552,7 @@ a { color:${C.gold}; }
 
 <tr><td bgcolor="${C.card}" style="border:1px solid ${C.line}; border-radius:20px; overflow:hidden;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-<tr><td style="padding:0;">${t.photo === 'report' && c.report ? `<a href="${esc(c.report.url)}" target="_blank">` : ''}<img src="${esc(photo)}" width="600" alt="${esc(photoAlt)}" style="display:block; width:100%; max-width:600px; height:auto; border-radius:19px 19px 0 0;"/>${t.photo === 'report' && c.report ? '</a>' : ''}</td></tr>
+<tr><td style="padding:0;">${t.photo === 'report' && c.report ? `<a href="${esc(c.report.url)}" target="_blank">` : t.photo === 'property' && c.property?.photo ? `<a href="${esc(withUtm(c.property.url, utm, 'enquiry_reply'))}" target="_blank">` : ''}<img src="${esc(photo)}" width="600" alt="${esc(photoAlt)}" style="display:block; width:100%; max-width:600px; height:auto; border-radius:19px 19px 0 0;"/>${(t.photo === 'report' && c.report) || (t.photo === 'property' && c.property?.photo) ? '</a>' : ''}</td></tr>
 <tr><td bgcolor="${C.dark}" style="padding:26px 40px 28px;" class="px">
 <p style="margin:0 0 10px; font-family:${SANS}; font-size:11px; font-weight:bold; letter-spacing:3px; text-transform:uppercase; color:${C.goldBtn};">${esc(t.kicker)}</p>
 <p class="hero-h" style="margin:0; font-family:${SERIF}; font-size:32px; line-height:38px; color:#FFFDF6;">${esc(t.headline(c, x))}</p>
