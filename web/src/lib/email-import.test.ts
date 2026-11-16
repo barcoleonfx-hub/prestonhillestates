@@ -45,6 +45,16 @@ describe('OnTheMarket small print', () => {
     expect(f.postcode).toBe('HA9 9ZZ')
     expect(fixSmallPrint(f.message, f.postcode)).toBeNull()
   })
+  it('puts right every line that has it, in one go', () => {
+    const saved = [`About: ${FOOTER}`, 'OnTheMarket valuation request', `Property: ${FOOTER}`, 'Their address: 19 Example Road, Wembley, HA9 9ZZ'].join('\n')
+    const f = fixSmallPrint(saved, 'E14 5HU')!
+    expect(f.message).toBe(['About: 19 Example Road, Wembley, HA9 9ZZ', 'OnTheMarket valuation request', 'Property: 19 Example Road, Wembley, HA9 9ZZ', 'Their address: 19 Example Road, Wembley, HA9 9ZZ'].join('\n'))
+    expect(f.postcode).toBe('HA9 9ZZ')
+    expect(fixSmallPrint(f.message, f.postcode)).toBeNull()
+  })
+  it('keeps a postcode staff put right themselves', () => {
+    expect(fixSmallPrint(`OnTheMarket valuation request\nProperty: ${FOOTER}\nTheir address: 19 Example Road, Wembley, HA9 9ZZ`, 'HA3 0PS')!.postcode).toBe('HA3 0PS')
+  })
   it('just removes it from a non-valuation enquiry', () => {
     const f = fixSmallPrint(`OnTheMarket viewing request\nProperty: ${FOOTER}\nComments: hello`, null)!
     expect(f.message).toBe('OnTheMarket viewing request\nComments: hello')
