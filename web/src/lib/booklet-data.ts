@@ -5,6 +5,7 @@ import { appointments, booklets } from '@/db/schema'
 import { getAppointment, type ApptRow } from './appointments'
 import { defaultLetter, greetingFor, type BookletComp, type BookletFields, type BookletInput, type BookletKind, type BookletReview } from './booklet'
 import { enquiryWorkspace } from './enquiry-workspace'
+import { isBoilerplate } from './email-import'
 import { otmAskingPrices } from './otm-check'
 import { knownBase } from './property-email-data'
 import { googleSummary, reviewsFor } from './reviews-data'
@@ -31,7 +32,11 @@ const truncated = (t: string) => /(…|\.\.\.)\s*$/.test(t)
 export async function savedBooklet(id: string): Promise<Partial<BookletFields>> {
   await ready()
   const r = await db.query.booklets.findFirst({ where: eq(booklets.id, id) })
-  try { return r ? (JSON.parse(r.data) as Partial<BookletFields>) : {} } catch { return {} }
+  let f: Partial<BookletFields> = {}
+  try { f = r ? (JSON.parse(r.data) as Partial<BookletFields>) : {} } catch { return {} }
+  // A home saved while a portal's small print was being read as the address is ignored (see isBoilerplate).
+  if (typeof f.home === 'string' && isBoilerplate(f.home)) delete f.home
+  return f
 }
 
 /** The valuation appointment booked for an enquiry (the next one, or else the latest). */

@@ -13,6 +13,7 @@ import { LogCallButton } from '../LogCallButton'
 import { AutoRefresh } from '../AutoRefresh'
 import { LEAD_STATUSES, isLeadStatus, statusLabel, toE164 } from '@/lib/lead-rules'
 import { canReach } from '@/lib/whatsapp'
+import { isBoilerplate } from '@/lib/email-import'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Enquiries' }
@@ -86,7 +87,7 @@ export default async function EnquiriesPage({ searchParams }: { searchParams: Pr
   // What each row says under the name: the home it's about, and what they want.
   const whatOf = (r: Row) => {
     const lines = detailLines(r.e.message)
-    const f = (re: RegExp) => lines.find((l) => l.label && re.test(l.label))?.value ?? null
+    const f = (re: RegExp) => { const v = lines.find((l) => l.label && re.test(l.label))?.value ?? null; return v && !isBoilerplate(v) ? v : null }
     if (r.p) return `${displayAddressFor(r.p)} · ${priceLabel(r.p)}`
     const where = f(/^(address|property)$/i) ?? f(/^about$/i) ?? r.e.postcode
     const intent = r.e.kind === 'valuation' ? (r.e.intent === 'selling' ? 'Thinking of selling' : r.e.intent === 'letting' ? 'Thinking of letting' : 'Not sure yet') : f(/^(type of enquiry|wants|looking for)$/i)

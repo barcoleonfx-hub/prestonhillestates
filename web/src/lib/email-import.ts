@@ -193,16 +193,16 @@ export function isBoilerplate(line: string | null | undefined): boolean {
 export function fixSmallPrint(message: string | null, postcode: string | null): { message: string; postcode: string | null } | null {
   if (!message) return null
   const lines = message.split('\n')
-  const bad = lines.findIndex((l) => /^(property|about|address):\s*/i.test(l) && isBoilerplate(l.replace(/^[^:]+:\s*/, '')))
-  if (bad < 0) return null
-  const junk = lines[bad].replace(/^[^:]+:\s*/, '')
+  const isBad = (l: string) => /^(property|about|address):\s*/i.test(l) && isBoilerplate(l.replace(/^[^:]+:\s*/, ''))
+  const junk = lines.filter(isBad).map((l) => l.replace(/^[^:]+:\s*/, ''))
+  if (!junk.length) return null
   const theirs = lines.find((l) => /^their address:\s*/i.test(l))?.replace(/^[^:]+:\s*/, '') ?? null
   const valuation = /valuation|apprais/i.test(message)
-  const out = [...lines]
-  if (valuation && theirs) out[bad] = `Property: ${theirs}`
-  else out.splice(bad, 1)
+  // Each bad line becomes the same label with their own address (a valuation is about their home), or goes.
+  const out = lines.flatMap((l) => (!isBad(l) ? [l] : valuation && theirs ? [`${l.slice(0, l.indexOf(':'))}: ${theirs}`] : []))
   const squash = (x: string) => x.toUpperCase().replace(/\s+/g, '')
-  const keepPc = postcode && !squash(junk).includes(squash(postcode)) ? postcode : (valuation ? fullPostcode(theirs) : null)
+  const fromJunk = !!postcode && junk.some((j) => squash(j).includes(squash(postcode)))
+  const keepPc = postcode && !fromJunk ? postcode : (valuation ? fullPostcode(theirs) : null)
   return { message: out.join('\n'), postcode: keepPc }
 }
 
