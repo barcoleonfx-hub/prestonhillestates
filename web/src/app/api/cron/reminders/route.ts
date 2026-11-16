@@ -11,6 +11,7 @@ import { runTenantAlerts } from '@/lib/tenants'
 import { sortFromEmails } from '@/lib/enquiry-sort'
 import { repairPortalSmallPrint, repairZooplaValuations } from '@/lib/enquiry-repair'
 import { refreshAreaPlaces } from '@/lib/area-places'
+import { runFollowups } from '@/lib/followups'
 import { markDormant } from '@/lib/leads'
 import { after } from 'next/server'
 
@@ -40,6 +41,7 @@ export async function GET(req: Request) {
     await runCampaigns().catch((e) => console.error('campaign sending failed', e))
     // Leads nobody has heard from in 60 days go dormant (once a day, light).
     await markDormant().catch((e) => console.error('marking dormant leads failed', e))
+    await runFollowups().catch((e) => console.error('follow-ups failed', e))
     await removeLicensingFiles().catch((e) => console.error('removing old licensing files failed', e))
     // New homes to rent emailed to registered tenants who'd want them (light: a few emails every 10 minutes).
     await runTenantAlerts().catch((e) => console.error('tenant alerts failed', e))

@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { and, count, desc, eq, isNull, lte, ne } from 'drizzle-orm'
+import { and, count, desc, eq, inArray, isNull, lte, ne } from 'drizzle-orm'
 import { db, ready } from '@/db/client'
 import { contacts, enquiries, properties, tasks } from '@/db/schema'
 import { activeStaff } from '@/lib/appointments'
@@ -9,6 +9,7 @@ import { listBetween, needingOutcome, toPending } from '@/lib/appointments'
 import { addDays, londonToIso, todayLondon } from '@/lib/time'
 import { LogoMark } from '@/components/Logo'
 import { enquirySide } from '@/lib/enquiry-labels'
+import { WHATSAPP_STEPS } from '@/lib/followup-rules'
 import { logout } from '../actions'
 import { NavLinks } from './NavLinks'
 import { AlertCenter } from './AlertCenter'
@@ -21,7 +22,7 @@ export default async function PortalLayout({ children }: { children: React.React
   await ready()
   const today = todayLondon()
   const endOfToday = londonToIso(addDays(today, 1), '00:00')!
-  const [fresh, todays, mine, overdueAll, [{ due }], staff, props] = await Promise.all([
+  const [fresh, todays, mine, overdueAll, [{ due }], staff, props, [{ waDue }]] = await Promise.all([
     db.select({ side: enquiries.side, autoSide: enquiries.autoSide, sideWhy: enquiries.sideWhy, kind: enquiries.kind, intent: enquiries.intent, message: enquiries.message, channel: properties.channel, roles: contacts.roles })
       .from(enquiries).leftJoin(properties, eq(enquiries.propertyId, properties.id)).leftJoin(contacts, eq(enquiries.contactId, contacts.id)).where(eq(enquiries.handled, false)),
     listBetween(londonToIso(today, '00:00')!, londonToIso(addDays(today, 1), '00:00')!),
@@ -31,6 +32,8 @@ export default async function PortalLayout({ children }: { children: React.React
     activeStaff(),
     db.select({ id: properties.id, ref: properties.ref, channel: properties.channel, displayAddress: properties.displayAddress, street: properties.street, town: properties.town, postcode: properties.postcode })
       .from(properties).where(ne(properties.status, 'withdrawn')).orderBy(desc(properties.updatedAt)).limit(400),
+    // Follow-up WhatsApps waiting to be sent.
+    db.select({ waDue: count() }).from(enquiries).where(and(eq(enquiries.followupState, 'active'), inArray(enquiries.followupStep, WHATSAPP_STEPS), lte(enquiries.followupNextAt, new Date().toISOString()))),
   ])
   // New enquiries per list; ones that can't be sorted count on both, so nobody misses them (each list says so).
   const sides = fresh.map((e) => enquirySide(e, e.channel, e.roles))
@@ -52,7 +55,7 @@ export default async function PortalLayout({ children }: { children: React.React
           staff={staff.map((s) => ({ id: s.id, name: s.name }))}
           props={props.map((p) => ({ id: p.id, ref: p.ref, channel: p.channel, label: displayAddressFor(p) || 'Untitled' }))}
         />
-        <NavLinks newSales={newSales} newLettings={newLettings} today={upcomingToday} outcomes={Math.max(mine.length, overdueAll.length)} callbacks={due} isAdmin={admin.role === 'admin'} />
+        <NavLinks newSales={newSales} newLettings={newLettings} today={upcomingToday} outcomes={Math.max(mine.length, overdueAll.length)} callbacks={due} followups={waDue} isAdmin={admin.role === 'admin'} />
         <AlertCenter me={{ id: admin.id, name: admin.name }} initialPending={mine.map(toPending)} />
         <div className="admin-me">
           <div className="who">{admin.name}</div>

@@ -26,7 +26,7 @@ function Icon({ name }: { name: string }) {
   )
 }
 
-export function NavLinks({ newSales, newLettings, today, outcomes, callbacks, isAdmin }: { newSales: number; newLettings: number; today: number; outcomes: number; callbacks: number; isAdmin: boolean }) {
+export function NavLinks({ newSales, newLettings, today, outcomes, callbacks, followups, isAdmin }: { newSales: number; newLettings: number; today: number; outcomes: number; callbacks: number; followups: number; isAdmin: boolean }) {
   const path = usePathname()
   const side = useSearchParams().get('side')
   const onSide = (x: string) => (path === '/admin/enquiries' && side === x ? 'on' : undefined)
@@ -52,6 +52,9 @@ export function NavLinks({ newSales, newLettings, today, outcomes, callbacks, is
       </Link>
       <Link href="/admin/enquiries?side=lettings" className={onSide('lettings')}>
         <Icon name="mail" />Lettings enquiries{newLettings > 0 ? <span className="count">{newLettings}</span> : null}
+      </Link>
+      <Link href="/admin/follow-ups" className={on('/admin/follow-ups')}>
+        <Icon name="day" />Follow-ups{followups > 0 ? <span className="count" title="WhatsApps to send">{followups}</span> : null}
       </Link>
       <Link href="/admin/mail" className={on('/admin/mail')}><Icon name="mail" />Inbox</Link>
       <Link href="/admin/campaigns" className={on('/admin/campaigns')}><Icon name="mail" />Email campaigns</Link>

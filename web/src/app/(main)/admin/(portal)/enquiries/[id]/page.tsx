@@ -18,6 +18,9 @@ import { activeStaff } from '@/lib/appointments'
 import { LEAD_MAGNETS, LEAD_STATUSES, isUkMobile, statusLabel } from '@/lib/lead-rules'
 import { leadTimeline } from '@/lib/leads'
 import { waFor, waHomes } from '@/lib/whatsapp-data'
+import { STEPS } from '@/lib/followup-rules'
+import { fmtWhen } from '@/lib/time'
+import { followupAction } from '../../../lead-actions'
 import { WhatsAppButton } from '../../WhatsAppButton'
 import { homeFrom, portalLinks } from '@/lib/valuation-check'
 import { landRegistryEstimate, rentCheck } from '@/lib/valuation-check-data'
@@ -112,6 +115,19 @@ export default async function EnquiryPage({ params, searchParams }: { params: Pr
               <div><dt>First contact</dt><dd>{e.firstContactedAt ? `${new Date(e.firstContactedAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/London' })}${speed(e.createdAt, e.firstContactedAt)}` : 'Not yet'}</dd></div>
               {contact ? <div><dt>Consent</dt><dd>{[contact.emailOptInAt ? 'emails' : null, contact.whatsappOptInAt ? 'WhatsApp' : null].filter(Boolean).join(' and ') || (contact.marketingOptOut ? 'Unsubscribed from emails' : 'None given')}{contact.whatsappOptInAt && !isUkMobile(contact.phoneE164) ? ' (no UK mobile on file)' : ''}</dd></div> : null}
             </dl>
+            <div className="lead-fu">
+              <div><b>Follow-ups: </b>{e.followupState === 'active' ? <>next is {STEPS[e.followupStep]?.label.toLowerCase()}, {e.followupNextAt ? fmtWhen(e.followupNextAt) : 'soon'} (step {e.followupStep + 1} of {STEPS.length})</>
+                : e.followupState === 'paused' ? <>paused{e.followupNote ? ` (${e.followupNote.replace(/^Paused by /, 'by ')})` : ''}</>
+                : e.followupState === 'stopped' ? <>stopped: {e.followupNote?.toLowerCase() ?? 'by hand'}</>
+                : e.followupState === 'done' ? <>all done, no reply</>
+                : <>not being followed up</>}</div>
+              <div className="fu-acts">
+                {(['active', 'paused'] as (string | null)[]).includes(e.followupState) ? null : <form action={followupAction}><input type="hidden" name="id" value={e.id} /><input type="hidden" name="what" value="start" /><button className="btn btn-ghost btn-sm" type="submit">{e.followupState ? 'Start again' : 'Start follow-ups'}</button></form>}
+                {e.followupState === 'active' ? <form action={followupAction}><input type="hidden" name="id" value={e.id} /><input type="hidden" name="what" value="pause" /><button className="btn btn-ghost btn-sm" type="submit">Pause</button></form> : null}
+                {e.followupState === 'paused' ? <form action={followupAction}><input type="hidden" name="id" value={e.id} /><input type="hidden" name="what" value="resume" /><button className="btn btn-ghost btn-sm" type="submit">Carry on</button></form> : null}
+                {e.followupState === 'active' || e.followupState === 'paused' ? <form action={followupAction}><input type="hidden" name="id" value={e.id} /><input type="hidden" name="what" value="stop" /><button className="btn btn-ghost btn-sm" type="submit">Stop</button></form> : null}
+              </div>
+            </div>
             <details className="lead-tl">
               <summary className="det-sum">Timeline ({timeline.length})</summary>
               <ol className="timeline">
@@ -183,7 +199,7 @@ export default async function EnquiryPage({ params, searchParams }: { params: Pr
             {thread.map((m) => (
               <div key={m.id} className={`cv-msg ${m.direction}`}>
                 <div className="cv-meta">
-                  <b>{m.direction === 'in' ? e.name : 'Preston Hill Estates'}</b>{m.via === 'mailbox' ? ' · sent from Apple Mail' : ''} · {new Date(m.sentAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/London' })}
+                  <b>{m.direction === 'in' ? e.name : 'Preston Hill Estates'}</b>{m.via === 'mailbox' ? ' · sent from Apple Mail' : m.via === 'followup' ? ' · automatic follow-up' : ''} · {new Date(m.sentAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/London' })}
                   {m.subject ? <span className="cv-subj">{m.subject}</span> : null}
                 </div>
                 <div className="cv-body">{m.body || '(no text)'}</div>

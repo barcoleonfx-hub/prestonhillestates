@@ -963,4 +963,30 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       `CREATE INDEX site_events_kind_idx ON site_events (kind, created_at)`,
     ],
   },
+  {
+    id: '044_followups',
+    sql: [
+      // Following up a new lead who hasn't replied (see lib/followup-rules): where each lead is in the sequence.
+      // state: active, paused, stopped (with why) or done. step: the next step to do (0-based).
+      `ALTER TABLE enquiries ADD COLUMN followup_state TEXT`,
+      `ALTER TABLE enquiries ADD COLUMN followup_step INTEGER NOT NULL DEFAULT 0`,
+      `ALTER TABLE enquiries ADD COLUMN followup_started_at TEXT`,
+      `ALTER TABLE enquiries ADD COLUMN followup_next_at TEXT`,
+      `ALTER TABLE enquiries ADD COLUMN followup_note TEXT`,
+      `CREATE INDEX enquiries_followup_idx ON enquiries (followup_state, followup_next_at)`,
+      // Every step: sent, skipped (and why), failed, done by hand (a WhatsApp), or missed.
+      `CREATE TABLE followup_log (
+        id TEXT PRIMARY KEY,
+        enquiry_id TEXT NOT NULL,
+        step TEXT NOT NULL,
+        channel TEXT NOT NULL,
+        status TEXT NOT NULL,
+        detail TEXT,
+        created_by TEXT,
+        created_at TEXT NOT NULL
+      )`,
+      `CREATE INDEX followup_log_enquiry_idx ON followup_log (enquiry_id, created_at)`,
+      `CREATE INDEX followup_log_created_idx ON followup_log (created_at)`,
+    ],
+  },
 ]
