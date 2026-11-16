@@ -1,8 +1,8 @@
 import 'server-only'
-import { and, eq, inArray, isNull, like } from 'drizzle-orm'
+import { and, eq, inArray, isNull, like, or } from 'drizzle-orm'
 import { db, ready } from '@/db/client'
 import { enquiries, mailMessages, settings } from '@/db/schema'
-import { cleanLines, parseZoopla } from './email-import'
+import { cleanLines, fixSmallPrint, parseZoopla } from './email-import'
 import { checkMailbox } from './mailbox'
 import { now } from './util'
 
@@ -40,6 +40,26 @@ export async function repairZooplaValuations(): Promise<number> {
       const r = await checkMailbox({ lookBackDays: 60, repairOnly: true }).catch(() => ({ ran: false, error: 'failed' }) as { ran: boolean; error?: string })
       if (!r.ran || r.error) await db.delete(settings).where(eq(settings.key, LOOKED))
     }
+  }
+  return fixed
+}
+
+/**
+ * OnTheMarket valuation emails used to be read with the small print at the bottom ("...Registered Office: 5 Churchill
+ * Place, London E14 5HU") as the home's address. Those are put right from what was saved: their own address becomes
+ * the home to value. Only enquiries that still have the small print are touched.
+ */
+export async function repairPortalSmallPrint(): Promise<number> {
+  await ready()
+  const rows = await db.select({ id: enquiries.id, message: enquiries.message, postcode: enquiries.postcode }).from(enquiries)
+    .where(or(like(enquiries.message, '%trade marks%'), like(enquiries.message, '%Registered Office%'), like(enquiries.message, '%Churchill Place%')))
+    .limit(500)
+  let fixed = 0
+  for (const r of rows) {
+    const f = fixSmallPrint(r.message, r.postcode)
+    if (!f) continue
+    await db.update(enquiries).set({ message: f.message, postcode: f.postcode }).where(eq(enquiries.id, r.id))
+    fixed++
   }
   return fixed
 }

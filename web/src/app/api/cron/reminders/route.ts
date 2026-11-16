@@ -9,7 +9,7 @@ import { runCampaigns } from '@/lib/campaign-data'
 import { removeLicensingFiles } from '@/lib/cleanup'
 import { runTenantAlerts } from '@/lib/tenants'
 import { sortFromEmails } from '@/lib/enquiry-sort'
-import { repairZooplaValuations } from '@/lib/enquiry-repair'
+import { repairPortalSmallPrint, repairZooplaValuations } from '@/lib/enquiry-repair'
 import { refreshAreaPlaces } from '@/lib/area-places'
 import { markDormant } from '@/lib/leads'
 import { after } from 'next/server'
@@ -47,6 +47,7 @@ export async function GET(req: Request) {
     await sortFromEmails().catch((e) => console.error('sorting enquiries failed', e))
     // Zoopla valuations read before their address was picked up: read again from the original email (light).
     await repairZooplaValuations().catch((e) => console.error('repairing Zoopla valuations failed', e))
+    await repairPortalSmallPrint().catch((e) => console.error('repairing portal small print failed', e))
     // Our own copy of places near homes (schools, shops, parks…) for the booklets: two small squares a run (light).
     await refreshAreaPlaces().catch((e) => console.error('area places failed', e))
     const heavy = [
