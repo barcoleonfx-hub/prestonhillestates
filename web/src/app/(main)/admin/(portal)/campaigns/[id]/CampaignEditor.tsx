@@ -6,10 +6,11 @@ import {
   ALL_ROLES, NEWS_LIBRARY, ROLES, fromLibrary, newBlock, renderCampaign,
   type Audience, type Block, type BlockKind, type Content, type Reader, type Role, type Shared,
 } from '@/lib/campaign'
-import { countAudience, saveCampaign, startCampaign, testCampaign } from '../../../campaign-actions'
+import { countAudience, loadSpotlight, saveCampaign, startCampaign, testCampaign } from '../../../campaign-actions'
 import { PeopleList } from './PeopleList'
 
 const KINDS: { kind: BlockKind; label: string; about: string }[] = [
+  { kind: 'spotlight', label: 'Property of the week', about: 'One home told properly: photos, why we love it, the area, sold prices' },
   { kind: 'letter', label: 'Letter', about: 'A heading and a note from the branch' },
   { kind: 'listings', label: 'Our listings', about: 'Current homes, picked for each reader' },
   { kind: 'market', label: 'Market snapshot', about: 'Local sold prices from the Land Registry' },
@@ -44,6 +45,14 @@ export function CampaignEditor(p: Props) {
   const [name, setName] = useState(p.initialName)
   const [audience, setAudience] = useState<Audience>(p.initialAudience)
   const [content, setContent] = useState<Content>(p.initialContent)
+  // Shared data, plus the property of the week's details as staff choose it (fetched for the preview).
+  const [shared, setShared] = useState<Shared>(p.shared)
+  const pickSpotlight = async (id: string, propertyId: string | null) => {
+    update(id, { propertyId } as Partial<Block>)
+    if (!propertyId || shared.spotlights?.[propertyId]) return
+    const h = await loadSpotlight(propertyId).catch(() => null)
+    if (h) setShared((x) => ({ ...x, spotlights: { ...(x.spotlights ?? {}), [propertyId]: h } }))
+  }
   const [summary, setSummary] = useState(p.summary)
   const [saved, setSaved] = useState<'saved' | 'saving' | 'unsaved' | 'error'>('saved')
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null)
@@ -75,8 +84,8 @@ export function CampaignEditor(p: Props) {
     return () => clearTimeout(t)
   }, [audience, p.readOnly])
 
-  const reader = (as === 'generic' ? null : as.startsWith('example-') ? example(p.shared.base, as.slice(8) as Role) : p.samples.find((s) => s.contactId === as)) ?? generic(p.shared.base)
-  const rendered = useMemo(() => renderCampaign(content, reader, p.shared, { campaign: name, sender: p.sender, month: p.month, markers: true }), [content, reader, p.shared, name, p.sender, p.month])
+  const reader = (as === 'generic' ? null : as.startsWith('example-') ? example(shared.base, as.slice(8) as Role) : p.samples.find((s) => s.contactId === as)) ?? generic(shared.base)
+  const rendered = useMemo(() => renderCampaign(content, reader, shared, { campaign: name, sender: p.sender, month: p.month, markers: true }), [content, reader, shared, name, p.sender, p.month])
   const wrap = useRef<HTMLDivElement>(null)
   const [switched, setSwitched] = useState<string | null>(null)
   const [showPeople, setShowPeople] = useState(false)
@@ -186,7 +195,7 @@ export function CampaignEditor(p: Props) {
                 <div className="cmp-block-head">
                   <button type="button" className="cmp-block-title" onClick={() => openBlock(open === b.id ? null : b)} aria-expanded={open === b.id}>
                     <span className="cmp-kind">{kindLabel(b.kind)}</span>
-                    <span className="cmp-sum">{summaryOf(b)}</span>
+                    <span className="cmp-sum">{summaryOf(b, shared)}</span>
                   </button>
                   {!p.readOnly ? (
                     <span className="cmp-block-tools">
@@ -198,7 +207,7 @@ export function CampaignEditor(p: Props) {
                 </div>
                 {open === b.id && switched ? <p className="cmp-switch">Only {b.kind === 'article' ? b.show.map((r) => ROLES.find((x) => x.value === r)?.plural.toLowerCase()).join(', ') : ''} see this, so the preview is now showing it as {switched}.</p> : null}
                 {open === b.id ? <button type="button" className="cmp-jump" onClick={() => { document.querySelector('.cmp-preview')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); setTimeout(() => scrollPreview(b.id), 400) }}>See this in the preview ↓</button> : null}
-                {open === b.id ? <BlockFields b={b} update={(x) => update(b.id, x)} shared={p.shared} ro={p.readOnly} /> : null}
+                {open === b.id ? <BlockFields b={b} update={(x) => update(b.id, x)} shared={shared} ro={p.readOnly} pickSpotlight={(pid) => pickSpotlight(b.id, pid)} /> : null}
               </li>
             ))}
           </ol>
@@ -250,8 +259,9 @@ export function CampaignEditor(p: Props) {
   )
 }
 
-function summaryOf(b: Block) {
+function summaryOf(b: Block, shared?: Shared) {
   switch (b.kind) {
+    case 'spotlight': return b.propertyId ? (shared?.spotlights?.[b.propertyId]?.address ?? 'Chosen') : 'Choose a property'
     case 'letter': return b.title.replace(/\*/g, '') || 'Untitled'
     case 'listings': return `${b.ids ? `${b.ids.length} chosen` : 'All current'} · up to ${b.max} · ${{ auto: 'right kind for each reader', sale: 'for sale', let: 'to rent', both: 'sale and rent' }[b.channel]}`
     case 'market': return 'Typical prices in each reader’s area'
@@ -266,8 +276,30 @@ function F({ label, children, hint }: { label: string; children: React.ReactNode
   return <div className="field"><label>{label}</label>{children}{hint ? <span className="hint">{hint}</span> : null}</div>
 }
 
-function BlockFields({ b, update, shared, ro }: { b: Block; update: (p: Partial<Block>) => void; shared: Shared; ro: boolean }) {
+function BlockFields({ b, update, shared, ro, pickSpotlight }: { b: Block; update: (p: Partial<Block>) => void; shared: Shared; ro: boolean; pickSpotlight: (propertyId: string | null) => void }) {
   switch (b.kind) {
+    case 'spotlight': {
+      const h = b.propertyId ? shared.spotlights?.[b.propertyId] : null
+      return (
+        <div className="cmp-fields">
+          <F label="The property" hint="Its photos, best features, nearest stations, local places and what the same kind of home has sold for nearby are filled in for you.">
+            <select className="select" value={b.propertyId ?? ''} onChange={(e) => pickSpotlight(e.target.value || null)} disabled={ro}>
+              <option value="">Choose one of our listings…</option>
+              {shared.listings.map((l) => <option key={l.id} value={l.id}>{l.priceText} · {l.address} ({l.channel === 'let' ? 'to let' : 'for sale'})</option>)}
+            </select>
+          </F>
+          {b.propertyId && !h ? <p className="card-sub">Loading its details…</p> : null}
+          {h ? <p className="card-sub">{h.photos.length} photo{h.photos.length === 1 ? '' : 's'} · {h.features.length} features · {h.stations.length ? `${h.stations[0].name} ${h.stations[0].minutes} min walk` : 'no station found'}{h.sold ? ` · ${h.sold.sales.length} ${h.sold.what} sold nearby` : h.channel === 'sale' ? ' · no similar sales found nearby' : ''}{h.channel === 'let' ? '. It’s to let: send it to tenants.' : '.'}</p> : null}
+          <F label="Why we love it" hint="Two or three sentences in your own words: what you’d tell a friend about it. {first_name} works here. Left blank, the listing’s summary is used.">
+            <textarea className="textarea" rows={4} value={b.why} onChange={(e) => update({ why: e.target.value })} disabled={ro} placeholder="e.g. The garden gets the sun all afternoon, and you can walk to Preston Road station in five minutes. Homes on this road rarely come up." />
+          </F>
+          <div className="cmp-two">
+            <F label="Small heading"><input className="input" value={b.label} onChange={(e) => update({ label: e.target.value })} disabled={ro} /></F>
+            <F label="Others picked for each reader" hint="0 to leave them out"><input className="input" type="number" min={0} max={4} value={b.others} onChange={(e) => update({ others: Math.max(0, Math.min(4, Number(e.target.value) || 0)) })} disabled={ro} /></F>
+          </div>
+        </div>
+      )
+    }
     case 'letter':
       return (
         <div className="cmp-fields">

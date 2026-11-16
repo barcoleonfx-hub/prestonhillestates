@@ -23,7 +23,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
   if (!c) notFound()
   const base = await siteBase()
   const audience = parseAudience(c)
-  const [shared, summary, box, limits, today] = await Promise.all([campaignShared(base), audienceSummary(audience), mailboxStatus(), campaignLimits(), sentToday()])
+  const [shared, summary, box, limits, today] = await Promise.all([campaignShared(base, parseContent(c)), audienceSummary(audience), mailboxStatus(), campaignLimits(), sentToday()])
   const samples = summary.samples.map((s) => readerFor(s, base))
   const draft = c.status === 'draft'
 

@@ -21,6 +21,8 @@ export type Block =
   | { id: string; kind: 'article'; tag: string; headline: string; body: string; link: string; linkLabel: string; show: Role[]; checked: string | null }
   | { id: string; kind: 'guides'; title: string; slugs: string[] }
   | { id: string; kind: 'cta'; variant: 'auto' | 'valuation' | 'letting' | 'mortgage' | 'register' }
+  /** One home, told properly: photos, why we love it, what makes it special, the area, what similar homes sold for. */
+  | { id: string; kind: 'spotlight'; propertyId: string | null; label: string; why: string; others: number }
 
 export type BlockKind = Block['kind']
 export type Content = { subject: string; preheader: string; signedBy: string; blocks: Block[] }
@@ -45,7 +47,16 @@ export type Listing = {
 }
 export type Snapshot = { area: string; label: string; median: number | null; prevMedian: number | null; count: number; prevCount: number; byType: { label: string; median: number; count: number }[]; latest: string | null }
 export type GuideLink = { slug: string; title: string; summary: string; url: string }
-export type Shared = { base: string; listings: Listing[]; market: Record<string, Snapshot>; guides: GuideLink[]; credit: string }
+/** Everything about the property of the week, gathered on the server. */
+export type Spotlight = {
+  id: string; url: string; channel: 'sale' | 'let'; address: string; headline: string; priceText: string; place: string | null
+  photos: string[]; specs: string[]; summary: string | null; features: string[]
+  stations: { name: string; lines: string; minutes: number; distance: string }[]
+  places: { name: string; detail: string; minutes: number }[]
+  /** Sales of the same kind of home nearby (sales only). Land Registry doesn't record bedrooms. */
+  sold: { what: string; typical: number | null; sales: { where: string; price: number; when: string; beds: number | null }[] } | null
+}
+export type Shared = { base: string; listings: Listing[]; market: Record<string, Snapshot>; guides: GuideLink[]; credit: string; spotlights?: Record<string, Spotlight> }
 
 const uid = () => Math.random().toString(36).slice(2, 10)
 export const ALL_ROLES: Role[] = ['buyer', 'tenant', 'landlord', 'seller', 'other']
@@ -113,6 +124,7 @@ export function newBlock(kind: BlockKind): Block {
     case 'article': return { id, kind, tag: 'News', headline: '', body: '', link: '', linkLabel: 'Read more', show: ALL_ROLES, checked: null }
     case 'guides': return { id, kind, title: 'From our guides', slugs: [] }
     case 'cta': return { id, kind, variant: 'auto' }
+    case 'spotlight': return { id, kind, propertyId: null, label: 'Property of the week', why: '', others: 3 }
   }
 }
 
@@ -130,6 +142,14 @@ export const TEMPLATES: { key: string; name: string; about: string; audience: Au
         { id: uid(), kind: 'guides', title: 'From our guides', slugs: [] },
         { id: uid(), kind: 'cta', variant: 'auto' },
       ],
+    }),
+  },
+  {
+    key: 'spotlight', name: 'Property of the week', about: 'One home, told properly: big photos, why we love it, what makes it special, the area and what similar homes sold for. Each reader also gets 2 or 3 others that fit their budget.',
+    audience: { roles: ['buyer'], areas: '', activeMonths: 24 },
+    content: (signedBy) => ({
+      subject: 'Property of the week: {spotlight}', preheader: '{first_name}, this is the one we’d go and see this week.', signedBy,
+      blocks: [newBlock('spotlight'), { id: uid(), kind: 'cta', variant: 'auto' }],
     }),
   },
   {
@@ -308,6 +328,7 @@ ${gs.map((g) => `<table role="presentation" width="100%" cellpadding="0" cellspa
 <a href="${esc(withUtm(g.url, campaign, 'newsletter'))}" target="_blank" style="font-family:${SANS}; font-size:15px; font-weight:bold; color:${C.ink}; text-decoration:none;">${esc(g.title)} <span style="color:${C.gold};">&rarr;</span></a>
 <p style="margin:4px 0 0; font-family:${SANS}; font-size:13px; line-height:20px; color:${C.faint};">${esc(g.summary)}</p></td></tr></table>`).join('')}`, C.card, '28px 40px 20px')
     }
+    case 'spotlight': return renderSpotlight(b, r, s, campaign)
     case 'cta': {
       const v = ctaFor(b.variant, r)
       const c = {
@@ -328,13 +349,13 @@ ${button(withUtm(c.url, campaign, 'newsletter'), c.btn)}
 export type CampaignSender = { email: string }
 
 export function renderCampaign(c: Content, r: Reader, s: Shared, opts: { campaign: string; sender: CampaignSender; month: string; markers?: boolean }): { subject: string; html: string; text: string } {
-  const subject = personalise(c.subject || 'News from Preston Hill Estates', r).slice(0, 150)
-  const pre = personalise(c.preheader, r)
+  const subject = personalise(spotlightText(c.subject || 'News from Preston Hill Estates', c, s), r).slice(0, 150)
+  const pre = personalise(spotlightText(c.preheader, c, s), r)
   // In the editor's preview each section is tagged, so the preview can scroll to the one being edited.
   const body = c.blocks.map((b, i) => { const h = renderBlock(b, r, s, opts.campaign, i === 0); return h && opts.markers ? h.replace(/^<tr/, `<tr data-block="${b.id}"`) : h }).filter(Boolean)
   // A thin line between two white sections so they don't run together.
   const white = (h: string) => h.startsWith(`<tr><td bgcolor="${C.card}"`)
-  const joined = body.map((h, i) => (i && white(h) && white(body[i - 1]) ? rule + h : h)).join('\n')
+  const joined = body.map((h, i) => (i && white(h) && white(body[i - 1]) ? rule + h : h)).join('\n').replace(/mailto:\{sender\}/g, `mailto:${opts.sender.email}`)
   const sign = c.signedBy.trim() ? section(`<p style="margin:0; font-family:${SANS}; font-size:15px; color:${C.ink};">With best wishes,</p><p style="margin:4px 0 0; font-family:${SERIF}; font-size:20px; color:${C.ink};">${esc(c.signedBy)}</p><p style="margin:2px 0 0; font-family:${SANS}; font-size:13px; color:${C.faint};">Preston Hill Estates &middot; 020 8904 9005</p>`, C.card, '24px 40px 34px') : ''
   const html = `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head>
@@ -386,10 +407,80 @@ function textVersion(c: Content, r: Reader, s: Shared, campaign: string) {
     else if (b.kind === 'guides') {
       const gs = (b.slugs.length ? s.guides.filter((g) => b.slugs.includes(g.slug)) : s.guides).slice(0, 3)
       if (gs.length) out.push('FROM OUR GUIDES', ...gs.map((g) => `- ${g.title}: ${g.url}`))
+    } else if (b.kind === 'spotlight') {
+      const h = b.propertyId ? s.spotlights?.[b.propertyId] : null
+      if (h) out.push(`${(b.label || 'Property of the week').toUpperCase()}: ${h.headline}`, `${h.priceText} · ${h.address}`, b.why.trim() ? personalise(b.why, r) : h.summary ?? '', ...h.features.map((f) => `- ${f}`), `See it: ${withUtm(h.url, campaign, 'newsletter')}`)
     } else if (b.kind === 'cta') out.push(`Call the branch on 020 8904 9005, or visit ${s.base}/valuation for a free valuation.`)
     out.push('')
   }
   if (c.signedBy.trim()) out.push('With best wishes,', c.signedBy, 'Preston Hill Estates · 271 Preston Road, Harrow HA3 0PS · 020 8904 9005', '')
   out.push('You’re getting this because you’ve been in touch with Preston Hill Estates about buying, selling, renting or letting a home.', `Unsubscribe: ${r.unsubscribeUrl}`)
   return out.join('\n')
+}
+
+// ---------- property of the week ----------
+
+/** "{spotlight}" in a subject or preview line: "3 bed semi-detached house in Kenton". */
+function spotlightText(t: string, c: Content, s: Shared) {
+  if (!t.includes('{spotlight}')) return t
+  const b = c.blocks.find((x): x is Extract<Block, { kind: 'spotlight' }> => x.kind === 'spotlight' && !!x.propertyId)
+  const h = b?.propertyId ? s.spotlights?.[b.propertyId] : null
+  return t.replace(/\{spotlight\}/g, h ? `${h.headline.replace(/\s+(for sale|to (let|rent))$/i, '')}${h.place ? ` in ${h.place}` : ''}` : 'a home we love')
+}
+
+function renderSpotlight(b: Extract<Block, { kind: 'spotlight' }>, r: Reader, s: Shared, campaign: string): string {
+  const h = b.propertyId ? s.spotlights?.[b.propertyId] : null
+  if (!h) return ''
+  const link = withUtm(h.url, campaign, 'newsletter')
+  const viewing = `mailto:${'{sender}'}?subject=${encodeURIComponent(`Viewing: ${h.address}`)}`
+  const [hero, ...more] = h.photos
+  const thumbs = more.slice(0, 3)
+  const why = (b.why.trim() ? personalise(b.why, r) : h.summary ?? '').trim()
+  const tick = (t: string) => `<tr><td valign="top" style="padding:5px 10px 5px 0; font-family:${SANS}; font-size:14px; font-weight:bold; color:${C.goldBtn};">&#10003;</td><td style="padding:5px 0; font-family:${SANS}; font-size:15px; line-height:22px; color:${C.ink};">${esc(t)}</td></tr>`
+  const near = (head: string, rows: string[]) => rows.length ? `<td class="stack" width="50%" valign="top" style="padding:0 8px 12px 0;"><p style="margin:0 0 8px; font-family:${SANS}; font-size:11px; font-weight:bold; letter-spacing:2px; text-transform:uppercase; color:${C.gold};">${head}</p>${rows.join('')}</td>` : ''
+  const nearRow = (what: string, detail: string, mins: number) => `<p style="margin:0 0 8px; font-family:${SANS}; font-size:14px; line-height:20px; color:${C.ink};"><b>${esc(what)}</b><br/><span style="color:${C.faint}; font-size:13px;">${esc(detail)} &middot; about ${mins} min walk</span></p>`
+  const stations = h.stations.slice(0, 2).map((x) => nearRow(x.name, x.lines, x.minutes))
+  const places = h.places.slice(0, 3).map((x) => nearRow(x.name, x.detail, x.minutes))
+  const gbpS = (n: number) => `£${Math.round(n).toLocaleString('en-GB')}`
+
+  const parts: string[] = []
+  parts.push(section(`<p style="margin:0 0 10px; font-family:${SANS}; font-size:11px; font-weight:bold; letter-spacing:2.5px; text-transform:uppercase; color:${C.gold};">${esc(b.label || 'Property of the week')}</p>
+<p class="masthead" style="margin:0; font-family:${SERIF}; font-size:34px; line-height:40px; color:${C.ink};">${esc(h.headline)}</p>
+<p style="margin:6px 0 0; font-family:${SANS}; font-size:15px; line-height:22px; color:${C.body};">${esc(h.address)}</p>
+<p style="margin:10px 0 0; font-family:${SERIF}; font-size:26px; line-height:32px; color:${C.gold};">${esc(h.priceText)}</p>`, C.card, '36px 40px 18px'))
+  if (hero) parts.push(section(`<a href="${esc(link)}" target="_blank"><img src="${esc(hero)}" width="520" alt="${esc(h.address)}" style="display:block; width:100%; height:auto; border-radius:14px;"/></a>
+${thumbs.length ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;"><tr>${thumbs.map((t, i) => `<td width="${Math.floor(100 / thumbs.length)}%" style="padding:0 ${i < thumbs.length - 1 ? 8 : 0}px 0 0;"><a href="${esc(link)}" target="_blank"><img src="${esc(t)}" width="${Math.floor(510 / thumbs.length)}" alt="" style="display:block; width:100%; height:auto; border-radius:10px;"/></a></td>`).join('')}</tr></table>` : ''}
+${h.specs.length ? `<p style="margin:14px 0 0; font-family:${SANS}; font-size:11px; letter-spacing:1.8px; text-transform:uppercase; color:${C.faint};">${h.specs.map(esc).join(' &middot; ')}</p>` : ''}`, C.card, '0 40px 18px'))
+  if (why) parts.push(section(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${C.cream}" style="border-left:3px solid ${C.goldBtn}; border-radius:0 12px 12px 0;"><tr><td style="padding:18px 22px;">
+<p style="margin:0 0 8px; font-family:${SANS}; font-size:11px; font-weight:bold; letter-spacing:2px; text-transform:uppercase; color:${C.gold};">Why we love it</p>
+${why.split(/\n{2,}/).map((x) => `<p style="margin:0 0 8px; font-family:${SERIF}; font-size:18px; line-height:27px; font-style:italic; color:${C.ink};">${esc(x.trim()).replace(/\n/g, '<br/>')}</p>`).join('')}
+</td></tr></table>`, C.card, '4px 40px 18px'))
+  if (h.features.length) parts.push(section(`<p style="margin:0 0 8px; font-family:${SERIF}; font-size:22px; line-height:28px; color:${C.ink};">What makes it <em style="color:${C.gold};">special</em></p>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0">${h.features.slice(0, 6).map(tick).join('')}</table>`, C.card, '8px 40px 14px'))
+  if (stations.length || places.length) parts.push(section(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>${near('Getting about', stations)}${near('On the doorstep', places)}</tr></table>`, C.card, '8px 40px 8px'))
+  if (h.sold && h.sold.sales.length) parts.push(section(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid ${C.line}; border-radius:12px;"><tr><td style="padding:18px 20px;">
+<p style="margin:0 0 4px; font-family:${SANS}; font-size:11px; font-weight:bold; letter-spacing:2px; text-transform:uppercase; color:${C.gold};">What ${esc(h.sold.what)} nearby sold for</p>
+${h.sold.typical ? `<p style="margin:0 0 10px; font-family:${SANS}; font-size:13px; color:${C.body};">Typical price in the last year: <b style="color:${C.ink};">${gbpS(h.sold.typical)}</b></p>` : ''}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${h.sold.sales.slice(0, 3).map((x) => `<tr><td style="padding:7px 0; border-top:1px solid ${C.line}; font-family:${SANS}; font-size:14px; color:${C.ink};">${esc(x.where)}${x.beds != null ? ` <span style="color:${C.gold}; font-size:12px; font-weight:bold;">${x.beds} bed</span>` : ''}<br/><span style="font-size:12px; color:${C.faint};">${esc(x.when)}</span></td><td align="right" style="padding:7px 0; border-top:1px solid ${C.line}; font-family:${SERIF}; font-size:17px; color:${C.ink};">${gbpS(x.price)}</td></tr>`).join('')}</table>
+<p style="margin:10px 0 0; font-family:${SANS}; font-size:11px; line-height:16px; color:${C.faint};">HM Land Registry records the type of home but not its bedrooms, so sizes vary. ${esc(s.credit)}</p>
+</td></tr></table>`, C.card, '8px 40px 14px'))
+  parts.push(section(`<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td>${button(viewing, 'Book a viewing')}</td></tr></table>
+<p style="margin:14px 0 0; font-family:${SANS}; font-size:13px;"><a href="${esc(link)}" target="_blank" style="color:${C.gold}; font-weight:bold; text-decoration:none;">See all the photos and details &rarr;</a> &nbsp;&middot;&nbsp; <a href="tel:+442089049005" style="color:${C.gold}; text-decoration:none;">020 8904 9005</a></p>`, C.card, '6px 40px 30px'))
+
+  // A few more for this reader: the best fit for their budget, area and bedrooms, the featured one left out.
+  if (b.others > 0) {
+    const pool: Extract<Block, { kind: 'listings' }> = { id: `${b.id}-more`, kind: 'listings', title: '', channel: 'auto', ids: s.listings.filter((l) => l.id !== h.id).map((l) => l.id), max: b.others }
+    const picks = pool.ids!.length ? listingsFor(pool, r, s.listings) : []
+    if (picks.length) {
+      const rows: string[] = []
+      for (let i = 0; i < picks.length; i += 2) {
+        const pair = picks.slice(i, i + 2)
+        rows.push(`<tr>${pair.map((l, j) => `<td class="stack" width="50%" valign="top" style="padding:${j ? '0 0 16px 8px' : '0 8px 16px 0'};">${listingCard(l, campaign, false)}</td>`).join('')}${pair.length === 1 ? '<td class="stack" width="50%">&nbsp;</td>' : ''}</tr>`)
+      }
+      parts.push(section(`<p style="margin:0 0 6px; font-family:${SANS}; font-size:11px; font-weight:bold; letter-spacing:2.5px; text-transform:uppercase; color:${C.gold};">Also new with us</p>
+<p style="margin:0 0 18px; font-family:${SERIF}; font-size:24px; line-height:30px; color:${C.ink};">Picked <em style="color:${C.gold};">for you</em></p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${rows.join('')}</table>`, C.cream))
+    }
+  }
+  return parts.join('\n')
 }
