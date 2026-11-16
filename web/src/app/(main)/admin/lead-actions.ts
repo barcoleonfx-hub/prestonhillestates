@@ -14,6 +14,8 @@ import { isStop, waBlocked } from '@/lib/whatsapp'
 import { erasePerson } from '@/lib/personal-data'
 import { advance, completeWhatsAppStep, followupSettings, saveFollowupSettings, startFollowups } from '@/lib/followups'
 import { STEPS } from '@/lib/followup-rules'
+import { queueReconnects } from '@/lib/reconnect'
+import { reconnects } from '@/db/schema'
 import { followupLog } from '@/db/schema'
 
 /** Staff move a lead along (or back) by hand. */
@@ -147,4 +149,24 @@ export async function followupAction(form: FormData) {
   } else return
   revalidatePath(`/admin/enquiries/${id}`)
   revalidatePath('/admin/follow-ups')
+}
+
+/** Reconnect with the leads ticked on the Reconnect page: queued, and sent in the background. */
+export async function queueReconnectAction(form: FormData) {
+  const me = await requireAdmin()
+  const ids = form.getAll('id').map(String).filter(Boolean)
+  if (!ids.length) redirect('/admin/reconnect?msg=none')
+  const r = await queueReconnects(ids, me.id)
+  await audit(me.id, 'queued reconnect emails', 'enquiries', String(r.queued), `${r.queued} queued, ${r.skipped} skipped`)
+  revalidatePath('/admin/reconnect')
+  redirect(`/admin/reconnect?queued=${r.queued}&skipped=${r.skipped}`)
+}
+
+/** Take queued reconnect emails back out before they go. */
+export async function cancelReconnects() {
+  const me = await requireAdmin()
+  await ready()
+  const r = await db.update(reconnects).set({ status: 'skipped', detail: `Cancelled by ${me.name}`, sentAt: now() }).where(eq(reconnects.status, 'queued'))
+  await audit(me.id, 'cancelled queued reconnect emails', 'enquiries', String(r.rowsAffected))
+  revalidatePath('/admin/reconnect')
 }

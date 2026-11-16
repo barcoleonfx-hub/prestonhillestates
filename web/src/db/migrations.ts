@@ -989,4 +989,21 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       `CREATE INDEX followup_log_created_idx ON followup_log (created_at)`,
     ],
   },
+  {
+    id: '045_reconnects',
+    sql: [
+      // Getting back in touch with leads who went quiet (lib/reconnect): queued by staff, sent in the background.
+      `CREATE TABLE reconnects (
+        id TEXT PRIMARY KEY,
+        enquiry_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        detail TEXT,
+        queued_by TEXT,
+        created_at TEXT NOT NULL,
+        sent_at TEXT
+      )`,
+      `CREATE INDEX reconnects_status_idx ON reconnects (status, created_at)`,
+      `CREATE INDEX reconnects_enquiry_idx ON reconnects (enquiry_id, created_at)`,
+    ],
+  },
 ]
