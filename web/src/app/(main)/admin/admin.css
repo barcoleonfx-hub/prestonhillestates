@@ -1146,3 +1146,5 @@ kbd { font: 600 0.68rem/1 var(--sans, inherit); padding: 3px 6px; border-radius:
 .lt-files b { overflow-wrap: anywhere; font-weight: 600; font-size: 0.9rem; }
 .lt-files small { color: var(--faint); font-size: 0.78rem; }
 .lt-upload { cursor: pointer; }
+.lt-missing ul { margin: 6px 0 0; padding-left: 18px; }
+.lt-missing li { margin: 2px 0; }

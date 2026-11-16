@@ -11,6 +11,7 @@ type Props = {
   id: string; initial: LetterState; files: LetterFile[]; properties: { id: string; channel: 'sale' | 'let'; label: string }[]
   property: LetterProperty | null; base: string; senderEmail: string; sent: boolean; canSend: boolean; today: string
 }
+const EMAIL_OK = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim())
 const MB = (n: number) => `${(n / 1048576).toFixed(n < 1048576 ? 2 : 1)} MB`
 
 export function LetterEditor(p: Props) {
@@ -26,6 +27,13 @@ export function LetterEditor(p: Props) {
   const [q, setQ] = useState('')
   const [found, setFound] = useState<{ id: string; name: string; email: string; note: string | null }[]>([])
   const [groupTotal, setGroupTotal] = useState<number | null>(null)
+  // "One person" typed in rather than picked from contacts: counts as soon as it's a valid address.
+  const [typedOne, setTypedOne] = useState(() => (p.initial.one.contactId ? { email: '', name: '' } : { email: p.initial.one.email, name: p.initial.one.name }))
+  useEffect(() => {
+    if (s.one.contactId) return
+    const email = EMAIL_OK(typedOne.email) ? typedOne.email.trim().toLowerCase() : ''
+    if (email !== s.one.email || typedOne.name.trim() !== s.one.name) setS((x) => ({ ...x, one: { contactId: null, email, name: typedOne.name.trim() } }))
+  }, [typedOne]) // eslint-disable-line react-hooks/exhaustive-deps
   const first = useRef(true)
   const ro = p.sent
   const c = s.content
@@ -105,14 +113,18 @@ export function LetterEditor(p: Props) {
 
           {s.toMode === 'one' ? (
             <div className="lt-one">
-              {s.one.email ? (
-                <div className="lt-chosen"><span><b>{s.one.name || s.one.email}</b>{s.one.name ? <small>{s.one.email}</small> : null}</span>{!ro ? <button type="button" className="btn btn-ghost btn-sm" onClick={() => set({ one: { contactId: null, email: '', name: '' } })}>Change</button> : null}</div>
+              {s.one.contactId && s.one.email ? (
+                <div className="lt-chosen"><span><b>{s.one.name || s.one.email}</b>{s.one.name ? <small>{s.one.email}</small> : null}</span>{!ro ? <button type="button" className="btn btn-ghost btn-sm" onClick={() => { set({ one: { contactId: null, email: '', name: '' } }); setTypedOne({ email: '', name: '' }) }}>Change</button> : null}</div>
               ) : (
                 <>
                   <div className="field"><label htmlFor="lt-find">Find someone on your contacts</label><input id="lt-find" className="input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name, email or phone" autoComplete="off" /></div>
-                  {found.length ? <ul className="lt-found">{found.map((f) => <li key={f.id}><button type="button" onClick={() => { set({ one: { contactId: f.id, email: f.email, name: f.name } }); setQ(''); setFound([]) }}><b>{f.name}</b><small>{f.email}{f.note ? ` · ${f.note}` : ''}</small></button></li>)}</ul> : null}
-                  <p className="hint">Or type their details:</p>
-                  <OneTyped onPick={(email, name) => set({ one: { contactId: null, email, name } })} />
+                  {found.length ? <ul className="lt-found">{found.map((f) => <li key={f.id}><button type="button" onClick={() => { set({ one: { contactId: f.id, email: f.email, name: f.name } }); setTypedOne({ email: '', name: '' }); setQ(''); setFound([]) }}><b>{f.name}</b><small>{f.email}{f.note ? ` · ${f.note}` : ''}</small></button></li>)}</ul> : null}
+                  <p className="hint">Or type their email address (and name, for “Dear …”):</p>
+                  <div className="cmp-two lt-typed">
+                    <div className="field"><label htmlFor="lt-oe">Email</label><input id="lt-oe" className="input" type="email" value={typedOne.email} onChange={(e) => setTypedOne({ ...typedOne, email: e.target.value })} placeholder="name@example.com" disabled={ro} /></div>
+                    <div className="field"><label htmlFor="lt-on">Name</label><input id="lt-on" className="input" value={typedOne.name} onChange={(e) => setTypedOne({ ...typedOne, name: e.target.value })} disabled={ro} /></div>
+                  </div>
+                  {typedOne.email.trim() && !EMAIL_OK(typedOne.email) ? <p className="te-err">That doesn’t look like an email address yet.</p> : null}
                 </>
               )}
               <span className="hint">For a client who asked about a home. It also goes into their latest enquiry, so their reply lands there.</span>
@@ -214,24 +226,21 @@ export function LetterEditor(p: Props) {
               </button>
             </div>
           ) : null}
-          {!ro && !ready ? <p className="card-sub">{!c.subject.trim() ? 'Add a subject line. ' : ''}{!c.body.trim() ? 'Write your message. ' : ''}{!count ? 'Choose who it’s to.' : ''}</p> : null}
+          {!ro && (!ready || !p.canSend) ? (
+            <div className="notice warn lt-missing"><b>Before you can send:</b>
+              <ul>
+                {!p.canSend ? <li>Connect the office mailbox in Email settings.</li> : null}
+                {!count ? <li>{s.toMode === 'one' ? 'Choose the person from your contacts, or type their email address.' : s.toMode === 'groups' ? 'Tick at least one group (or add addresses).' : 'Add at least one email address.'}</li> : null}
+                {typed.bad.length ? <li>Fix the addresses that aren’t email addresses.</li> : null}
+                {!c.subject.trim() ? <li>Add a subject line.</li> : null}
+                {!c.body.trim() ? <li>Write your message.</li> : null}
+                {size > attachLimit(count) ? <li>Make the attachments smaller (see Attachments).</li> : null}
+              </ul>
+            </div>
+          ) : null}
           {!p.canSend ? <p className="card-sub">Connect the office mailbox in Email settings to send.</p> : <p className="card-sub">Sent from {p.senderEmail}. {count > SEND_NOW_MAX ? 'Big sends go out a few at a time, within your daily campaign limit.' : 'A copy of each goes in Sent and the email history, and replies arrive in the inbox.'}</p>}
         </section>
       </div>
-    </div>
-  )
-}
-
-/** "One person" typed in: their email and name. */
-function OneTyped({ onPick }: { onPick: (email: string, name: string) => void }) {
-  const [email, setEmail] = useState('')
-  const [name, setName] = useState('')
-  const ok = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
-  return (
-    <div className="cmp-two lt-typed">
-      <div className="field"><label htmlFor="lt-oe">Email</label><input id="lt-oe" className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></div>
-      <div className="field"><label htmlFor="lt-on">Name</label><input id="lt-on" className="input" value={name} onChange={(e) => setName(e.target.value)} /></div>
-      <button type="button" className="btn btn-dark btn-sm" disabled={!ok} onClick={() => onPick(email.trim().toLowerCase(), name.trim())}>Use this person</button>
     </div>
   )
 }
