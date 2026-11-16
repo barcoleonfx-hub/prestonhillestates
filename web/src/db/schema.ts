@@ -165,6 +165,12 @@ export const enquiries = sqliteTable('enquiries', {
   referrer: text('referrer'),
   landingPage: text('landing_page'),
   leadMagnet: text('lead_magnet'),
+  /** Automatic follow-ups (see lib/followup-rules): active, paused, stopped or done; the next step and when. */
+  followupState: text('followup_state'),
+  followupStep: integer('followup_step').notNull().default(0),
+  followupStartedAt: text('followup_started_at'),
+  followupNextAt: text('followup_next_at'),
+  followupNote: text('followup_note'),
 })
 
 /** The email conversation on an enquiry: what we sent ('out') and what they replied ('in'). */
@@ -633,5 +639,17 @@ export const siteEvents = sqliteTable('site_events', {
   kind: text('kind').notNull(),
   page: text('page'),
   detail: text('detail'),
+  createdAt: text('created_at').notNull(),
+})
+
+/** Each follow-up step on a lead: sent, skipped (and why), failed, done by hand, or missed. */
+export const followupLog = sqliteTable('followup_log', {
+  id: text('id').primaryKey(),
+  enquiryId: text('enquiry_id').notNull(),
+  step: text('step').notNull(),
+  channel: text('channel').notNull(),
+  status: text('status').notNull(),
+  detail: text('detail'),
+  createdBy: text('created_by'),
   createdAt: text('created_at').notNull(),
 })

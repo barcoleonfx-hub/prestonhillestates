@@ -12,6 +12,9 @@ import { contactLeadEvent, leadEvent, setLeadOwner, setLeadStatus, withdrawConse
 import { now, uid } from '@/lib/util'
 import { isStop, waBlocked } from '@/lib/whatsapp'
 import { erasePerson } from '@/lib/personal-data'
+import { advance, completeWhatsAppStep, followupSettings, saveFollowupSettings, startFollowups } from '@/lib/followups'
+import { STEPS } from '@/lib/followup-rules'
+import { followupLog } from '@/db/schema'
 
 /** Staff move a lead along (or back) by hand. */
 export async function updateLeadStatus(form: FormData) {
@@ -79,6 +82,7 @@ export async function logWhatsApp(input: { enquiryId: string | null; contactId: 
   if (input.marketing && !c?.whatsappOptInAt) return { error: 'They haven’t agreed to WhatsApp messages about other homes.' }
   const at = now()
   await db.insert(leadEvents).values({ id: uid(), enquiryId: e?.id ?? null, contactId, kind: 'whatsapp', detail: `WhatsApp sent: ${String(input.label).slice(0, 60)}\n${text}`, createdBy: me.id, createdAt: at })
+  if (e) await completeWhatsAppStep(e.id, me.id).catch((x) => console.error('follow-up step', x))
   if (e) await leadEvent(e.id, 'outbound', { by: me.id, at, detail: 'WhatsApp message' })
   else if (contactId) await contactLeadEvent(contactId, 'outbound', { by: me.id, at, detail: 'WhatsApp message' })
   if (contactId) await db.update(contacts).set({ lastContactAt: at }).where(eq(contacts.id, contactId))
@@ -110,4 +114,37 @@ export async function logWhatsAppReply(input: { enquiryId: string | null; contac
   if (e) revalidatePath(`/admin/enquiries/${e.id}`)
   if (contactId) revalidatePath(`/admin/contacts/${contactId}`)
   return { ok: true, stopped: stop }
+}
+
+/** Switch automatic follow-ups on or off (admins). On: leads from now (or the last few days) are followed up. */
+export async function setFollowupsOn(form: FormData) {
+  const me = await requireRole('admin')
+  const on = form.get('on') === '1'
+  const back = Math.min(14, Math.max(0, Number(form.get('backDays') ?? 0) || 0))
+  const cur = await followupSettings()
+  await saveFollowupSettings({ on, since: on ? (cur.on && cur.since ? cur.since : new Date(Date.now() - back * 864e5).toISOString()) : cur.since, by: me.id, at: now() })
+  await audit(me.id, on ? 'switched follow-ups on' : 'switched follow-ups off', 'settings', 'followups', on ? `from ${back ? `${back} days ago` : 'now'}` : undefined)
+  revalidatePath('/admin/follow-ups')
+}
+
+/** Pause, carry on, stop or start one lead's follow-ups; or skip the WhatsApp that's due. */
+export async function followupAction(form: FormData) {
+  const me = await requireAdmin()
+  await ready()
+  const id = String(form.get('id') ?? '')
+  const what = String(form.get('what') ?? '')
+  const e = id ? await db.query.enquiries.findFirst({ where: eq(enquiries.id, id) }) : null
+  if (!e) return
+  if (what === 'pause' && e.followupState === 'active') await db.update(enquiries).set({ followupState: 'paused', followupNote: `Paused by ${me.name}` }).where(eq(enquiries.id, id))
+  else if (what === 'resume' && e.followupState === 'paused') {
+    const due = e.followupNextAt && e.followupNextAt > now() ? e.followupNextAt : new Date(Date.now() + 3600_000).toISOString()
+    await db.update(enquiries).set({ followupState: 'active', followupNextAt: due, followupNote: null }).where(eq(enquiries.id, id))
+  } else if (what === 'stop' && (e.followupState === 'active' || e.followupState === 'paused')) await db.update(enquiries).set({ followupState: 'stopped', followupNextAt: null, followupNote: `Stopped by ${me.name}` }).where(eq(enquiries.id, id))
+  else if (what === 'start') await startFollowups(id)
+  else if (what === 'skip' && e.followupState === 'active' && STEPS[e.followupStep]) {
+    await db.insert(followupLog).values({ id: uid(), enquiryId: id, step: STEPS[e.followupStep].key, channel: STEPS[e.followupStep].channel, status: 'skipped', detail: `Skipped by ${me.name}`, createdBy: me.id, createdAt: now() })
+    await advance(e)
+  } else return
+  revalidatePath(`/admin/enquiries/${id}`)
+  revalidatePath('/admin/follow-ups')
 }
