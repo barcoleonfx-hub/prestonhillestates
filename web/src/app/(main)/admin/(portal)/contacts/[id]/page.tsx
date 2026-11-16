@@ -2,13 +2,14 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { and, desc, eq } from 'drizzle-orm'
 import { db } from '@/db/client'
-import { admins, auditLog } from '@/db/schema'
+import { admins, auditLog, consents } from '@/db/schema'
 import { requireAdmin } from '@/lib/auth'
 import { activeStaff } from '@/lib/appointments'
 import { audit, getContact, openTasks, timelineFor } from '@/lib/contacts'
 import { moneyShort, roleLabel, rolesOf } from '@/lib/crm-options'
 import { fmtTime, fmtWhen, isoToLondon, dayLabel, todayLondon } from '@/lib/time'
 import { archiveContact, setDoNotContact } from '../../../crm-actions'
+import { erasePersonAction, stopConsent } from '../../../lead-actions'
 import { LogCallButton } from '../../LogCallButton'
 import { TaskDoneButton } from '../../TaskDoneButton'
 import { AddCallbackForm, EditContactForm } from './ContactForms'
@@ -16,13 +17,14 @@ import { AddCallbackForm, EditContactForm } from './ContactForms'
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Contact' }
 
-export default async function ContactPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ContactPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ erase?: string }> }) {
   const me = await requireAdmin()
   const { id } = await params
+  const sp = await searchParams
   const c = await getContact(id)
   if (!c) notFound()
   await audit(me.id, 'view', 'contact', c.id)
-  const [timeline, open, staff, history] = await Promise.all([
+  const [timeline, open, staff, history, consentLog] = await Promise.all([
     timelineFor(c),
     openTasks({ contactId: c.id }),
     activeStaff(),
@@ -30,6 +32,7 @@ export default async function ContactPage({ params }: { params: Promise<{ id: st
       ? db.select({ a: auditLog, name: admins.name }).from(auditLog).leftJoin(admins, eq(auditLog.adminId, admins.id))
         .where(and(eq(auditLog.entity, 'contact'), eq(auditLog.entityId, c.id))).orderBy(desc(auditLog.at)).limit(30)
       : Promise.resolve([]),
+    db.select().from(consents).where(eq(consents.contactId, c.id)).orderBy(desc(consents.createdAt)).limit(20),
   ])
   const roles = rolesOf(c.roles)
   const today = todayLondon()
@@ -120,6 +123,54 @@ export default async function ContactPage({ params }: { params: Promise<{ id: st
                 c={{ id: c.id, name: c.name, phone: c.phone, phone2: c.phone2, email: c.email, roles, source: c.source, areas: c.areas, minBeds: c.minBeds, maxPrice: c.maxPrice, position: c.position, address: c.address, notes: c.notes, ownerId: c.ownerId }}
               />
             </details>
+          </section>
+
+          <section className="card card-pad" id="privacy">
+            <h2>Consent &amp; privacy</h2>
+            <dl className="consent-facts">
+              {(['email', 'whatsapp'] as const).map((ch) => {
+                const at = ch === 'email' ? c.emailOptInAt : c.whatsappOptInAt
+                const stopped = ch === 'email' && !at && c.marketingOptOut
+                return (
+                  <div key={ch} className="consent-line">
+                    <dt>{ch === 'email' ? 'Marketing emails' : 'WhatsApp'}</dt>
+                    <dd>
+                      {at ? <>Agreed {dayLabel(isoToLondon(at).date, today)}{c.consentSource ? <small> · {c.consentSource}</small> : null}</> : stopped ? 'Unsubscribed' : 'Not agreed'}
+                      {at ? (
+                        <form action={stopConsent} style={{ display: 'inline', marginLeft: 8 }}>
+                          <input type="hidden" name="contactId" value={c.id} />
+                          <input type="hidden" name="channel" value={ch} />
+                          <button className="btn btn-ghost btn-sm" type="submit">They asked to stop</button>
+                        </form>
+                      ) : null}
+                    </dd>
+                  </div>
+                )
+              })}
+            </dl>
+            {consentLog.length ? (
+              <details className="consent-log">
+                <summary className="det-sum">Consent history ({consentLog.length})</summary>
+                <ul className="audit">
+                  {consentLog.map((x) => <li key={x.id}><b>{x.granted ? 'Agreed to' : 'Stopped'} {x.channel === 'email' ? 'emails' : 'WhatsApp'}</b> · {dayLabel(isoToLondon(x.createdAt).date, today)} {fmtTime(x.createdAt)}{x.source ? ` · ${x.source}` : ''}{x.wording ? <span className="consent-words">“{x.wording}”</span> : null}</li>)}
+                </ul>
+              </details>
+            ) : null}
+            <div className="actions" style={{ marginTop: 12 }}>
+              <a className="btn btn-ghost btn-sm" href={`/admin/contacts/${c.id}/export`} download>Download their data (subject access request)</a>
+            </div>
+            {me.role === 'admin' ? (
+              <details className="erase" open={sp.erase === 'confirm'}>
+                <summary className="det-sum">Erase this person (right to be forgotten)</summary>
+                <p className="card-sub">Deletes their record, enquiries, emails, notes, calls, callbacks, alerts and consent history for good. Diary appointments stay but lose their name and details. Download their data first if they asked for a copy.</p>
+                <form action={erasePersonAction} className="erase-form">
+                  <input type="hidden" name="contactId" value={c.id} />
+                  <label>Type DELETE to confirm <input name="confirm" autoComplete="off" className="input" aria-invalid={sp.erase === 'confirm' || undefined} /></label>
+                  {sp.erase === 'confirm' ? <p className="err" role="alert">Type DELETE in the box to erase them.</p> : null}
+                  <button className="btn btn-danger btn-sm" type="submit">Erase everything about {c.name.split(/\s+/)[0]}</button>
+                </form>
+              </details>
+            ) : null}
           </section>
 
           {me.role === 'admin' ? (

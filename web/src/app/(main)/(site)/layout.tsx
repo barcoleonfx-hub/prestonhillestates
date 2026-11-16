@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { LogoMark } from '@/components/Logo'
 import { AccreditationLinks, PortalLinks } from '@/components/PortalLinks'
 import { ValuationPopup } from '@/components/ValuationPopup'
+import { VisitTracker } from '@/components/LeadCapture'
 import './site.css'
 
 export default function SiteLayout({ children }: { children: React.ReactNode }) {
@@ -68,11 +69,12 @@ export default function SiteLayout({ children }: { children: React.ReactNode }) 
           </div>
           <div className="legal">
             <span>© {new Date().getFullYear()} Preston Hill Estates · Company No. 05058532</span>
-            <span>Independent estate agents since 2004</span>
+            <span><Link href="/privacy">Privacy policy</Link> · Independent estate agents since 2004</span>
           </div>
         </div>
       </footer>
       <ValuationPopup />
+      <VisitTracker />
     </>
   )
 }

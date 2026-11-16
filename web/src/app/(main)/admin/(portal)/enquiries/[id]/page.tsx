@@ -13,11 +13,21 @@ import { EmailComposer } from './EmailComposer'
 import { ReplyBox } from './ReplyBox'
 import { conversation } from '@/lib/enquiry-thread'
 import { ValuationCheck } from './ValuationCheck'
+import { LeadControls } from './LeadPanel'
+import { activeStaff } from '@/lib/appointments'
+import { LEAD_MAGNETS, LEAD_STATUSES, isUkMobile, statusLabel } from '@/lib/lead-rules'
+import { leadTimeline } from '@/lib/leads'
 import { homeFrom, portalLinks } from '@/lib/valuation-check'
 import { landRegistryEstimate, rentCheck } from '@/lib/valuation-check-data'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Enquiry' }
+
+/** How long it took to first get in touch, e.g. " (after 25 min)". */
+function speed(from: string, to: string) {
+  const m = Math.max(0, Math.round((Date.parse(to) - Date.parse(from)) / 60000))
+  return ` (after ${m < 60 ? `${m} min` : m < 48 * 60 ? `${Math.round(m / 60)} h` : `${Math.round(m / 1440)} days`})`
+}
 
 const KIND_TITLE = { 'sales-valuation': 'Sales valuation', 'lettings-valuation': 'Rental valuation', buyer: 'Buyer enquiry', tenant: 'Tenant enquiry' } as const
 
@@ -29,7 +39,7 @@ export default async function EnquiryPage({ params, searchParams }: { params: Pr
   const w = await enquiryWorkspace(id, me)
   if (!w) notFound()
   const { e, p, contact, sorted, valuation, kind, ctx, lines, listings, suggested } = w
-  const [trail, thread] = await Promise.all([trailFor([e]).then((t) => t[e.id] ?? []), conversation(e.id)])
+  const [trail, thread, timeline, staff] = await Promise.all([trailFor([e]).then((t) => t[e.id] ?? []), conversation(e.id), leadTimeline(e.id), activeStaff()])
   // The valuation check: our estimate, the portal searches, comparables and the figure.
   const rent = kind === 'lettings-valuation'
   const home = homeFrom(e.message)
@@ -63,7 +73,8 @@ export default async function EnquiryPage({ params, searchParams }: { params: Pr
             <span>{new Date(e.createdAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/London' })}</span>
           </div>
           <div className="ew-pills">
-            {!e.handled ? <span className="pill gold">New</span> : <span className="pill">Dealt with</span>}
+            <span className={`pill ${LEAD_STATUSES.find((x) => x.value === e.status)?.tone ?? ''}`}>{statusLabel(e.status)}</span>
+            {!e.handled ? <span className="pill gold">To deal with</span> : <span className="pill">Dealt with</span>}
             {sorted.side ? <span className={`pill side-${sorted.side}`}>{SIDE_LABEL[sorted.side]}</span> : <span className="pill warn">Sales or lettings?</span>}
             {e.outcome ? <span className="pill">{outcomeText(e.outcome)}</span> : null}
             {e.lastReplyAt && !e.handled ? <span className="pill gold">Replied</span> : null}
@@ -86,6 +97,34 @@ export default async function EnquiryPage({ params, searchParams }: { params: Pr
 
       <div className="ew-grid">
         <div className="ew-side">
+          <section className="card card-pad lead-card">
+            <h2>Lead</h2>
+            <LeadControls id={e.id} status={e.status} ownerId={e.ownerId} meId={me.id} staff={staff.map((x) => ({ id: x.id, name: x.name }))} />
+            <dl className="lead-src">
+              <div><dt>Came from</dt><dd>{e.leadMagnet && LEAD_MAGNETS[e.leadMagnet] ? LEAD_MAGNETS[e.leadMagnet] : e.source === 'website' ? 'Website' : e.source}</dd></div>
+              {e.utmSource || e.utmCampaign ? <div><dt>Advert / link</dt><dd>{[e.utmSource, e.utmMedium, e.utmCampaign].filter(Boolean).join(' · ')}</dd></div> : null}
+              {e.referrer ? <div><dt>Sent by</dt><dd>{e.referrer.replace(/^https?:\/\//, '')}</dd></div> : null}
+              {e.landingPage ? <div><dt>First page</dt><dd>{e.landingPage}</dd></div> : null}
+              <div><dt>First contact</dt><dd>{e.firstContactedAt ? `${new Date(e.firstContactedAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/London' })}${speed(e.createdAt, e.firstContactedAt)}` : 'Not yet'}</dd></div>
+              {contact ? <div><dt>Consent</dt><dd>{[contact.emailOptInAt ? 'emails' : null, contact.whatsappOptInAt ? 'WhatsApp' : null].filter(Boolean).join(' and ') || (contact.marketingOptOut ? 'Unsubscribed from emails' : 'None given')}{contact.whatsappOptInAt && !isUkMobile(contact.phoneE164) ? ' (no UK mobile on file)' : ''}</dd></div> : null}
+            </dl>
+            <details className="lead-tl">
+              <summary className="det-sum">Timeline ({timeline.length})</summary>
+              <ol className="timeline">
+                {timeline.map((t, i) => (
+                  <li key={i} className={`tl-${t.kind}`}>
+                    <span className="tl-dot" aria-hidden="true" />
+                    <div>
+                      <div className="tl-title">{t.title}</div>
+                      {t.body ? <p className="tl-body pre">{t.body}</p> : null}
+                      <div className="tl-meta">{new Date(t.at).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/London' })}{t.by ? ` · ${t.by}` : ''}</div>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </details>
+          </section>
+
           <section className="card card-pad">
             <h2>{valuation ? 'Their property' : 'What they asked about'}</h2>
             {p ? (

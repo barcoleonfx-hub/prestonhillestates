@@ -59,12 +59,13 @@
 .phc-choices .phc-wa:hover { background: #18773F; color: #fff; }
 
 .phc-form { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 12px 12px; border-top: 1px solid var(--phc-line); background: #fff; }
-.phc-form input:not(.phc-hp) { flex: 1; min-width: 0; font: inherit; font-size: 16px; color: var(--phc-ink); background: var(--phc-cream);
+.phc-consent { width: 100%; padding: 0 4px 4px; color: var(--phc-ink); }
+.phc-form > input:not(.phc-hp) { flex: 1; min-width: 0; font: inherit; font-size: 16px; color: var(--phc-ink); background: var(--phc-cream);
   border: 1.5px solid var(--phc-line); border-radius: 999px; padding: 10px 16px; }
-.phc-form input:not(.phc-hp):focus { outline: none; border-color: var(--phc-gold); }
+.phc-form > input:not(.phc-hp):focus { outline: none; border-color: var(--phc-gold); }
 .phc-form input[aria-invalid="true"] { border-color: #A8442E; }
-.phc-form button { flex: none; width: 44px; height: 44px; border-radius: 50%; border: 0; background: var(--phc-gold); color: #fff; cursor: pointer; display: grid; place-items: center; }
-.phc-form button:disabled { opacity: 0.5; cursor: default; }
+.phc-form > button { flex: none; width: 44px; height: 44px; border-radius: 50%; border: 0; background: var(--phc-gold); color: #fff; cursor: pointer; display: grid; place-items: center; }
+.phc-form > button:disabled { opacity: 0.5; cursor: default; }
 .phc-err { width: 100%; margin: 0 4px; font-size: 0.82rem; color: #A8442E; }
 .phc-hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
 .phc-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

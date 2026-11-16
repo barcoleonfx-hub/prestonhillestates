@@ -8,6 +8,7 @@ import { addRole, normEmail, normPhone, prettyPhone, roleLabel, rolesOf } from '
 import { portalUrl, sendMail, staffEmailHtml } from './mailer'
 import { fmtWhen } from './time'
 import { now, uid } from './util'
+import { syncPhoneE164 } from './leads'
 
 export async function audit(adminId: string, action: string, entity: string, entityId: string, detail?: string) {
   await db.insert(auditLog).values({ id: uid(), adminId, action, entity, entityId, detail: detail ?? null, at: now() }).catch(() => {})
@@ -85,6 +86,7 @@ export async function upsertContact(input: {
       lastContactAt: input.touch === false ? existing.lastContactAt : ts,
       updatedAt: ts,
     }).where(eq(contacts.id, existing.id))
+    await syncPhoneE164(existing.id).catch(() => {})
     return existing.id
   }
   const id = uid()
@@ -95,6 +97,7 @@ export async function upsertContact(input: {
     roles: input.role ?? '', source: input.source ?? null, address: input.address ?? null,
     lastContactAt: ts, createdBy: input.by ?? null, createdAt: ts, updatedAt: ts,
   })
+  await syncPhoneE164(id).catch(() => {})
   return id
 }
 

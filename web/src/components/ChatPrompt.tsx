@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { postJson, SEND_FAILED } from '@/lib/post-json'
 import { LogoMark } from './Logo'
+import { attributionJson, ConsentBoxes, type Consent } from './LeadCapture'
 import './chat-prompt.css'
 
 // A guided chat in the corner of the homepage, Landlords and Properties pages: "Selling, letting or management?"
@@ -75,6 +76,7 @@ export function ChatPrompt() {
   const [typing, setTyping] = useState(false)
   const [value, setValue] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [consent, setConsent] = useState<Consent>({ email: false, whatsapp: false })
   const answers = useRef({ postcode: '', name: '', phone: '' })
   const nextId = useRef(1)
   const listRef = useRef<HTMLDivElement>(null)
@@ -181,6 +183,7 @@ export function ChatPrompt() {
       const hp = (document.getElementById('phc-hp') as HTMLInputElement | null)?.value ?? ''
       const r = (await postJson<{ ok: boolean; error?: string; field?: string }>('/api/public/chat', {
         goal: goal ?? '', postcode: answers.current.postcode, name: answers.current.name, phone: v, page: window.location.pathname, hp_check: hp,
+        magnet: 'chat', attribution: attributionJson(), consent_email: consent.email, consent_whatsapp: consent.whatsapp,
       }, setTyping)) ?? { ok: false, error: SEND_FAILED, field: undefined }
       if (!r.ok) {
         const back: Stage = r.field === 'postcode' ? 'postcode' : r.field === 'name' ? 'name' : 'phone'
@@ -233,6 +236,7 @@ export function ChatPrompt() {
           {asking ? (
             <form className="phc-form" onSubmit={submit} noValidate>
               {error ? <p className="phc-err" role="alert">{error}</p> : null}
+              {stage === 'phone' || stage === 'sending' ? <div className="phc-consent"><ConsentBoxes compact value={consent} onChange={setConsent} /></div> : null}
               <input id="phc-hp" name="hp_check" tabIndex={-1} autoComplete="off" aria-hidden="true" className="phc-hp" />
               <label htmlFor="phc-in" className="phc-sr">{field.label}</label>
               <input id="phc-in" ref={inputRef} value={value} onChange={(e) => setValue(e.target.value)} placeholder={field.ph} type={field.type} autoComplete={field.auto}

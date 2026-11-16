@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { postJson, SEND_FAILED } from '@/lib/post-json'
+import { attributionJson, ConsentBoxes, type Consent } from '@/components/LeadCapture'
 import { SoldPanel } from './SoldPanel'
 
 type Intent = 'selling' | 'letting'
@@ -49,6 +50,7 @@ export function ValuationWizard({ initialIntent, initialPostcode }: { initialInt
   const [email, setEmail] = useState('')
   const [time, setTime] = useState('')
   const [notes, setNotes] = useState('')
+  const [consent, setConsent] = useState<Consent>({ email: false, whatsapp: false })
   const [error, setError] = useState<{ field?: Field; text: string } | null>(null)
   const [sending, setSending] = useState(false)
   const [waiting, setWaiting] = useState(false)
@@ -125,7 +127,7 @@ export function ValuationWizard({ initialIntent, initialPostcode }: { initialInt
     setSending(true)
     const hp_check = (e.currentTarget as HTMLFormElement).querySelector<HTMLInputElement>('input[name=hp_check]')?.value ?? ''
     try {
-      const r = await postJson<{ ok: boolean; error?: string; field?: Field; estimate?: Estimate | null }>('/api/public/valuation', { name: name.trim(), phone: phone.trim(), email: email.trim(), postcode: pc, intent, address: address.trim(), propertyType: type, bedrooms: beds, timescale: when, contactTime: time, notes: notes.trim(), hp_check }, setWaiting)
+      const r = await postJson<{ ok: boolean; error?: string; field?: Field; estimate?: Estimate | null }>('/api/public/valuation', { name: name.trim(), phone: phone.trim(), email: email.trim(), postcode: pc, intent, address: address.trim(), propertyType: type, bedrooms: beds, timescale: when, contactTime: time, notes: notes.trim(), hp_check, magnet: 'valuation-page', attribution: attributionJson(), consent_email: consent.email, consent_whatsapp: consent.whatsapp }, setWaiting)
       if (!r) { setSending(false); setError({ text: SEND_FAILED }); return }
       if (!r.ok) {
         setSending(false)
@@ -251,7 +253,7 @@ export function ValuationWizard({ initialIntent, initialPostcode }: { initialInt
             <div className="vx-field"><label htmlFor="vx-email">Email <span className="vx-opt">(optional)</span></label><input id="vx-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" aria-invalid={error?.field === 'email' || undefined} /></div>
             <div className="vx-field"><span className="vx-label">Best time to call</span><Chips name="time" options={TIMES} value={time} onChange={setTime} /></div>
             <div className="vx-field"><label htmlFor="vx-notes">Anything we should know? <span className="vx-opt">(optional)</span></label><textarea id="vx-notes" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. extended at the back, tenant in place until March" /></div>
-            <p className="vx-fine">We’ll only use your details to arrange your valuation.</p>
+            <ConsentBoxes value={consent} onChange={setConsent} />
           </div>
         ) : null}
 

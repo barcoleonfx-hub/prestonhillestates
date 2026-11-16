@@ -27,6 +27,6 @@ export async function POST(req: Request) {
   await registerTenant({
     name, email, phone, maxRent: maxRent && maxRent >= 300 && maxRent <= 20000 ? maxRent : null, minBeds, areas,
     moveBy: MOVES.includes(str('moveBy')) ? str('moveBy') : '', pets: b.pets === true, furnishing: FURN.includes(str('furnishing')) ? str('furnishing') : '', notes: str('notes', 600),
-  })
+  }, (k) => b[k])
   return Response.json({ ok: true })
 }

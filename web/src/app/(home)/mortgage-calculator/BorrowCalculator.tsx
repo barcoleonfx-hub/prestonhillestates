@@ -1,5 +1,6 @@
 'use client'
 import { useMemo, useState } from 'react'
+import { attributionJson, ConsentBoxes, type Consent } from '@/components/LeadCapture'
 
 // Most UK lenders lend roughly 4 to 4.5 times household income, after allowing for regular debts.
 const LOW_MULTIPLE = 4
@@ -125,6 +126,7 @@ function BuyerSignup({ budget, summary }: { budget: number; summary: string }) {
   const [email, setEmail] = useState('')
   const [areas, setAreas] = useState('')
   const [state, setState] = useState<{ error?: string; field?: string; done?: boolean; sending?: boolean }>({})
+  const [consent, setConsent] = useState<Consent>({ email: false, whatsapp: false })
 
   const send = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -133,7 +135,7 @@ function BuyerSignup({ budget, summary }: { budget: number; summary: string }) {
     setState({ sending: true })
     const hp_check = e.currentTarget.querySelector<HTMLInputElement>('input[name=hp_check]')?.value ?? ''
     try {
-      const res = await fetch('/api/public/buyer', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, phone, email, areas, budget, summary, hp_check }) })
+      const res = await fetch('/api/public/buyer', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, phone, email, areas, budget, summary, hp_check, magnet: 'buyer-calculator', attribution: attributionJson(), consent_email: consent.email, consent_whatsapp: consent.whatsapp }) })
       const r = (await res.json()) as { ok: boolean; error?: string; field?: string }
       setState(r.ok ? { done: true } : { error: r.error ?? 'Something went wrong. Please call us on 020 8904 9005.', field: r.field })
     } catch {
@@ -164,7 +166,7 @@ function BuyerSignup({ budget, summary }: { budget: number; summary: string }) {
       </div>
       {state.error ? <p className="vx-error" role="alert">{state.error}</p> : null}
       <button className="btn dark" type="submit" disabled={state.sending}>{state.sending ? 'Sending…' : 'Register as a buyer'}</button>
-      <p className="mc-hint">We’ll only use your details to tell you about suitable homes.</p>
+      <ConsentBoxes value={consent} onChange={setConsent} />
     </form>
   )
 }

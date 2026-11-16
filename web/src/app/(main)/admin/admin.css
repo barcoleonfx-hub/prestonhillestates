@@ -1034,3 +1034,30 @@ kbd { font: 600 0.68rem/1 var(--sans, inherit); padding: 3px 6px; border-radius:
 .te-results small { color: var(--danger); }
 .cmp-left .card-pad > .field + .field, .cmp-left .card-pad > .field + .cmp-two, .cmp-left .card-pad > .cmp-two + .field, .cmp-left .card-pad > .cmp-two + .cmp-two { margin-top: 12px; }
 .te-list td .pill { white-space: nowrap; }
+
+/* ---------- lead pipeline: stage, owner, source, consent ---------- */
+.lead-ctl { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: end; }
+.lead-ctl label { display: grid; gap: 4px; font-size: 0.78rem; color: var(--muted, #6b6656); }
+.lead-ctl select { width: 100%; }
+.lead-take { grid-column: 1 / -1; }
+.lead-src { margin: 12px 0 0; display: grid; gap: 6px; font-size: 0.86rem; }
+.lead-src > div { display: grid; grid-template-columns: 110px 1fr; gap: 8px; }
+.lead-src dt { color: var(--muted, #6b6656); }
+.lead-src dd { margin: 0; overflow-wrap: anywhere; }
+.lead-tl { margin-top: 12px; }
+.lead-tl .timeline { margin-top: 10px; max-height: 520px; overflow: auto; }
+.consent-facts { display: grid; gap: 8px; margin: 0; }
+.consent-line { display: grid; grid-template-columns: 130px 1fr; gap: 8px; align-items: center; }
+.consent-line dt { color: var(--muted, #6b6656); }
+.consent-line dd { margin: 0; }
+.consent-words { display: block; font-size: 0.78rem; color: var(--muted, #6b6656); margin-top: 2px; }
+.consent-log { margin-top: 10px; }
+.erase { margin-top: 14px; border-top: 1px solid var(--line, #e7e2d3); padding-top: 12px; }
+.erase-form { display: grid; gap: 8px; margin-top: 8px; max-width: 360px; }
+.erase-form label { display: grid; gap: 4px; font-size: 0.84rem; }
+.erase-form .err { color: #A8442E; font-size: 0.84rem; margin: 0; }
+.lead-filters { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 0 0 12px; }
+.lead-filters a { font-size: 0.82rem; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--line, #e7e2d3); color: inherit; text-decoration: none; }
+.lead-filters a.on { background: var(--ink, #1f1d17); border-color: var(--ink, #1f1d17); color: #fff; }
+.lead-filters .sep { width: 1px; height: 18px; background: var(--line, #e7e2d3); margin: 0 4px; }
+@media (max-width: 640px) { .lead-ctl { grid-template-columns: 1fr; } .lead-src > div, .consent-line { grid-template-columns: 1fr; gap: 2px; } }

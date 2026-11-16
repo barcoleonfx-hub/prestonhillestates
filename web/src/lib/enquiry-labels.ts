@@ -1,7 +1,7 @@
 // How an enquiry is described across the portal. Safe to import from client components.
 
 export const ENQUIRY_SOURCES: Record<string, string> = {
-  website: 'Website', zoopla: 'Zoopla', onthemarket: 'OnTheMarket', email: 'Email',
+  website: 'Website', zoopla: 'Zoopla', onthemarket: 'OnTheMarket', email: 'Email', phone: 'Phone', walk_in: 'Walk-in', referral: 'Referral', other: 'Other',
 }
 
 /** e.g. "Website viewing request", "Zoopla enquiry", "Email enquiry", "Buyer registration". */

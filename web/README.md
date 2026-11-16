@@ -136,6 +136,41 @@ service, with a persistent disk for the database, photos, videos and saved email
 - **Staff roles**: admins can add staff, switch accounts off, reset passwords and manage roles.
   Negotiators can do everything else.
 
+## Leads: stages, owners, consent and privacy
+
+Every enquiry is a lead with a stage (New, Contacted, Engaged, Viewing / visit booked, Offer, Won, Lost,
+Dormant) and an owner. Stages move on their own: an email or call from us makes it Contacted, a reply or
+call from them Engaged, a booked viewing or valuation Viewing, "Not interested" or "Do not call" Lost, and
+a lead nobody has heard from either way in 60 days goes Dormant (checked once a day). Staff can change
+the stage or owner by hand on the enquiry page; the first person to contact a lead becomes its owner.
+The enquiries list filters by stage and has "My leads". Everyone sees every lead.
+
+Website forms record where the lead came from (the advert or campaign link, the site that sent them, the
+first page, which form) and show two optional consent boxes, never pre-ticked. Each consent is stored with
+its exact wording, date and form, and shows on the contact page, where staff can also record that someone
+asked to stop, download everything held about them (a subject access request) or, for admins, erase them.
+The privacy policy is at /privacy.
+
+To add your own campaign links, put `?utm_source=facebook&utm_medium=paid&utm_campaign=spring-valuations`
+(any words) on the link; the lead will show it.
+
+### Importing leads from other tools
+
+`POST /api/leads/import` with `Authorization: Bearer $LEAD_IMPORT_SECRET` and JSON: one lead, a list, or
+`{ "leads": [...] }` (100 at most). Fields: `name` (required), `email` and/or `phone`, `message`,
+`postcode`, `source` (zoopla, onthemarket, website, email, phone, walk_in, referral, other), `kind`
+(viewing, valuation, buyer, email), `intent` (selling, letting, unsure), `property_ref`, `external_id`
+(sending the same one twice is ignored), `consent_email` / `consent_whatsapp` (only if the person really
+agreed), `utm_source`, `utm_medium`, `utm_campaign`, `referrer`, `landing_page`. The endpoint is off until
+`LEAD_IMPORT_SECRET` (24+ characters) is set, and allows 30 requests a minute.
+
+```bash
+curl -X POST https://<your-site>/api/leads/import -H "Authorization: Bearer $LEAD_IMPORT_SECRET" \
+  -H 'Content-Type: application/json' -d '{"name":"Test Person","phone":"07700 900123","source":"walk_in","kind":"valuation"}'
+```
+
+`npm test` runs the unit tests for the lead rules (stages, phone numbers, sources, consent, import checks).
+
 ## Testing
 
 `scripts/e2e.mjs` drives a real browser through the whole flow: sign in, create a listing,
