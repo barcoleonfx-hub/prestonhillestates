@@ -326,6 +326,8 @@ export const contacts = sqliteTable(
     emailOptInAt: text('email_opt_in_at'),
     whatsappOptInAt: text('whatsapp_opt_in_at'),
     consentSource: text('consent_source'),
+    /** They said STOP on WhatsApp (or asked us not to message them there): no WhatsApp until they opt in again. */
+    whatsappStoppedAt: text('whatsapp_stopped_at'),
     createdBy: text('created_by'),
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
@@ -622,5 +624,14 @@ export const consents = sqliteTable('consents', {
   granted: integer('granted', { mode: 'boolean' }).notNull(),
   wording: text('wording'),
   source: text('source'),
+  createdAt: text('created_at').notNull(),
+})
+
+/** Anonymous counts of things done on the website, such as tapping a WhatsApp button. No personal details. */
+export const siteEvents = sqliteTable('site_events', {
+  id: text('id').primaryKey(),
+  kind: text('kind').notNull(),
+  page: text('page'),
+  detail: text('detail'),
   createdAt: text('created_at').notNull(),
 })

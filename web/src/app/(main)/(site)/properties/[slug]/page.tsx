@@ -316,7 +316,7 @@ export default async function PropertyPage({ params }: { params: Params }) {
         </div>
 
         <aside className="aside">
-          <EnquiryForm propertyId={p.id} isLet={isLet} />
+          <EnquiryForm propertyId={p.id} isLet={isLet} waText={`Hi Preston Hill Estates, I’m interested in ${address} (ref ${p.ref}) on your website. Is it still available?`} />
           {isLet ? (
             <div className="tenant-box">
               <b>Not quite right?</b>

@@ -52,7 +52,7 @@ export default function PrivacyPage() {
           <p>Our staff at the branch. Where it’s needed for your enquiry, we share relevant details with the seller or landlord of a property you’re interested in, and with solicitors or referencing agencies in a sale or tenancy. The companies that run our systems store it for us: our website and staff system are hosted by Render, and our email is held by our email provider. We don’t sell your information, and we don’t share it with anyone for their own marketing.</p>
 
           <h2 className="sect">How long we keep it</h2>
-          <p>We keep enquiries, and the emails and notes that go with them, only while they’re useful for helping you buy, sell, let or rent, and you can ask us to delete them at any time. Where the law says we must keep records (for example anti-money-laundering records, kept for 5 years after a sale ends), we keep those for that time. If you ask us to stop contacting you, we keep a note of that so we don’t contact you again.</p>
+          <p>Our system deletes things automatically: each enquiry 2 years after it was made, and your record (with the calls, emails, notes and consent that go with it) 2 years after we were last in touch, unless something is still booked or to do. You can ask us to delete your information sooner. Where the law says we must keep records for longer (for example anti-money-laundering records, kept for 5 years after a sale ends), we keep those for that time.</p>
 
           <h2 className="sect">What our website stores in your browser</h2>
           <p>We don’t use advertising or tracking cookies. Our website keeps a few small notes in your own browser (local storage), which never leave it until you send a form:</p>
@@ -60,7 +60,7 @@ export default function PrivacyPage() {
             <li>how you first arrived (the page, the site that sent you, and any advert link), for 90 days, sent with any form you fill in;</li>
             <li>that you closed or sent the valuation pop-up or the chat, so we don’t keep showing them.</li>
           </ul>
-          <p>Videos on property pages play from YouTube’s privacy-enhanced (no-cookie) service. You can clear these notes at any time in your browser settings.</p>
+          <p>We also count how often the WhatsApp buttons are tapped, and on which page, without keeping anything about who tapped them. Videos on property pages play from YouTube’s privacy-enhanced (no-cookie) service. You can clear these notes at any time in your browser settings.</p>
 
           <h2 className="sect">Your rights</h2>
           <p>You can ask us, free of charge, to:</p>

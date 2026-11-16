@@ -4,13 +4,14 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { postJson, SEND_FAILED } from '@/lib/post-json'
 import { LogoMark } from './Logo'
 import { attributionJson, ConsentBoxes, type Consent } from './LeadCapture'
+import { countWhatsAppTap } from './WhatsAppLink'
+import { OFFICE_WHATSAPP, waLink as officeLink } from '@/lib/whatsapp'
 import './chat-prompt.css'
 
 // A guided chat in the corner of the homepage, Landlords and Properties pages: "Selling, letting or management?"
 // It asks for the postcode, name and phone, and the answer arrives in the portal as a valuation enquiry with an
 // alert. Nobody has to be online to answer it. WhatsApp is offered for anyone who'd rather message.
 
-const WHATSAPP = '447745203146'
 const SENT_KEY = 'phe_chat_sent' // after sending: no prompt for a year
 const QUIET_KEY = 'phe_chat_quiet' // prompt closed: not again this visit
 const PROMPT_AFTER = 20_000
@@ -25,7 +26,7 @@ const GOALS: { key: Goal; label: string; said: string; reply: string; wa: string
   { key: 'manage', label: 'Manage my property', said: 'I’d like my property managed', reply: 'Great. Our fully managed service looks after the tenancy, the rent and the repairs for you.', wa: 'Hi Preston Hill Estates, I’d like to talk about managing my property.' },
 ]
 
-const waLink = (text: string) => `https://wa.me/${WHATSAPP}?text=${encodeURIComponent(text)}`
+const waLink = (text: string) => officeLink(OFFICE_WHATSAPP, text)
 const firstName = (n: string) => n.trim().split(/\s+/)[0] ?? ''
 const POSTCODE = /^[A-Z]{1,2}[0-9][A-Z0-9]? ?[0-9][A-Z]{2}$/
 const PHONE = /^[0-9+()\s-]{7,20}$/
@@ -228,7 +229,7 @@ export function ChatPrompt() {
             ) : null}
             {!typing && stage === 'done' ? (
               <div className="phc-choices">
-                <a className="phc-wa" href={waLink(info?.wa ?? 'Hi Preston Hill Estates')} target="_blank" rel="noopener noreferrer"><WaIcon /> Message us on WhatsApp</a>
+                <a className="phc-wa" href={waLink(info?.wa ?? 'Hi Preston Hill Estates')} target="_blank" rel="noopener noreferrer" onClick={() => countWhatsAppTap('chat-after')}><WaIcon /> Message us on WhatsApp</a>
                 <button type="button" className="phc-quiet" onClick={close}>Close</button>
               </div>
             ) : null}
@@ -244,7 +245,7 @@ export function ChatPrompt() {
               <button type="submit" aria-label="Send" disabled={typing || stage === 'sending'}><Icon d={SEND_ICON} /></button>
             </form>
           ) : stage === 'choose' || stage === 'browse' ? (
-            <p className="phc-foot"><a href={waLink('Hi Preston Hill Estates')} target="_blank" rel="noopener noreferrer"><WaIcon /> Prefer WhatsApp? Message us</a></p>
+            <p className="phc-foot"><a href={waLink('Hi Preston Hill Estates')} target="_blank" rel="noopener noreferrer" onClick={() => countWhatsAppTap('chat')}><WaIcon /> Prefer WhatsApp? Message us</a></p>
           ) : null}
         </section>
       ) : null}

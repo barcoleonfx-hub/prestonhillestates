@@ -82,7 +82,7 @@ export async function recordConsents(input: { contactId: string | null; enquiryI
   for (const ch of ['email', 'whatsapp'] as ConsentChannel[]) {
     if (!input[ch]) continue
     await db.insert(consents).values({ id: uid(), contactId: input.contactId, enquiryId: input.enquiryId ?? null, channel: ch, granted: true, wording: CONSENT_WORDING[ch], source: input.source, createdAt: at })
-    await db.update(contacts).set(ch === 'email' ? { emailOptInAt: at, marketingOptOut: false, consentSource: input.source, updatedAt: at } : { whatsappOptInAt: at, consentSource: input.source, updatedAt: at }).where(eq(contacts.id, input.contactId))
+    await db.update(contacts).set(ch === 'email' ? { emailOptInAt: at, marketingOptOut: false, consentSource: input.source, updatedAt: at } : { whatsappOptInAt: at, whatsappStoppedAt: null, consentSource: input.source, updatedAt: at }).where(eq(contacts.id, input.contactId))
     await db.insert(leadEvents).values({ id: uid(), enquiryId: input.enquiryId ?? null, contactId: input.contactId, kind: 'consent', detail: `Agreed to ${ch === 'email' ? 'emails' : 'WhatsApp messages'} (${input.source})`, createdBy: 'system', createdAt: at })
   }
 }
@@ -92,7 +92,7 @@ export async function withdrawConsent(contactId: string, channel: ConsentChannel
   await ready()
   const at = now()
   await db.insert(consents).values({ id: uid(), contactId, enquiryId: null, channel, granted: false, wording: null, source, createdAt: at })
-  await db.update(contacts).set(channel === 'email' ? { emailOptInAt: null, marketingOptOut: true, updatedAt: at } : { whatsappOptInAt: null, updatedAt: at }).where(eq(contacts.id, contactId))
+  await db.update(contacts).set(channel === 'email' ? { emailOptInAt: null, marketingOptOut: true, updatedAt: at } : { whatsappOptInAt: null, whatsappStoppedAt: at, updatedAt: at }).where(eq(contacts.id, contactId))
   await db.insert(leadEvents).values({ id: uid(), enquiryId: null, contactId, kind: 'consent', detail: `Stopped ${channel === 'email' ? 'emails' : 'WhatsApp messages'} (${source})`, createdBy: by, createdAt: at })
 }
 
@@ -158,7 +158,11 @@ export async function leadTimeline(enquiryId: string): Promise<TimelineItem[]> {
     ...msgs.map((m) => ({ at: m.sentAt, kind: (m.direction === 'in' ? 'email-in' : 'email-out') as TimelineItem['kind'], title: m.direction === 'in' ? `They replied: ${m.subject ?? ''}` : `Email sent: ${m.subject ?? ''}`, body: short(m.body), by: who(m.sentBy) })),
     // Notes that just record an email being sent repeat the email itself.
     ...notes.filter((n) => !/^Email sent:/.test(n.body)).map((n) => ({ at: n.createdAt, kind: 'note' as const, title: 'Note', body: short(n.body, 600), by: who(n.createdBy) })),
-    ...evs.map((v) => ({ at: v.createdAt, kind: (['status', 'owner', 'consent', 'whatsapp', 'import'].includes(v.kind) ? v.kind : 'other') as TimelineItem['kind'], title: v.detail ?? v.kind, body: null, by: who(v.createdBy) })),
+    // A WhatsApp entry is "what happened" on the first line, then the message.
+    ...evs.map((v) => {
+      const [first, ...rest] = (v.detail ?? v.kind).split('\n')
+      return { at: v.createdAt, kind: (['status', 'owner', 'consent', 'whatsapp', 'import'].includes(v.kind) ? v.kind : 'other') as TimelineItem['kind'], title: first, body: short(rest.join('\n'), 600), by: who(v.createdBy) }
+    }),
     ...appts.map((a) => ({ at: a.createdAt, kind: 'appointment' as const, title: `${a.kind === 'valuation' ? 'Valuation' : 'Viewing'} booked for ${new Date(a.startsAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/London' })}${a.status === 'cancelled' ? ' (cancelled)' : ''}`, body: short(a.outcomeNotes ?? a.notes), by: who(a.createdBy) })),
     ...callRows.map((c) => ({ at: c.createdAt, kind: 'call' as const, title: `${c.direction === 'out' ? 'Called them' : 'They called'}${c.nextStep ? ` · next: ${c.nextStep.replace(/_/g, ' ')}` : ''}`, body: short(c.notes), by: who(c.createdBy) })),
   ]

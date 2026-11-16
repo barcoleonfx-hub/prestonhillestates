@@ -125,6 +125,8 @@
 .enquiry textarea { min-height: 80px; resize: vertical; }
 .enquiry .alt { text-align: center; font-size: 0.82rem; color: #B8B4A2; margin-top: 12px; }
 .enquiry .alt a { color: var(--gold); text-decoration: none; font-weight: 600; }
+.enquiry .wa-alt { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 10px; padding: 11px 14px; border-radius: 999px; border: 1px solid rgba(37,211,102,0.45); color: #7EE2A6; font-size: 0.88rem; font-weight: 600; text-decoration: none; }
+.enquiry .wa-alt:hover { background: rgba(37,211,102,0.1); }
 .enquiry .done { margin-top: 18px; background: rgba(196,151,47,0.14); border: 1px solid rgba(196,151,47,0.4); border-radius: 12px; padding: 16px; font-size: 0.92rem; }
 .enquiry .err { color: #F0B4A3; font-size: 0.84rem; }
 .branch { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 20px 22px; display: flex; gap: 14px; align-items: center; font-size: 0.88rem; color: var(--ink-soft); }
