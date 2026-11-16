@@ -40,7 +40,7 @@ export function trackOf(r: Pick<Row, 'e' | 'c' | 'channel'>): Track {
 }
 
 /** The home to value, or the one they asked about; never a portal's small print. */
-function addressOf(r: Row): { address: string | null; postcode: string | null } {
+export function addressOf(r: Row): { address: string | null; postcode: string | null } {
   const pc = (s: string | null | undefined) => (s ?? '').match(/([A-Z]{1,2}\d[A-Z\d]?)\s*(\d[A-Z]{2})/i)
   if (r.p) { const m = pc(r.p.postcode); return { address: displayAddressFor(r.p), postcode: m ? `${m[1]} ${m[2]}`.toUpperCase() : null } }
   const lines = detailLines(r.e.message)
@@ -189,3 +189,4 @@ export async function followupBoard(at = new Date()) {
   return { waDue, upcoming, recent, waiting: waiting.sort((a, b) => (a.e.createdAt < b.e.createdAt ? -1 : 1)) }
 }
 export type BoardRow = Row
+export type LeadRow = Row

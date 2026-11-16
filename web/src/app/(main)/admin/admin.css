@@ -1117,3 +1117,9 @@ kbd { font: 600 0.68rem/1 var(--sans, inherit); padding: 3px 6px; border-radius:
 .fu-mail pre { margin: 0; padding: 12px; white-space: pre-wrap; font-family: inherit; font-size: 0.88rem; line-height: 1.5; overflow-wrap: anywhere; }
 .lead-fu { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line-soft); font-size: 0.86rem; display: grid; gap: 8px; }
 .lead-fu .fu-acts { gap: 6px; }
+.rc-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.rc-tickall { font-size: 0.82rem; display: flex; gap: 6px; align-items: center; white-space: nowrap; cursor: pointer; }
+.rc-pick { display: flex; gap: 12px; align-items: flex-start; min-width: 0; flex: 1; cursor: pointer; }
+.rc-pick input { margin-top: 4px; width: 16px; height: 16px; accent-color: var(--gold-deep, #A47B1D); }
+.fu-row.off { opacity: 0.6; }
+.rc-bar { position: sticky; bottom: 12px; z-index: 5; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; background: var(--surface, #fff); border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; margin: 0 0 18px; box-shadow: 0 8px 24px rgba(0,0,0,0.08); font-size: 0.85rem; color: var(--faint); }

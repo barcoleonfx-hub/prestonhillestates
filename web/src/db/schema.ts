@@ -653,3 +653,14 @@ export const followupLog = sqliteTable('followup_log', {
   createdBy: text('created_by'),
   createdAt: text('created_at').notNull(),
 })
+
+/** Reconnect emails to leads who went quiet: queued, then sent (or skipped, or failed) in the background. */
+export const reconnects = sqliteTable('reconnects', {
+  id: text('id').primaryKey(),
+  enquiryId: text('enquiry_id').notNull(),
+  status: text('status').notNull(), // queued | sent | skipped | failed
+  detail: text('detail'),
+  queuedBy: text('queued_by'),
+  createdAt: text('created_at').notNull(),
+  sentAt: text('sent_at'),
+})

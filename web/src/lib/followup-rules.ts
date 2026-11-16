@@ -104,7 +104,7 @@ export function followupEmail(track: Track, stepKey: string, c: EmailContext): F
       subject = `Your ${rent ? 'rental ' : ''}valuation${c.address ? `: ${c.address}` : ''}`
       body = [
         `I just wanted to follow up on your request for a ${rent ? 'rental ' : ''}valuation${at}.`,
-        `We’d be glad to come round at a time that suits you, including Saturday mornings. It’s free and there’s no obligation.`,
+        `We’d be glad to come round at a time that suits you. It’s free and there’s no obligation.`,
         'Just reply with a day and time that works, or call us on 020 8904 9005.',
       ]
     } else {

@@ -56,6 +56,7 @@ export function NavLinks({ newSales, newLettings, today, outcomes, callbacks, fo
       <Link href="/admin/follow-ups" className={on('/admin/follow-ups')}>
         <Icon name="day" />Follow-ups{followups > 0 ? <span className="count" title="WhatsApps to send">{followups}</span> : null}
       </Link>
+      <Link href="/admin/reconnect" className={on('/admin/reconnect')}><Icon name="people" />Reconnect</Link>
       <Link href="/admin/mail" className={on('/admin/mail')}><Icon name="mail" />Inbox</Link>
       <Link href="/admin/campaigns" className={on('/admin/campaigns')}><Icon name="mail" />Email campaigns</Link>
       {isAdmin ? <Link href="/admin/staff" className={on('/admin/staff')}><Icon name="team" />Staff</Link> : null}
