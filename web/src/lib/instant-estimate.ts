@@ -47,7 +47,7 @@ export async function instantEstimate(i: { postcode: string; intent: string; pro
   const street = (i.address.split(',').map((x) => x.trim()).reverse().find((x) => /[a-z]{3,}/i.test(x) && !/^(flat|apartment|unit)\b/i.test(x)) ?? '').replace(/^\d+[a-z]?\s+/i, '') || null
   // The exact kind of house when they told us (semi, detached, terraced), otherwise all houses.
   const lr = flat ? 'F' : /semi/i.test(i.propertyType) ? 'S' : /terrace/i.test(i.propertyType) ? 'T' : /detached/i.test(i.propertyType) ? 'D' : house ? 'H' : null
-  const near = await salesNear(pc, { type: lr, limit: 16, street }).catch(() => null)
+  const near = await salesNear(pc, { type: lr, beds, limit: 16, street }).catch(() => null)
   const prices = (near?.recent ?? []).map((s) => s.price).sort((a, b) => a - b)
   if (prices.length < 4) return fromOtm(pc, false, beds, listings)
   const what = !near!.typed ? 'homes' : lr === 'F' ? 'flats and maisonettes' : lr === 'S' ? 'semi-detached houses' : lr === 'T' ? 'terraced houses' : lr === 'D' ? 'detached houses' : 'houses'

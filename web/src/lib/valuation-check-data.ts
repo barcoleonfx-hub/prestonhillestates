@@ -13,8 +13,8 @@ const r5k = (n: number) => Math.round(n / 5000) * 5000
  * (closest first, widening until there are enough), as the middle half of their prices. Land Registry doesn't
  * record bedrooms or size, so this is a starting point for staff, never the valuation itself.
  */
-export async function landRegistryEstimate(postcode: string, type: 'F' | 'T' | 'S' | 'D' | null): Promise<LrEstimate | null> {
-  const near = await salesNear(postcode, { type: type ?? null, limit: 16 }).catch(() => null)
+export async function landRegistryEstimate(postcode: string, type: 'F' | 'T' | 'S' | 'D' | null, beds: number | null = null): Promise<LrEstimate | null> {
+  const near = await salesNear(postcode, { type: type ?? null, beds, limit: 16 }).catch(() => null)
   const comps = near?.recent ?? []
   if (comps.length < 3) return null
   const s = comps.map((c) => c.price).sort((a, b) => a - b)

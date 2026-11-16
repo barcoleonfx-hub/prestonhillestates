@@ -71,7 +71,7 @@ export async function enquiryWorkspace(id: string, me: { name: string }) {
   const kind = emailKindFor(sorted.side, valuation)
   const ep = p ? emailProperty(p, base) : null
   const home = homeFrom(e.message)
-  const near = postcode && valuation && sorted.side !== 'lettings' ? await salesNear(postcode, { limit: 4, type: home.type }).catch(() => null) : null
+  const near = postcode && valuation && sorted.side !== 'lettings' ? await salesNear(postcode, { limit: 4, type: home.type, beds: home.beds }).catch(() => null) : null
   const ctx: EnquiryEmailContext = {
     kind, name: e.name, address: address ?? (ep ? null : postcode), postcode,
     property: ep ? { url: ep.url, address: ep.address, priceText: ep.priceText, photo: ep.photos[0] ?? null, specs: ep.specs.slice(0, 3) } : null,

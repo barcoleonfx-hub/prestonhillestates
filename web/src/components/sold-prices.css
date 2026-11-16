@@ -26,3 +26,7 @@
 .sp-panel .sp-cta b { color: var(--sp-ink); }
 .sp-loading { font-size: 0.84rem; color: var(--sp-faint); padding: 10px 0; }
 @media (max-width: 520px) { .sp-stats { grid-template-columns: 1fr; } }
+.sp-beds { display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 999px; background: #F7F0DE; color: #A47B1D; font-style: normal; font-size: 0.72rem; font-weight: 700; vertical-align: 2px; }
+.sp-match { font-size: 0.86rem; color: var(--ink-soft, #59554A); }
+.sp-match b { color: var(--ink, #23211A); }
+.sp-types li.on { border-color: #C4972F; background: #FBF5E4; box-shadow: 0 0 0 1px #C4972F inset; }

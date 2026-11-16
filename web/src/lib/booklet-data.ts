@@ -194,7 +194,7 @@ export async function bookletInput(id: string, me: { name: string }): Promise<Bo
 
   // The evidence: what similar homes sold (or let) for nearby, and what's on OnTheMarket now.
   const [near, rents, otm, base, google, revs] = await Promise.all([
-    !rent && lookPc ? salesNear(lookPc, { type: home.type, limit: 10 }).catch(() => null) : Promise.resolve(null),
+    !rent && lookPc ? salesNear(lookPc, { type: home.type, beds: home.beds, limit: 10 }).catch(() => null) : Promise.resolve(null),
     rent && lookPc ? rentCheck(lookPc, home.beds).catch(() => null) : Promise.resolve(null),
     lookPc ? otmAskingPrices(lookPc, { rent, beds: home.beds }).catch(() => null) : Promise.resolve(null),
     knownBase(),
