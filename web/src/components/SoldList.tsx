@@ -7,13 +7,14 @@ export const money = (n: number | null | undefined) => (n == null ? '–' : `£$
 const miles = (m: number) => (m < 160 ? 'under 0.1 mi' : `${(m / 1609).toFixed(1)} mi`)
 const month = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })
 
-export function SoldStats({ stats }: { stats: AreaStats; note?: string }) {
+/** `match` highlights the figure for the same kind of home (D, S, T or F). */
+export function SoldStats({ stats, match }: { stats: AreaStats; note?: string; match?: string | null }) {
   return (
     <div className="sp-stats">
       <div className="sp-big"><b>{stats.count12.toLocaleString()}</b><span>homes sold {stats.label} in the last 12 months</span></div>
       <div className="sp-big"><b>{money(stats.median12)}</b><span>typical price {stats.label}</span></div>
       {stats.byType.length ? (
-        <ul className="sp-types">{stats.byType.map((t) => <li key={t.type}><span>{t.label}</span><b>{money(t.median)}</b><small>{t.count} sold</small></li>)}</ul>
+        <ul className="sp-types">{stats.byType.map((t) => <li key={t.type} className={match === t.type ? 'on' : undefined}><span>{t.label}{match === t.type ? ' · like this one' : ''}</span><b>{money(t.median)}</b><small>{t.count} sold</small></li>)}</ul>
       ) : null}
     </div>
   )
@@ -25,7 +26,7 @@ export function SoldList({ sales, highlight }: { sales: PublicSale[]; highlight?
     <ul className="sp-list">
       {sales.map((s, i) => (
         <li key={`${s.postcode}-${s.soldOn}-${s.price}-${i}`} className={highlight && s.street === highlight ? 'same' : undefined}>
-          <div className="sp-where"><b>{s.street ?? s.postcode}</b><span>{s.metres != null ? `${miles(s.metres)} · ` : ''}{s.postcode} · {s.typeLabel}{s.tenure === 'L' ? ', leasehold' : s.tenure === 'F' ? ', freehold' : ''}{s.newBuild ? ', new build' : ''}</span></div>
+          <div className="sp-where"><b>{s.street ?? s.postcode}{s.beds != null ? <em className="sp-beds">{s.beds === 0 ? 'Studio' : `${s.beds} bed`}</em> : null}</b><span>{s.metres != null ? `${miles(s.metres)} · ` : ''}{s.postcode} · {s.typeLabel}{s.tenure === 'L' ? ', leasehold' : s.tenure === 'F' ? ', freehold' : ''}{s.newBuild ? ', new build' : ''}</span></div>
           <div className="sp-price"><b>{money(s.price)}</b><span>{month(s.soldOn)}</span></div>
         </li>
       ))}

@@ -4,7 +4,7 @@ import { Readable } from 'node:stream'
 import type { ReadableStream as WebStream } from 'node:stream/web'
 import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm'
 import { db, getClient, ready } from '@/db/client'
-import { knownAddresses, postcodeGeo, settings, soldPrices, type SoldPrice } from '@/db/schema'
+import { knownAddresses, postcodeGeo, properties, settings, soldPrices, type SoldPrice } from '@/db/schema'
 import { positionOf } from '@/lib/postcode-geo'
 import { now } from '@/lib/util'
 
@@ -138,8 +138,43 @@ export const sectorOf = (pc: string) => { const p = pc.toUpperCase().trim().repl
 const median = (xs: number[]) => { if (!xs.length) return null; const s = [...xs].sort((a, b) => a - b); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2) }
 const monthsAgo = (n: number) => { const d = new Date(); d.setMonth(d.getMonth() - n); return d.toISOString().slice(0, 10) }
 
-export type PublicSale = { street: string | null; postcode: string; type: string; typeLabel: string; tenure: string | null; newBuild: boolean; price: number; soldOn: string; metres?: number }
-const pub = (r: SoldPrice, metres?: number): PublicSale => ({ street: r.street, postcode: r.postcode, type: r.type, typeLabel: TYPE_LABEL[r.type] ?? 'Home', tenure: r.tenure, newBuild: r.newBuild, price: r.price, soldOn: r.soldOn, ...(metres != null ? { metres: Math.round(metres) } : {}) })
+/** `beds`: known only when it's a home we listed (Land Registry doesn't record bedrooms). */
+export type PublicSale = { street: string | null; postcode: string; type: string; typeLabel: string; tenure: string | null; newBuild: boolean; price: number; soldOn: string; metres?: number; beds?: number | null }
+export type LrType = 'F' | 'H' | 'D' | 'S' | 'T'
+const pub = (r: SoldPrice, metres?: number, beds?: Map<string, number>): PublicSale => ({ street: r.street, postcode: r.postcode, type: r.type, typeLabel: TYPE_LABEL[r.type] ?? 'Home', tenure: r.tenure, newBuild: r.newBuild, price: r.price, soldOn: r.soldOn, ...(metres != null ? { metres: Math.round(metres) } : {}), ...(beds ? { beds: beds.get(homeKey(r.postcode, r.paon, r.saon)) ?? null } : {}) })
+
+// ---------- bedrooms, where we know them ----------
+// Land Registry records the price, date, address and whether it's a detached, semi-detached or terraced house or a
+// flat, but never the bedrooms. We do know them for homes we've listed ourselves, matched by postcode and number.
+
+const num = (s: string | null | undefined) => (s ?? '').toUpperCase().replace(/^(FLAT|APARTMENT|APT|UNIT|MAISONETTE)\s+/, '').replace(/[^A-Z0-9]/g, '')
+const homeKey = (postcode: string, paon: string | null, saon: string | null) => `${postcode.toUpperCase().replace(/\s+/g, ' ').trim()}|${num(paon)}|${num(saon)}`
+
+/** Bedrooms of sold homes that we've listed, keyed by postcode, house number and flat number. */
+async function bedsWeKnow(rows: Pick<SoldPrice, 'postcode'>[]): Promise<Map<string, number>> {
+  const pcs = [...new Set(rows.map((r) => r.postcode.toUpperCase()))]
+  const out = new Map<string, number>()
+  if (!pcs.length) return out
+  const ours = await db.select({ postcode: properties.postcode, line: properties.addressLine1, beds: properties.bedrooms }).from(properties).where(inArray(sql`upper(${properties.postcode})`, pcs))
+  for (const o of ours) {
+    if (o.beds == null || !o.postcode || !o.line) continue
+    const flat = /\b(?:flat|apartment|apt|unit)\s+([a-z0-9]+)/i.exec(o.line)?.[1] ?? null
+    const rest = flat ? o.line.replace(/\b(?:flat|apartment|apt|unit)\s+[a-z0-9]+,?\s*/i, '') : o.line
+    const house = /^\s*(\d+[a-z]?)\b/i.exec(rest)?.[1] ?? null
+    if (house) out.set(homeKey(o.postcode, house, flat), o.beds)
+  }
+  return out
+}
+
+/**
+ * Comparable sales first: the same number of bedrooms where we know it, then the rest of the same type (bedrooms not
+ * recorded). Homes we know have a different number of bedrooms are left out.
+ */
+function byBeds<T extends { r: SoldPrice }>(found: T[], beds: number | null | undefined, known: Map<string, number>): T[] {
+  if (beds == null) return found
+  const b = (x: T) => known.get(homeKey(x.r.postcode, x.r.paon, x.r.saon))
+  return found.filter((x) => { const k = b(x); return k == null || k === beds }).sort((x, y) => Number(b(y) === beds) - Number(b(x) === beds))
+}
 // House numbers and flat numbers are left out on purpose: street and postcode are enough to compare.
 
 export type AreaStats = { label: string; count12: number; median12: number | null; byType: { type: string; label: string; count: number; median: number | null }[] }
@@ -166,7 +201,7 @@ const sameStreet = (a: string | null, b: string | null) => !!a && !!b && a.toLow
  * Sales closest to a postcode, by real distance: a quarter of a mile first, widening until there are enough.
  * Their own street comes first when we know it. Falls back to the postcode sector if we can't place the postcode.
  */
-async function salesByDistance(pc: string, opts: { type?: 'F' | 'H' | 'D' | 'S' | 'T' | null; limit: number; street?: string | null }): Promise<Near | null> {
+async function salesByDistance(pc: string, opts: { type?: LrType | null; beds?: number | null; limit: number; street?: string | null }): Promise<Near | null> {
   const here = await positionOf(pc)
   if (!here) return null
   const since = monthsAgo(24), since12 = monthsAgo(12)
@@ -183,6 +218,9 @@ async function salesByDistance(pc: string, opts: { type?: 'F' | 'H' | 'D' | 'S' 
   }
   if (!found.length) return null
   found.sort((a, b) => Number(sameStreet(b.r.street, opts.street ?? null)) - Number(sameStreet(a.r.street, opts.street ?? null)) || a.d - b.d || (a.r.soldOn < b.r.soldOn ? 1 : -1))
+  const known = await bedsWeKnow(found.map((x) => x.r))
+  found = byBeds(found, opts.beds, known)
+  if (!found.length) return null
   // Typical prices: all homes sold in the last 12 months, over the smallest distance with at least 10 sales.
   const maxR = RADII[RADII.length - 1][0]
   const all = (await db.select({ type: soldPrices.type, price: soldPrices.price, e: postcodeGeo.e, n: postcodeGeo.n }).from(soldPrices)
@@ -195,14 +233,14 @@ async function salesByDistance(pc: string, opts: { type?: 'F' | 'H' | 'D' | 'S' 
   const where = `within ${label}`
   return {
     postcode: pc, scope: 'radius', area: `${where} of ${pc}`, where,
-    recent: found.slice(0, opts.limit).map((x) => pub(x.r, x.d)), stats: statsFromRows(within, `within ${statsR[1]}`), covered: true, typed: !!opts.type,
+    recent: found.slice(0, opts.limit).map((x) => pub(x.r, x.d, known)), stats: statsFromRows(within, `within ${statsR[1]}`), covered: true, typed: !!opts.type,
   }
 }
 
-export async function salesNear(postcode: string, opts: { type?: 'F' | 'H' | 'D' | 'S' | 'T' | null; limit?: number; district?: boolean; street?: string | null } = {}): Promise<Near | null> {
+export async function salesNear(postcode: string, opts: { type?: LrType | null; beds?: number | null; limit?: number; district?: boolean; street?: string | null } = {}): Promise<Near | null> {
   await ready()
   if (!opts.district) {
-    const byDistance = await salesByDistance(postcode.toUpperCase().trim().replace(/\s+/g, ' '), { type: opts.type, limit: opts.limit ?? 8, street: opts.street }).catch(() => null)
+    const byDistance = await salesByDistance(postcode.toUpperCase().trim().replace(/\s+/g, ' '), { type: opts.type, beds: opts.beds, limit: opts.limit ?? 8, street: opts.street }).catch(() => null)
     if (byDistance) return byDistance
   }
   const pc = postcode.toUpperCase().trim().replace(/\s+/g, ' ')
@@ -217,23 +255,31 @@ export async function salesNear(postcode: string, opts: { type?: 'F' | 'H' | 'D'
     scope = 'district'
     recent = await db.select().from(soldPrices).where(and(typed(eq(soldPrices.outward, out)), gte(soldPrices.soldOn, since))).orderBy(desc(soldPrices.soldOn)).limit(limit)
   }
-  if (!recent.length && opts.type) return salesNear(postcode, { ...opts, type: null })
+  // No sales of the same type nearby: say so, rather than show other kinds of home as if they compared.
   // The same postcode first, then the rest by date.
   recent.sort((a, b) => (a.postcode === pc ? -1 : 0) - (b.postcode === pc ? -1 : 0) || (a.soldOn < b.soldOn ? 1 : -1))
   const stats = scope === 'sector' && sec ? await statsFor(eq(soldPrices.sector, sec), `in ${sec}`) : await statsFor(eq(soldPrices.outward, out), `in ${out}`)
   const area = scope === 'sector' ? sec! : out
-  return { postcode: pc, scope, area, where: `in ${area}`, recent: recent.map((r) => pub(r)), stats, covered: recent.length > 0, typed: !!opts.type }
+  const known = await bedsWeKnow(recent)
+  const kept = byBeds(recent.map((r) => ({ r })), opts.beds, known).map((x) => x.r)
+  return { postcode: pc, scope, area, where: `in ${area}`, recent: kept.map((r) => pub(r, undefined, known)), stats, covered: kept.length > 0, typed: !!opts.type }
 }
 
-/** Sales on the same street (and postcode district), for a property page. */
-export async function salesOnStreet(street: string | null, postcode: string | null, type?: 'F' | 'H' | null) {
+/**
+ * Sales on the same street (and postcode district), for a property page: homes of the same type only (a flat on the
+ * street says little about a house), with bedrooms where we know them and none we know to differ.
+ */
+export async function salesOnStreet(street: string | null, postcode: string | null, type?: LrType | null, beds?: number | null) {
   await ready()
   if (!postcode) return null
   const out = outwardOf(postcode)
   const st = street ? tidy(street.replace(/^\d+[a-z]?\s+/i, '')) : null
-  const street5 = st ? await db.select().from(soldPrices).where(and(eq(soldPrices.street, st), eq(soldPrices.outward, out), gte(soldPrices.soldOn, monthsAgo(36)))).orderBy(desc(soldPrices.soldOn)).limit(6) : []
-  const near = await salesNear(postcode, { type, limit: 8, street: st })
-  return { street: st, onStreet: street5.map((r) => pub(r)), near }
+  const typeCond = type === 'H' ? inArray(soldPrices.type, ['D', 'S', 'T']) : type ? eq(soldPrices.type, type) : undefined
+  const rows = st ? await db.select().from(soldPrices).where(and(eq(soldPrices.street, st), eq(soldPrices.outward, out), gte(soldPrices.soldOn, monthsAgo(36)), typeCond)).orderBy(desc(soldPrices.soldOn)).limit(12) : []
+  const known = await bedsWeKnow(rows)
+  const street5 = byBeds(rows.map((r) => ({ r })), beds, known).map((x) => x.r).slice(0, 6)
+  const near = await salesNear(postcode, { type, beds, limit: 8, street: st })
+  return { street: st, onStreet: street5.map((r) => pub(r, undefined, known)), near }
 }
 
 /** Last 12 months across the districts we cover, for the homepage. */
@@ -248,13 +294,23 @@ export async function patchSummary() {
 
 export async function soldPricesState() { await ready(); return loadState() }
 
-/** Our property types → Land Registry's: flats, or houses of any kind. */
-export function lrTypeFor(propertyType: string | null | undefined): 'F' | 'H' | null {
+/**
+ * Our property types → Land Registry's: detached (D), semi-detached (S), terraced (T, including end of terrace and
+ * town houses) or flat (F). Bungalows and cottages can be any of the three, so they match houses of any kind (H).
+ */
+export function lrTypeFor(propertyType: string | null | undefined): LrType | null {
   if (!propertyType) return null
-  if (/flat|maisonette|studio|apartment|penthouse/i.test(propertyType)) return 'F'
-  if (/house|bungalow|terrace|semi|detached|cottage/i.test(propertyType)) return 'H'
+  const t = propertyType.toLowerCase().replace(/_/g, ' ')
+  if (/flat|maisonette|studio|apartment|penthouse/.test(t)) return 'F'
+  if (/semi/.test(t)) return 'S'
+  if (/terrace|town ?house|mews/.test(t)) return 'T'
+  if (/detached/.test(t)) return 'D'
+  if (/house|bungalow|cottage/.test(t)) return 'H'
   return null
 }
+
+/** "semi-detached houses", "flats and maisonettes": what a list of comparable sales shows. */
+export const typePlural = (t: LrType | null | undefined) => ({ D: 'detached houses', S: 'semi-detached houses', T: 'terraced houses', F: 'flats and maisonettes', H: 'houses' } as const)[t ?? 'H'] ?? 'homes'
 
 // ---------- addresses back to 1995, for the address finder ----------
 

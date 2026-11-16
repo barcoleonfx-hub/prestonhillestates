@@ -17,7 +17,7 @@ import { districtOf } from '@/lib/areas'
 import { listingArea } from '@/lib/listing-area'
 import { distanceText } from '@/lib/geo'
 import type { PlaceKind } from '@/lib/area-facts'
-import { lrTypeFor, salesOnStreet } from '@/lib/sold-prices'
+import { lrTypeFor, salesOnStreet, typePlural } from '@/lib/sold-prices'
 import { SoldCredit, SoldList, SoldStats } from '@/components/SoldList'
 import '@/components/sold-prices.css'
 
@@ -82,7 +82,7 @@ export default async function PropertyPage({ params }: { params: Params }) {
   const photos = p.media.filter((m) => m.kind === 'photo')
   // Land Registry sold prices for sales listings: the same street first, then the postcode sector.
   const [sold, area] = await Promise.all([
-    p.channel !== 'let' && p.postcode ? salesOnStreet(p.street ?? p.addressLine1 ?? null, p.postcode, lrTypeFor(p.propertyType)).catch(() => null) : Promise.resolve(null),
+    p.channel !== 'let' && p.postcode ? salesOnStreet(p.street ?? p.addressLine1 ?? null, p.postcode, lrTypeFor(p.propertyType), p.bedrooms).catch(() => null) : Promise.resolve(null),
     listingArea(p).catch(() => ({ home: null, stations: [], places: [], fromOsm: false })),
   ])
   const plans = p.media.filter((m) => m.kind === 'floorplan')
@@ -302,10 +302,10 @@ export default async function PropertyPage({ params }: { params: Params }) {
 
             {sold && (sold.onStreet.length || sold.near?.covered) ? (
               <details className="acc sp" id="sold-nearby">
-                <summary><h2>Sold nearby</h2><span className="acc-ic" aria-hidden="true" /></summary>
+                <summary><h2>Sold nearby</h2>{lrTypeFor(p.propertyType) ? <span className="acc-sum">{typePlural(lrTypeFor(p.propertyType)).replace(/^./, (c) => c.toUpperCase())}</span> : null}<span className="acc-ic" aria-hidden="true" /></summary>
                 <div className="acc-body">
-                  <p style={{ color: 'var(--ink-soft)' }}>What homes around here have actually sold for, {sold.near?.typed ? `${lrTypeFor(p.propertyType) === 'F' ? 'flats' : 'houses'} like this one first` : 'newest first'}, so you can judge the price for yourself.</p>
-                  {sold.near ? <SoldStats stats={sold.near.stats} note={sold.near.where} /> : null}
+                  <p className="sp-match">This home: <b>{[p.bedrooms != null ? (p.bedrooms === 0 ? 'studio' : `${p.bedrooms}-bed`) : '', labelFor(PROPERTY_TYPES, p.propertyType).toLowerCase()].filter(Boolean).join(' ') || 'this home'}</b>. Below are {lrTypeFor(p.propertyType) ? typePlural(lrTypeFor(p.propertyType)) : 'homes'} that have actually sold nearby, so you can judge the price for yourself. HM Land Registry doesn’t record bedrooms, so their sizes vary{p.bedrooms != null ? `; where we know a home had ${p.bedrooms} bedroom${p.bedrooms === 1 ? '' : 's'}, it’s marked, and any we know were a different size are left out` : ''}.</p>
+                  {sold.near ? <SoldStats stats={sold.near.stats} note={sold.near.where} match={lrTypeFor(p.propertyType)} /> : null}
                   <SoldList sales={[...sold.onStreet, ...(sold.near?.recent ?? []).filter((r) => !sold.onStreet.some((x) => x.postcode === r.postcode && x.soldOn === r.soldOn && x.price === r.price))].slice(0, 8)} highlight={sold.street} />
                   <p style={{ marginTop: 10 }}><a href={`/sold-prices?postcode=${encodeURIComponent(p.postcode ?? '')}`} style={{ color: 'var(--gold-deep)', fontWeight: 600 }}>See more sold prices near {p.postcode} →</a></p>
                   <SoldCredit />

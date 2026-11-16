@@ -19,7 +19,7 @@ const OUTWARD = /^[A-Z]{1,2}[0-9][A-Z0-9]?$/
 export default async function SoldPricesPage({ searchParams }: { searchParams: Promise<{ postcode?: string; type?: string }> }) {
   const sp = await searchParams
   const raw = (sp.postcode ?? '').toUpperCase().trim().replace(/\s+/g, ' ').slice(0, 10)
-  const type = sp.type === 'F' || sp.type === 'H' ? sp.type : null
+  const type = sp.type === 'F' || sp.type === 'H' || sp.type === 'D' || sp.type === 'S' || sp.type === 'T' ? sp.type : null
   // A full postcode, or just a district like "HA3" (searched as its first sector-less form).
   const valid = POSTCODE.test(raw) || OUTWARD.test(raw)
   const near = valid ? await salesNear(OUTWARD.test(raw) ? `${raw} 0AA` : raw, { type, limit: 20, district: OUTWARD.test(raw) }).catch(() => null) : null
@@ -61,15 +61,18 @@ export default async function SoldPricesPage({ searchParams }: { searchParams: P
                   <h2>Recent sales {OUTWARD.test(raw) ? `in ${near.area}` : near.scope === 'radius' ? `${near.where} of ${near.postcode}` : `near ${near.postcode}`}</h2>
                   <div className="spg-seg">
                     <Link className={!type ? 'on' : undefined} href={href('')}>All homes</Link>
-                    <Link className={type === 'H' ? 'on' : undefined} href={href('H')}>Houses</Link>
+                    <Link className={type === 'D' ? 'on' : undefined} href={href('D')}>Detached</Link>
+                    <Link className={type === 'S' ? 'on' : undefined} href={href('S')}>Semi-detached</Link>
+                    <Link className={type === 'T' ? 'on' : undefined} href={href('T')}>Terraced</Link>
                     <Link className={type === 'F' ? 'on' : undefined} href={href('F')}>Flats</Link>
                   </div>
                 </div>
                 <SoldList sales={near.recent} />
+                <p className="spg-note">HM Land Registry records whether each home is detached, semi-detached, terraced or a flat, but not how many bedrooms it has. Choose a type above to compare like with like.</p>
                 <SoldCredit />
               </div>
               <aside>
-                <SoldStats stats={near.stats} note={near.where} />
+                <SoldStats stats={near.stats} note={near.where} match={type} />
                 <div className="spg-cta">
                   <h3>Where would yours sit?</h3>
                   <p>Sold prices give you the range; condition, extensions and the exact street decide where in it your home falls. We’ll tell you, free and in person.</p>
