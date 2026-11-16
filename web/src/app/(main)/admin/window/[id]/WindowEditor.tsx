@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import QRCode from 'qrcode'
 import type { WindowCardInput } from '@/lib/window-card-data'
-import { DESCRIPTION_MAX, HEADLINE_MAX, MAX_HIGHLIGHTS, MAX_PHOTOS, orderedPhotos, type BadgeKind, type CardData } from '@/lib/window-card'
+import { DESCRIPTION_MAX, HEADLINE_MAX, MAX_HIGHLIGHTS, MAX_PHOTOS, orderedPhotos, paperSize, type BadgeKind, type CardData } from '@/lib/window-card'
 import { resetWindowCard, saveWindowCard } from '../../window-actions'
 import { Sheet } from './Sheet'
 
@@ -34,6 +34,9 @@ export function WindowEditor({ input }: { input: WindowCardInput }) {
   const urls = useMemo(() => new Map(all.map((p) => [p.id, p.url])), [all])
   const set = (patch: Partial<CardData>) => { dirty.current = true; setD((x) => ({ ...x, ...patch })) }
   const W = d.layout === 'landscape' ? 1123 : 794, H = d.layout === 'landscape' ? 794 : 1123
+  const paper = d.paper ?? 'a4'
+  const size = paperSize(paper, d.layout)
+  const PAPER = paper.toUpperCase()
 
   // A QR code that opens the listing on the website.
   useEffect(() => { if (input.url) QRCode.toDataURL(input.url, { margin: 0, width: 400, color: { dark: '#23211A', light: '#FFFFFF' } }).then(setQr).catch(() => setQr(null)) }, [input.url])
@@ -78,13 +81,13 @@ export function WindowEditor({ input }: { input: WindowCardInput }) {
     try {
       const [{ toJpeg }, { jsPDF }] = await Promise.all([import('html-to-image'), import('jspdf')])
       await document.fonts.ready
-      // About 290 dots per inch: sharp in a shop window, and a manageable file.
-      const data = await toJpeg(sheet.current, { pixelRatio: 3, quality: 0.93, backgroundColor: '#ffffff', width: W, height: H, style: { transform: 'none' }, imagePlaceholder: BLANK })
-      const doc = new jsPDF({ orientation: d.layout, unit: 'mm', format: 'a4', compress: true })
-      const [pw, ph] = d.layout === 'landscape' ? [297, 210] : [210, 297]
+      // About 290 dots per inch on A4, 270 on A3: sharp in a shop window, and a manageable file.
+      const data = await toJpeg(sheet.current, { pixelRatio: paper === 'a3' ? 4 : 3, quality: 0.93, backgroundColor: '#ffffff', width: W, height: H, style: { transform: 'none' }, imagePlaceholder: BLANK })
+      const doc = new jsPDF({ orientation: d.layout, unit: 'mm', format: paper, compress: true })
+      const [pw, ph] = [size.w, size.h]
       doc.addImage(data, 'JPEG', 0, 0, pw, ph, undefined, 'FAST')
-      doc.save(`Window card ${input.card.ref} ${input.address.replace(/[^\w ,-]/g, '').slice(0, 40)}.pdf`)
-      setMsg({ ok: true, text: 'Downloaded. Print it at 100% (“actual size”) on A4.' })
+      doc.save(`Window card ${PAPER} ${input.card.ref} ${input.address.replace(/[^\w ,-]/g, '').slice(0, 40)}.pdf`)
+      setMsg({ ok: true, text: `Downloaded. Print it at 100% (“actual size”) on ${PAPER} paper.` })
     } catch (e) {
       console.error(e)
       setMsg({ ok: false, text: 'The PDF couldn’t be made in this browser. Use Print instead and choose “Save as PDF”.' })
@@ -101,7 +104,7 @@ export function WindowEditor({ input }: { input: WindowCardInput }) {
   const hi = [...d.highlights, ...Array(MAX_HIGHLIGHTS).fill('')].slice(0, MAX_HIGHLIGHTS)
   return (
     <div className="wc-page">
-      <style>{`@page { size: A4 ${d.layout}; margin: 0; }`}</style>
+      <style>{`@page { size: ${PAPER} ${d.layout}; margin: 0; } @media print { html, body { margin: 0 !important; padding: 0 !important; height: ${size.h}mm !important; overflow: hidden !important; } .wc-page, .wc-stage { height: ${size.h}mm !important; overflow: hidden !important; } .wc-scale { zoom: ${size.scale}; margin: 0 !important; } }`}</style>
       <aside className="wc-panel">
         <div>
           <p className="wc-hint"><Link href={`/admin/properties/${input.id}`}>← Back to the property</Link> · <Link href="/admin/window">Other properties</Link></p>
@@ -111,8 +114,8 @@ export function WindowEditor({ input }: { input: WindowCardInput }) {
         {!input.published ? <p className="notice warn">This property isn’t on the website yet, so there’s no QR code to its page.</p> : null}
 
         <div className="wc-actions">
-          <button type="button" className="btn btn-gold" onClick={pdf} disabled={busy === 'pdf'}>{busy === 'pdf' ? 'Making the PDF…' : 'Download PDF'}</button>
-          <button type="button" className="btn btn-ghost" onClick={() => window.print()}>Print</button>
+          <button type="button" className="btn btn-gold" onClick={pdf} disabled={busy === 'pdf'}>{busy === 'pdf' ? 'Making the PDF…' : `Download ${PAPER} PDF`}</button>
+          <button type="button" className="btn btn-ghost" onClick={() => window.print()}>Print on {PAPER}</button>
           {msg ? <p className={`notice ${msg.ok ? 'ok' : 'err'}`}>{msg.text}</p> : null}
           <span className="wc-status">{saved === 'saved' ? 'All changes saved' : saved === 'saving' ? 'Saving…' : 'Changes not saved yet'}</span>
         </div>
@@ -120,9 +123,15 @@ export function WindowEditor({ input }: { input: WindowCardInput }) {
         <section>
           <h2>Layout</h2>
           <div className="seg">
-            <button type="button" className={d.layout === 'portrait' ? 'on' : undefined} onClick={() => set({ layout: 'portrait' })}>Portrait A4</button>
-            <button type="button" className={d.layout === 'landscape' ? 'on' : undefined} onClick={() => set({ layout: 'landscape' })}>Landscape A4</button>
+            <button type="button" className={d.layout === 'portrait' ? 'on' : undefined} onClick={() => set({ layout: 'portrait' })}>Portrait</button>
+            <button type="button" className={d.layout === 'landscape' ? 'on' : undefined} onClick={() => set({ layout: 'landscape' })}>Landscape</button>
           </div>
+          <h2 style={{ marginTop: 14 }}>Paper size</h2>
+          <div className="seg">
+            <button type="button" className={paper === 'a4' ? 'on' : undefined} onClick={() => set({ paper: 'a4' })}>A4</button>
+            <button type="button" className={paper === 'a3' ? 'on' : undefined} onClick={() => set({ paper: 'a3' })}>A3</button>
+          </div>
+          <p className="wc-hint" style={{ marginTop: 6 }}>{paper === 'a3' ? 'A3 is the same sheet, twice the size (297 × 420 mm). Check your printer takes A3, or send the PDF to a print shop.' : 'A4: 210 × 297 mm.'}</p>
         </section>
 
         <section>
