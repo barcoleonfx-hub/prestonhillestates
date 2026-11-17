@@ -72,3 +72,22 @@ describe('paper size', () => {
     expect(mergeCard(p, { headline: 'x' }).paper).toBe('a4')
   })
 })
+
+describe('printer margin', () => {
+  it('keeps everything 8 mm in from the edge for office printers, keeping the shape', async () => {
+    const { placement, PRINT_MARGIN_MM } = await import('./window-card')
+    const mmPerPx = 210 / 794
+    const a4 = placement('a4', 'portrait', 'office')
+    expect(a4.pad * mmPerPx).toBeCloseTo(PRINT_MARGIN_MM, 5)
+    // The sheet fits inside the border on both sides, centred: at least 8 mm everywhere.
+    expect((794 - 794 * a4.scale) / 2 * mmPerPx).toBeGreaterThanOrEqual(PRINT_MARGIN_MM - 1e-9)
+    expect((1123 - 1123 * a4.scale) / 2 * mmPerPx).toBeGreaterThanOrEqual(PRINT_MARGIN_MM - 1e-9)
+    // On A3 the page is scaled up by √2, and the border is still 8 mm once printed.
+    const a3 = placement('a3', 'landscape', 'office')
+    expect(a3.pad * mmPerPx * Math.SQRT2).toBeCloseTo(PRINT_MARGIN_MM, 5)
+    expect(placement('a4', 'portrait', 'none')).toEqual({ pad: 0, scale: 1 })
+  })
+  it('older saved sheets get the safe border', () => {
+    expect(mergeCard(p, { headline: 'x' }).margin).toBe('office')
+  })
+})

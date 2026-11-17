@@ -16,6 +16,7 @@ export async function saveWindowCard(propertyId: string, d: CardData): Promise<{
   const data: CardData = {
     layout: d.layout === 'landscape' ? 'landscape' : 'portrait',
     paper: d.paper === 'a3' ? 'a3' : 'a4',
+    margin: d.margin === 'none' ? 'none' : 'office',
     badge: (['auto', 'none', 'just-listed', 'new-instruction', 'reduced', 'custom'] as const).includes(d.badge) ? d.badge : 'auto',
     badgeText: String(d.badgeText ?? '').slice(0, 28),
     headline: String(d.headline ?? '').slice(0, HEADLINE_MAX + 20),
