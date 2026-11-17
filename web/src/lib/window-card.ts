@@ -5,11 +5,14 @@
 export type CardLayout = 'portrait' | 'landscape'
 /** A3 is A4 scaled up by √2: the same design, printed bigger. */
 export type CardPaper = 'a4' | 'a3'
+/** office: an 8 mm white border, because office printers can't print to the edge of the paper. none: edge to edge (print shops). */
+export type CardMargin = 'office' | 'none'
 export type BadgeKind = 'auto' | 'none' | 'just-listed' | 'new-instruction' | 'reduced' | 'custom'
 export type CardPhoto = { id: string; x: number; y: number }
 export type CardData = {
   layout: CardLayout
   paper: CardPaper
+  margin: CardMargin
   badge: BadgeKind
   badgeText: string
   headline: string
@@ -44,6 +47,22 @@ export type CardProperty = {
 export function paperSize(paper: CardPaper, layout: CardLayout): { w: number; h: number; scale: number } {
   const [short, long] = paper === 'a3' ? [297, 420] : [210, 297]
   return { w: layout === 'landscape' ? long : short, h: layout === 'landscape' ? short : long, scale: paper === 'a3' ? Math.SQRT2 : 1 }
+}
+
+/** The white border for office printers, in millimetres on the printed page. Most can't print the outer 4 to 6 mm. */
+export const PRINT_MARGIN_MM = 8
+
+/**
+ * Where the sheet sits on the page, in the sheet's own pixels (A4 is 794 × 1123): the border all round, and how much
+ * the sheet shrinks to fit inside it (keeping its shape, centred).
+ */
+export function placement(paper: CardPaper, layout: CardLayout, margin: CardMargin): { pad: number; scale: number } {
+  if (margin === 'none') return { pad: 0, scale: 1 }
+  const { scale } = paperSize(paper, layout)
+  const [W, H] = layout === 'landscape' ? [1123, 794] : [794, 1123]
+  // 8 mm on the printed page; the A3 page is the A4 sheet scaled up, so its border is smaller in sheet pixels.
+  const pad = (PRINT_MARGIN_MM / scale) * (794 / 210)
+  return { pad, scale: Math.min((W - 2 * pad) / W, (H - 2 * pad) / H) }
 }
 
 export const MAX_PHOTOS = 4
@@ -98,7 +117,7 @@ export function orderedPhotos(p: Pick<CardProperty, 'photos'>) {
 
 export function cardDefaults(p: CardProperty): CardData {
   return {
-    layout: 'portrait', paper: 'a4', badge: 'auto', badgeText: '', headline: defaultHeadline(p), description: shortDescription(p.summary, p.description),
+    layout: 'portrait', paper: 'a4', margin: 'office', badge: 'auto', badgeText: '', headline: defaultHeadline(p), description: shortDescription(p.summary, p.description),
     highlights: defaultHighlights(p), photos: orderedPhotos(p).slice(0, MAX_PHOTOS).map((x) => ({ id: x.id, x: 50, y: 50 })), showQr: true,
   }
 }

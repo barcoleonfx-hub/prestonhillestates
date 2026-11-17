@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import QRCode from 'qrcode'
 import type { WindowCardInput } from '@/lib/window-card-data'
-import { DESCRIPTION_MAX, HEADLINE_MAX, MAX_HIGHLIGHTS, MAX_PHOTOS, orderedPhotos, paperSize, type BadgeKind, type CardData } from '@/lib/window-card'
+import { DESCRIPTION_MAX, HEADLINE_MAX, MAX_HIGHLIGHTS, MAX_PHOTOS, orderedPhotos, paperSize, placement, type BadgeKind, type CardData } from '@/lib/window-card'
 import { resetWindowCard, saveWindowCard } from '../../window-actions'
 import { Sheet } from './Sheet'
 
@@ -27,6 +27,8 @@ export function WindowEditor({ input }: { input: WindowCardInput }) {
   const [saved, setSaved] = useState<'saved' | 'saving' | 'unsaved'>('saved')
   const [fit, setFit] = useState(0.7)
   const sheet = useRef<HTMLDivElement>(null)
+  // The whole page as it prints: the sheet inside its white border.
+  const page = useRef<HTMLDivElement>(null)
   const stage = useRef<HTMLDivElement>(null)
   // Only what staff change is saved: until then the sheet keeps following the listing (new photos, new wording).
   const dirty = useRef(false)
@@ -36,6 +38,8 @@ export function WindowEditor({ input }: { input: WindowCardInput }) {
   const W = d.layout === 'landscape' ? 1123 : 794, H = d.layout === 'landscape' ? 794 : 1123
   const paper = d.paper ?? 'a4'
   const size = paperSize(paper, d.layout)
+  const margin = d.margin ?? 'office'
+  const place = placement(paper, d.layout, margin)
   const PAPER = paper.toUpperCase()
 
   // A QR code that opens the listing on the website.
@@ -76,13 +80,13 @@ export function WindowEditor({ input }: { input: WindowCardInput }) {
   const removeSlot = () => { if (d.photos.length > 1) { set({ photos: d.photos.filter((_, i) => i !== slot) }); setSlot(Math.max(0, slot - 1)) } }
 
   async function pdf() {
-    if (!sheet.current) return
+    if (!page.current) return
     setBusy('pdf'); setMsg(null)
     try {
       const [{ toJpeg }, { jsPDF }] = await Promise.all([import('html-to-image'), import('jspdf')])
       await document.fonts.ready
       // About 290 dots per inch on A4, 270 on A3: sharp in a shop window, and a manageable file.
-      const data = await toJpeg(sheet.current, { pixelRatio: paper === 'a3' ? 4 : 3, quality: 0.93, backgroundColor: '#ffffff', width: W, height: H, style: { transform: 'none' }, imagePlaceholder: BLANK })
+      const data = await toJpeg(page.current, { pixelRatio: paper === 'a3' ? 4 : 3, quality: 0.93, backgroundColor: '#ffffff', width: W, height: H, style: { transform: 'none' }, imagePlaceholder: BLANK })
       const doc = new jsPDF({ orientation: d.layout, unit: 'mm', format: paper, compress: true })
       const [pw, ph] = [size.w, size.h]
       doc.addImage(data, 'JPEG', 0, 0, pw, ph, undefined, 'FAST')
@@ -132,6 +136,12 @@ export function WindowEditor({ input }: { input: WindowCardInput }) {
             <button type="button" className={paper === 'a3' ? 'on' : undefined} onClick={() => set({ paper: 'a3' })}>A3</button>
           </div>
           <p className="wc-hint" style={{ marginTop: 6 }}>{paper === 'a3' ? 'A3 is the same sheet, twice the size (297 × 420 mm). Check your printer takes A3, or send the PDF to a print shop.' : 'A4: 210 × 297 mm.'}</p>
+          <h2 style={{ marginTop: 14 }}>Printing on</h2>
+          <div className="seg">
+            <button type="button" className={margin === 'office' ? 'on' : undefined} onClick={() => set({ margin: 'office' })}>Our printer</button>
+            <button type="button" className={margin === 'none' ? 'on' : undefined} onClick={() => set({ margin: 'none' })}>Print shop</button>
+          </div>
+          <p className="wc-hint" style={{ marginTop: 6 }}>{margin === 'office' ? 'Keeps everything 8 mm in from the edge, because office printers can’t print right to the edge and would cut off the logo and phone number.' : 'Edge to edge, with no white border. Only for printers that can print to the edge (most print shops).'}</p>
         </section>
 
         <section>
@@ -188,7 +198,13 @@ export function WindowEditor({ input }: { input: WindowCardInput }) {
 
       <main className="wc-stage" ref={stage}>
         <div className="wc-scale wc-shadow" style={{ transform: `scale(${fit})`, width: W, height: H, marginBottom: -(H * (1 - fit)) }}>
-          <Sheet ref={sheet} card={input.card} data={d} address={input.address} price={input.price} photos={urls} qr={input.url ? qr : null} onPhotoClick={onPhotoClick} />
+          <div ref={page} className="wc-paper" style={{ width: W, height: H }}>
+            <div style={{ width: W * place.scale, height: H * place.scale }}>
+              <div style={{ width: W, height: H, transform: `scale(${place.scale})`, transformOrigin: 'top left' }}>
+                <Sheet ref={sheet} card={input.card} data={d} address={input.address} price={input.price} photos={urls} qr={input.url ? qr : null} onPhotoClick={onPhotoClick} />
+              </div>
+            </div>
+          </div>
         </div>
       </main>
     </div>
