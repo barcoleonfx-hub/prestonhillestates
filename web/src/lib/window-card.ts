@@ -66,24 +66,33 @@ export function placement(paper: CardPaper, layout: CardLayout, margin: CardMarg
 }
 
 export const MAX_PHOTOS = 4
-export const MAX_HIGHLIGHTS = 5
+/** Up to eight highlights can be shown; the sheet starts with up to five from the listing. */
+export const MAX_HIGHLIGHTS = 8
+export const DEFAULT_HIGHLIGHTS = 5
 export const HEADLINE_MAX = 60
-export const DESCRIPTION_MAX = 230
+/** The description the sheet starts with is short; staff can write (or pull in) up to DESCRIPTION_MAX. */
+export const DESCRIPTION_SHORT = 230
+export const DESCRIPTION_MAX = 700
 
 const tidy = (s: string) => s.replace(/\s+/g, ' ').trim()
 
 /** The first sentence or two of the listing's own words, no longer than a shop window can hold. */
 export function shortDescription(...texts: (string | null | undefined)[]): string {
+  return descriptionUpTo(DESCRIPTION_SHORT, ...texts)
+}
+
+/** Whole sentences from the first of these the listing has, up to `max` characters. */
+export function descriptionUpTo(max: number, ...texts: (string | null | undefined)[]): string {
   for (const t of texts) {
     const clean = tidy((t ?? '').replace(/[*_#>]/g, ''))
     if (!clean) continue
     const sentences = clean.match(/[^.!?]+[.!?]+(\s|$)|[^.!?]+$/g)?.map((x) => x.trim()) ?? [clean]
     let out = ''
     for (const s of sentences) {
-      if ((out ? `${out} ${s}` : s).length > DESCRIPTION_MAX) break
+      if ((out ? `${out} ${s}` : s).length > max) break
       out = out ? `${out} ${s}` : s
     }
-    if (!out) out = `${clean.slice(0, DESCRIPTION_MAX - 1).replace(/\s+\S*$/, '')}…`
+    if (!out) out = `${clean.slice(0, max - 1).replace(/\s+\S*$/, '')}…`
     return out
   }
   return ''
@@ -99,13 +108,13 @@ export function defaultHeadline(p: Pick<CardProperty, 'headline' | 'bedrooms' | 
 }
 
 /** Up to five short selling points from the key features, each short enough for one line. */
-export function defaultHighlights(p: Pick<CardProperty, 'keyFeatures'>): string[] {
+export function defaultHighlights(p: Pick<CardProperty, 'keyFeatures'>, max = DEFAULT_HIGHLIGHTS): string[] {
   const out: string[] = []
   for (const k of p.keyFeatures) {
     const t = tidy(k).replace(/[.;]+$/, '')
     if (!t || t.length > 42 || out.some((x) => x.toLowerCase() === t.toLowerCase())) continue
     out.push(t.charAt(0).toUpperCase() + t.slice(1))
-    if (out.length === MAX_HIGHLIGHTS) break
+    if (out.length === max) break
   }
   return out
 }
@@ -173,4 +182,12 @@ export function splitPrice(text: string): { lead: string; amount: string; tail: 
   const m = /^(.*?)(£[\d,]+(?:\.\d+)?)(.*)$/.exec(text)
   if (!m) return { lead: '', amount: text, tail: '' }
   return { lead: m[1].trim(), amount: m[2], tail: m[3].trim() }
+}
+
+/** "Use more of the listing's description": the summary and then the full description, in whole sentences. */
+export function longerDescription(p: Pick<CardProperty, 'summary' | 'description'>, max = 600): string {
+  const parts = [p.summary, p.description].map((x) => tidy((x ?? '').replace(/[*_#>]/g, ''))).filter(Boolean)
+  // The description often starts by repeating the summary.
+  const joined = parts.length === 2 && parts[1].startsWith(parts[0].slice(0, 60)) ? parts[1] : parts.join(' ')
+  return descriptionUpTo(max, joined)
 }

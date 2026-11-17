@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import QRCode from 'qrcode'
 import type { WindowCardInput } from '@/lib/window-card-data'
-import { DESCRIPTION_MAX, HEADLINE_MAX, MAX_HIGHLIGHTS, MAX_PHOTOS, orderedPhotos, paperSize, placement, type BadgeKind, type CardData } from '@/lib/window-card'
+import { DESCRIPTION_MAX, HEADLINE_MAX, MAX_HIGHLIGHTS, MAX_PHOTOS, defaultHighlights, longerDescription, orderedPhotos, paperSize, placement, type BadgeKind, type CardData } from '@/lib/window-card'
 import { resetWindowCard, saveWindowCard } from '../../window-actions'
 import { Sheet } from './Sheet'
 
@@ -26,6 +26,9 @@ export function WindowEditor({ input }: { input: WindowCardInput }) {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [saved, setSaved] = useState<'saved' | 'saving' | 'unsaved'>('saved')
   const [fit, setFit] = useState(0.7)
+  // Whether the words fit in the text area of the sheet, and how much room is left (in sheet pixels).
+  const [overflow, setOverflow] = useState(false)
+  const [room, setRoom] = useState(0)
   const sheet = useRef<HTMLDivElement>(null)
   // The whole page as it prints: the sheet inside its white border.
   const page = useRef<HTMLDivElement>(null)
@@ -51,6 +54,17 @@ export function WindowEditor({ input }: { input: WindowCardInput }) {
     const t = setTimeout(async () => { setSaved('saving'); await saveWindowCard(input.id, d).catch(() => {}); setSaved('saved') }, 800)
     return () => clearTimeout(t)
   }, [d, input.id])
+  useEffect(() => {
+    const body = sheet.current?.querySelector<HTMLElement>('.wc-body')
+    if (!body) return
+    const t = setTimeout(() => {
+      const last = body.lastElementChild as HTMLElement | null
+      const used = last ? last.offsetTop + last.offsetHeight - body.offsetTop : 0
+      setOverflow(body.scrollHeight > body.clientHeight + 2)
+      setRoom(Math.max(0, body.clientHeight - used))
+    }, 150)
+    return () => clearTimeout(t)
+  }, [d])
   // The preview fits the space available.
   useEffect(() => {
     const measure = () => { const el = stage.current; if (!el) return; setFit(Math.min(1, (el.clientWidth - 56) / W, (window.innerHeight - 56) / H)) }
@@ -105,7 +119,9 @@ export function WindowEditor({ input }: { input: WindowCardInput }) {
     window.location.reload()
   }
 
-  const hi = [...d.highlights, ...Array(MAX_HIGHLIGHTS).fill('')].slice(0, MAX_HIGHLIGHTS)
+  // Five boxes to start with, and one more each time the last is filled, up to eight.
+  const filled = d.highlights.filter((h) => h.trim()).length
+  const hi = [...d.highlights, ...Array(MAX_HIGHLIGHTS).fill('')].slice(0, Math.min(MAX_HIGHLIGHTS, Math.max(5, filled + 1)))
   return (
     <div className="wc-page">
       <style>{`@page { size: ${PAPER} ${d.layout}; margin: 0; } @media print { html, body { margin: 0 !important; padding: 0 !important; height: ${size.h}mm !important; overflow: hidden !important; } .wc-page, .wc-stage { height: ${size.h}mm !important; overflow: hidden !important; } .wc-scale { zoom: ${size.scale}; margin: 0 !important; } }`}</style>
@@ -179,7 +195,12 @@ export function WindowEditor({ input }: { input: WindowCardInput }) {
         <section>
           <h2>Words</h2>
           <div className="field"><label>Headline <span className={`count${d.headline.length > HEADLINE_MAX ? ' over' : ''}`}>{d.headline.length}/{HEADLINE_MAX}</span></label><input className="input" value={d.headline} onChange={(e) => set({ headline: e.target.value })} placeholder="e.g. Stunning 3 Bed Semi with Garden" /></div>
-          <div className="field"><label>Short description <span className={`count${d.description.length > DESCRIPTION_MAX ? ' over' : ''}`}>{d.description.length}/{DESCRIPTION_MAX}</span></label><textarea className="textarea" rows={4} value={d.description} onChange={(e) => set({ description: e.target.value })} /></div>
+          <div className="field"><label>Description <span className={`count${d.description.length > DESCRIPTION_MAX ? ' over' : ''}`}>{d.description.length}/{DESCRIPTION_MAX}</span></label><textarea className="textarea" rows={7} value={d.description} onChange={(e) => set({ description: e.target.value })} /><span className="wc-hint">Leave a blank line to start a new paragraph.</span></div>
+          {(input.card.summary || input.card.description) ? <div className="wc-slot-tools" style={{ marginTop: -4, marginBottom: 10 }}>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => set({ description: longerDescription(input.card) })}>Use more of the listing’s description</button>
+            {defaultHighlights(input.card, MAX_HIGHLIGHTS).length > d.highlights.filter((h) => h.trim()).length ? <button type="button" className="btn btn-ghost btn-sm" onClick={() => { const have = d.highlights.filter((h) => h.trim()); const more = defaultHighlights(input.card, MAX_HIGHLIGHTS).filter((h) => !have.some((x) => x.trim().toLowerCase() === h.toLowerCase())); set({ highlights: [...have, ...more].slice(0, MAX_HIGHLIGHTS) }) }}>Add more highlights from the listing</button> : null}
+          </div> : null}
+          {overflow ? <p className="notice warn">The words don’t all fit on the sheet. Shorten the description or remove a highlight (or a fact) until this message goes.</p> : room > 120 ? <p className="wc-hint">There’s room for more: add to the description or the highlights.</p> : null}
           <div className="field"><label>Highlights (one per line on the sheet)</label>
             {hi.map((h, i) => <input key={i} className="input" value={h} maxLength={42} onChange={(e) => { const next = [...hi]; next[i] = e.target.value; set({ highlights: next }) }} placeholder={i === 0 ? 'e.g. South-facing garden' : ''} style={{ marginBottom: 4 }} />)}
           </div>

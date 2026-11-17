@@ -91,3 +91,20 @@ describe('printer margin', () => {
     expect(mergeCard(p, { headline: 'x' }).margin).toBe('office')
   })
 })
+
+describe('more words for bigger sheets', () => {
+  it('pulls in more of the listing, in whole sentences, without repeating the summary', async () => {
+    const { longerDescription } = await import('./window-card')
+    const summary = 'A spacious three bedroom semi. Close to Preston Road.'
+    const description = 'A spacious three bedroom semi. Close to Preston Road. The kitchen is newly fitted. The garden is 90ft long and faces south.'
+    expect(longerDescription({ summary, description })).toBe(description)
+    expect(longerDescription({ summary: 'One. Two.', description: 'Three. Four.' })).toBe('One. Two. Three. Four.')
+    expect(longerDescription({ summary, description }, 60)).toBe('A spacious three bedroom semi. Close to Preston Road.')
+  })
+  it('offers up to eight highlights, starting with five', async () => {
+    const { defaultHighlights, MAX_HIGHLIGHTS } = await import('./window-card')
+    const many = { keyFeatures: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'] }
+    expect(defaultHighlights(many)).toHaveLength(5)
+    expect(defaultHighlights(many, MAX_HIGHLIGHTS)).toHaveLength(8)
+  })
+})
