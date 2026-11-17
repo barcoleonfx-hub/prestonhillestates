@@ -63,7 +63,7 @@ export const Sheet = forwardRef<HTMLDivElement, {
             ))}
           </div>
         ) : null}
-        {data.description ? <p className="wc-desc">{data.description}</p> : null}
+        {data.description.trim() ? <div className="wc-desc">{data.description.split(/\n\s*\n/).map((para, i) => para.trim() ? <p key={i}>{para.trim()}</p> : null)}</div> : null}
         {data.highlights.some((h) => h.trim()) ? <ul className="wc-highlights">{data.highlights.filter((h) => h.trim()).map((h, i) => <li key={i}>{h.trim()}</li>)}</ul> : null}
       </div>
 

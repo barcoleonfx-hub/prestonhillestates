@@ -20,7 +20,7 @@ export async function saveWindowCard(propertyId: string, d: CardData): Promise<{
     badge: (['auto', 'none', 'just-listed', 'new-instruction', 'reduced', 'custom'] as const).includes(d.badge) ? d.badge : 'auto',
     badgeText: String(d.badgeText ?? '').slice(0, 28),
     headline: String(d.headline ?? '').slice(0, HEADLINE_MAX + 20),
-    description: String(d.description ?? '').slice(0, DESCRIPTION_MAX + 80),
+    description: String(d.description ?? '').slice(0, DESCRIPTION_MAX + 100),
     highlights: (d.highlights ?? []).map((h) => String(h).slice(0, 60)).slice(0, MAX_HIGHLIGHTS),
     photos: (d.photos ?? []).slice(0, MAX_PHOTOS).map((p) => ({ id: String(p.id), x: clamp(p.x), y: clamp(p.y) })),
     showQr: !!d.showQr,
