@@ -10,17 +10,34 @@ export type CardMargin = 'office' | 'none'
 export type BadgeKind = 'auto' | 'none' | 'just-listed' | 'new-instruction' | 'reduced' | 'custom'
 export type CardPhoto = { id: string; x: number; y: number }
 /**
- * The main colour (the FOR SALE band, price plate and footer). Big areas of near-black print muddy and use a lot of
- * ink, so the sheets start in a vibrant royal blue; the classic black is still there.
+ * The sheet's colour: a vibrant main colour (the FOR SALE pill, price, footer and highlights), a soft tint of it for
+ * the panels, a near-white page and a deep shade for the text. All of them sit well with the gold logo, and none of the
+ * big areas is dark, so they print bright and clean. Terracotta is the house style; staff can pick another per sheet.
  */
 export const THEMES = [
-  { key: 'blue', label: 'Royal blue', colour: '#1F56B8' },
-  { key: 'green', label: 'Emerald', colour: '#0E8A5F' },
-  { key: 'red', label: 'Red', colour: '#C62E3A' },
-  { key: 'black', label: 'Classic black', colour: '#23211A' },
+  { key: 'terracotta', label: 'Terracotta', colour: '#D2552B', tint: '#FBE3D8', page: '#FBF6F2', ink: '#2B1A12' },
+  { key: 'emerald', label: 'Emerald', colour: '#0A7F5A', tint: '#DDF3E8', page: '#F4F8F6', ink: '#0B2A20' },
+  { key: 'jade', label: 'Jade', colour: '#0B8C82', tint: '#D5F1EE', page: '#F3F9F8', ink: '#082F2B' },
+  { key: 'fresh', label: 'Fresh green', colour: '#1E9950', tint: '#DFF5E5', page: '#F5FAF6', ink: '#0D2A18' },
+  { key: 'ocean', label: 'Ocean', colour: '#0A7AAE', tint: '#D8EDF8', page: '#F3F8FB', ink: '#0A2433' },
+  { key: 'berry', label: 'Berry', colour: '#C0306A', tint: '#FADDE8', page: '#FBF5F7', ink: '#2E0F1D' },
 ] as const
 export type CardTheme = (typeof THEMES)[number]['key']
-export const themeColour = (t: string | null | undefined) => (THEMES.find((x) => x.key === t) ?? THEMES[0]).colour
+export type Theme = (typeof THEMES)[number]
+/** The theme for a saved choice; anything unknown (including the colours we used to offer) is Terracotta. */
+export const themeFor = (t: string | null | undefined): Theme => THEMES.find((x) => x.key === t) ?? THEMES[0]
+export const themeColour = (t: string | null | undefined) => themeFor(t).colour
+
+/** a and b blended (share of a from 0 to 1), as #RRGGBB. */
+function blend(a: string, b: string, share: number) {
+  const c = (h: string, i: number) => parseInt(h.slice(1 + 2 * i, 3 + 2 * i), 16)
+  return `#${[0, 1, 2].map((i) => Math.round(c(a, i) * share + c(b, i) * (1 - share)).toString(16).padStart(2, '0')).join('')}`.toUpperCase()
+}
+/** The CSS custom properties the sheet is drawn with. */
+export function themeVars(t: string | null | undefined): Record<string, string> {
+  const x = themeFor(t)
+  return { '--brand': x.colour, '--tint': x.tint, '--page': x.page, '--ink': x.ink, '--muted': blend(x.ink, '#FFFFFF', 0.72) }
+}
 
 export type CardData = {
   theme: CardTheme
@@ -140,7 +157,7 @@ export function orderedPhotos(p: Pick<CardProperty, 'photos'>) {
 
 export function cardDefaults(p: CardProperty): CardData {
   return {
-    theme: 'blue', layout: 'portrait', paper: 'a4', margin: 'office', badge: 'auto', badgeText: '', headline: defaultHeadline(p), description: shortDescription(p.summary, p.description),
+    theme: 'terracotta', layout: 'portrait', paper: 'a4', margin: 'office', badge: 'auto', badgeText: '', headline: defaultHeadline(p), description: shortDescription(p.summary, p.description),
     highlights: defaultHighlights(p), photos: orderedPhotos(p).slice(0, MAX_PHOTOS).map((x) => ({ id: x.id, x: 50, y: 50 })), showQr: true,
   }
 }
@@ -153,6 +170,7 @@ export function mergeCard(p: CardProperty, saved: Partial<CardData> | null): Car
   const photos = (saved.photos ?? d.photos).filter((x) => ids.has(x.id)).slice(0, MAX_PHOTOS)
   return {
     ...d, ...saved,
+    theme: themeFor(saved.theme).key,
     highlights: (saved.highlights ?? d.highlights).map(tidy).filter(Boolean).slice(0, MAX_HIGHLIGHTS),
     photos: photos.length ? photos : d.photos,
   }
