@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm'
 import { db, ready } from '@/db/client'
 import { windowCards } from '@/db/schema'
 import { requireAdmin } from '@/lib/auth'
-import { DESCRIPTION_MAX, HEADLINE_MAX, MAX_HIGHLIGHTS, MAX_PHOTOS, type CardData } from '@/lib/window-card'
+import { DESCRIPTION_MAX, HEADLINE_MAX, MAX_HIGHLIGHTS, MAX_PHOTOS, themeFor, type CardData } from '@/lib/window-card'
 import { now } from '@/lib/util'
 
 const clamp = (n: unknown) => Math.max(0, Math.min(100, Math.round(Number(n) || 0)))
@@ -14,7 +14,7 @@ export async function saveWindowCard(propertyId: string, d: CardData): Promise<{
   const me = await requireAdmin()
   await ready()
   const data: CardData = {
-    theme: (['blue', 'green', 'red', 'black'] as const).includes(d.theme) ? d.theme : 'blue',
+    theme: themeFor(d.theme).key,
     layout: d.layout === 'landscape' ? 'landscape' : 'portrait',
     paper: d.paper === 'a3' ? 'a3' : 'a4',
     margin: d.margin === 'none' ? 'none' : 'office',

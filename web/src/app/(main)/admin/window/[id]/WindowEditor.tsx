@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import QRCode from 'qrcode'
 import type { WindowCardInput } from '@/lib/window-card-data'
-import { DESCRIPTION_MAX, HEADLINE_MAX, MAX_HIGHLIGHTS, MAX_PHOTOS, defaultHighlights, longerDescription, orderedPhotos, paperSize, placement, THEMES, type BadgeKind, type CardData } from '@/lib/window-card'
+import { DESCRIPTION_MAX, HEADLINE_MAX, MAX_HIGHLIGHTS, MAX_PHOTOS, defaultHighlights, longerDescription, orderedPhotos, paperSize, placement, THEMES, themeFor, type BadgeKind, type CardData } from '@/lib/window-card'
 import { resetWindowCard, saveWindowCard } from '../../window-actions'
 import { Sheet } from './Sheet'
 
@@ -143,9 +143,9 @@ export function WindowEditor({ input }: { input: WindowCardInput }) {
         <section>
           <h2>Colour</h2>
           <div className="wc-swatches">
-            {THEMES.map((t) => <button key={t.key} type="button" className={`wc-swatch${(d.theme ?? 'blue') === t.key ? ' on' : ''}`} onClick={() => set({ theme: t.key })}><i style={{ background: t.colour }} />{t.label}</button>)}
+            {THEMES.map((t) => <button key={t.key} type="button" className={`wc-swatch${themeFor(d.theme).key === t.key ? ' on' : ''}`} onClick={() => set({ theme: t.key })}><i style={{ background: t.colour }} />{t.label}</button>)}
           </div>
-          <p className="wc-hint" style={{ marginTop: 6 }}>Bright colours print cleaner than black, which can come out muddy and uses a lot of ink.</p>
+          <p className="wc-hint" style={{ marginTop: 6 }}>Terracotta is our house style. Every colour here prints bright and clean next to the gold logo.</p>
         </section>
 
         <section>

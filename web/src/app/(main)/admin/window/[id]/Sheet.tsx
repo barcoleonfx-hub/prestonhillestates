@@ -2,7 +2,7 @@
 
 import { forwardRef } from 'react'
 import { LogoMark } from '@/components/Logo'
-import { badgeFor, bandFor, factsFor, splitPrice, themeColour, type CardData, type CardProperty } from '@/lib/window-card'
+import { badgeFor, bandFor, factsFor, splitPrice, themeVars, type CardData, type CardProperty } from '@/lib/window-card'
 
 const ICON: Record<string, string> = {
   bed: 'M3 18v-6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v6M3 14h18M3 18v2M21 18v2M6 10V7a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3',
@@ -32,7 +32,7 @@ export const Sheet = forwardRef<HTMLDivElement, {
   )
   const long = data.headline.length > 38
   return (
-    <div ref={ref} className={`wc-sheet ${data.layout}`} style={{ ['--brand' as string]: themeColour(data.theme) }}>
+    <div ref={ref} className={`wc-sheet ${data.layout}`} style={themeVars(data.theme) as React.CSSProperties}>
       <header className="wc-top">
         <div className="wc-brand"><LogoMark /><span><b>PRESTON HILL</b><i>ESTATES</i></span></div>
         <div className="wc-band">{band}</div>
@@ -57,7 +57,7 @@ export const Sheet = forwardRef<HTMLDivElement, {
           <div className="wc-facts">
             {facts.map((f) => (
               <div key={f.key} className="wc-fact">
-                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={ICON[f.key]} /></svg>
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={ICON[f.key]} /></svg>
                 <span><b>{f.value}</b>{f.label ? <small>{f.label}</small> : null}</span>
               </div>
             ))}

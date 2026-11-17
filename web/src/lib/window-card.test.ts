@@ -110,12 +110,17 @@ describe('more words for bigger sheets', () => {
 })
 
 describe('colour', () => {
-  it('starts in vibrant royal blue, including sheets saved before', async () => {
-    const { themeColour } = await import('./window-card')
-    expect(cardDefaults(p).theme).toBe('blue')
-    expect(mergeCard(p, { headline: 'x' }).theme).toBe('blue')
-    expect(themeColour('blue')).toBe('#1F56B8')
-    expect(themeColour('black')).toBe('#23211A')
-    expect(themeColour('nonsense')).toBe('#1F56B8')
+  it('starts in Terracotta, and moves sheets saved in the old colours to it', async () => {
+    const { themeColour, themeFor, themeVars, THEMES } = await import('./window-card')
+    expect(cardDefaults(p).theme).toBe('terracotta')
+    expect(mergeCard(p, { headline: 'x' }).theme).toBe('terracotta')
+    expect(mergeCard(p, { theme: 'blue' as never }).theme).toBe('terracotta')
+    expect(mergeCard(p, { theme: 'jade' }).theme).toBe('jade')
+    expect(themeColour('nonsense')).toBe('#D2552B')
+    expect(themeFor('ocean').tint).toBe('#D8EDF8')
+    expect(themeVars('terracotta')['--muted']).toBe('#665A54')
+    // Nothing big on the sheet is dark: every main colour and tint is well clear of black.
+    const lum = (h: string) => { const [r, g, b] = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255); return 0.2126 * r + 0.7152 * g + 0.0722 * b }
+    for (const t of THEMES) { expect(lum(t.colour)).toBeGreaterThan(0.12); expect(lum(t.tint)).toBeGreaterThan(0.75) }
   })
 })
