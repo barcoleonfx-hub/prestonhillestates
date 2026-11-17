@@ -32,7 +32,7 @@
 @media (max-width: 1000px) { .wc-page { grid-template-columns: 1fr; } .wc-panel { position: static; max-height: none; border-right: 0; } }
 
 /* ---------- the sheet ---------- */
-.wc-sheet { --ink: #23211A; --gold: #C4972F; --gold-deep: #A47B1D; --cream: #FBF8EE; --body: #4A473D;
+.wc-sheet { --brand: #1F56B8; --ink: #23211A; --gold: #C4972F; --gold-deep: #A47B1D; --cream: #FBF8EE; --body: #4A473D;
   width: 794px; height: 1123px; background: #fff; color: var(--ink); overflow: hidden; display: grid; position: relative;
   grid-template-rows: 64px auto 1fr 112px; font-family: var(--sans, 'Helvetica Neue', Arial, sans-serif); }
 .wc-sheet.landscape { width: 1123px; height: 794px; grid-template-columns: 640px 1fr; grid-template-rows: 64px 1fr 104px; }
@@ -44,8 +44,8 @@
 .wc-brand span { display: grid; line-height: 1.05; }
 .wc-brand b { font-size: 19px; letter-spacing: 0.22em; font-weight: 700; }
 .wc-brand i { font-style: normal; font-size: 12px; letter-spacing: 0.5em; color: var(--gold-deep); margin-top: 3px; }
-.wc-band { background: var(--ink); color: #fff; display: grid; place-items: center; padding: 0 38px; font-size: 34px; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; position: relative; }
-.wc-band::before { content: ''; position: absolute; left: -26px; top: 0; bottom: 0; width: 26px; background: var(--ink); clip-path: polygon(100% 0, 100% 100%, 0 100%); }
+.wc-band { background: var(--brand); color: #fff; display: grid; place-items: center; padding: 0 38px; font-size: 34px; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; position: relative; }
+.wc-band::before { content: ''; position: absolute; left: -26px; top: 0; bottom: 0; width: 26px; background: var(--brand); clip-path: polygon(100% 0, 100% 100%, 0 100%); }
 
 .wc-media { display: grid; gap: 6px; padding: 6px 6px 0; }
 .wc-sheet.landscape .wc-media { grid-row: 2; grid-template-rows: 1fr 150px; padding: 6px 0 6px 6px; }
@@ -68,7 +68,7 @@
   font-size: 19px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; padding: 10px 0; box-shadow: 0 4px 14px rgba(0,0,0,0.25); }
 
 /* The price, on a dark plate over the bottom of the main photo. */
-.wc-price { position: absolute; left: 0; bottom: 0; background: var(--ink); color: #fff; padding: 14px 30px 16px 28px; display: grid; border-top: 4px solid var(--gold); border-top-right-radius: 4px; }
+.wc-price { position: absolute; left: 0; bottom: 0; background: var(--brand); color: #fff; padding: 14px 30px 16px 28px; display: grid; border-top: 4px solid var(--gold); border-top-right-radius: 4px; }
 .wc-price-lead { font-size: 15px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); }
 .wc-price-amt { font-family: var(--serif, Georgia, serif); font-size: 60px; line-height: 1; font-weight: 700; letter-spacing: -0.01em; margin-top: 4px; }
 .wc-price-amt small { font-family: var(--sans, Arial, sans-serif); font-size: 22px; font-weight: 600; letter-spacing: 0; }
@@ -99,15 +99,15 @@
 }
 .wc-highlights li::after { content: ''; position: absolute; left: 5px; top: 5px; width: 5px; height: 9px; border: solid #fff; border-width: 0 2.5px 2.5px 0; transform: rotate(45deg); }
 
-.wc-foot { background: var(--ink); color: #fff; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 0 30px 0 36px; border-top: 4px solid var(--gold); }
+.wc-foot { background: var(--brand); color: #fff; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 0 30px 0 36px; border-top: 4px solid var(--gold); }
 .wc-sheet.landscape .wc-foot { grid-column: 1 / -1; }
 .wc-foot-l { display: grid; gap: 2px; }
 .wc-cta { font-size: 14px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold); }
 .wc-phone { font-size: 42px; font-weight: 800; letter-spacing: 0.02em; line-height: 1.05; }
-.wc-web { font-size: 13px; color: #CFC9B6; letter-spacing: 0.04em; }
+.wc-web { font-size: 13px; color: rgba(255,255,255,0.82); letter-spacing: 0.04em; }
 .wc-qr { display: flex; align-items: center; gap: 12px; }
 .wc-qr img { width: 84px; height: 84px; background: #fff; padding: 6px; border-radius: 6px; display: block; }
-.wc-qr span { font-size: 12px; line-height: 1.35; color: #CFC9B6; letter-spacing: 0.04em; }
+.wc-qr span { font-size: 12px; line-height: 1.35; color: rgba(255,255,255,0.82); letter-spacing: 0.04em; }
 
 /* Printing: only the sheet, at its real size. */
 @media print {
@@ -119,3 +119,9 @@
   .wc-shadow { box-shadow: none; }
   .wc-sheet { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* Colour swatches in the editor. */
+.wc-swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+.wc-swatch { display: inline-flex; align-items: center; gap: 7px; padding: 6px 10px 6px 6px; border-radius: 999px; border: 1.5px solid #E2DED1; background: #fff; cursor: pointer; font: inherit; font-size: 0.8rem; color: #3C3A31; }
+.wc-swatch i { width: 20px; height: 20px; border-radius: 50%; display: block; }
+.wc-swatch.on { border-color: #A47B1D; background: #FDF9EE; font-weight: 600; }

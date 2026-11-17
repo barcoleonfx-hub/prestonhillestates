@@ -14,6 +14,7 @@ export async function saveWindowCard(propertyId: string, d: CardData): Promise<{
   const me = await requireAdmin()
   await ready()
   const data: CardData = {
+    theme: (['blue', 'green', 'red', 'black'] as const).includes(d.theme) ? d.theme : 'blue',
     layout: d.layout === 'landscape' ? 'landscape' : 'portrait',
     paper: d.paper === 'a3' ? 'a3' : 'a4',
     margin: d.margin === 'none' ? 'none' : 'office',

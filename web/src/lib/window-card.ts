@@ -9,7 +9,21 @@ export type CardPaper = 'a4' | 'a3'
 export type CardMargin = 'office' | 'none'
 export type BadgeKind = 'auto' | 'none' | 'just-listed' | 'new-instruction' | 'reduced' | 'custom'
 export type CardPhoto = { id: string; x: number; y: number }
+/**
+ * The main colour (the FOR SALE band, price plate and footer). Big areas of near-black print muddy and use a lot of
+ * ink, so the sheets start in a vibrant royal blue; the classic black is still there.
+ */
+export const THEMES = [
+  { key: 'blue', label: 'Royal blue', colour: '#1F56B8' },
+  { key: 'green', label: 'Emerald', colour: '#0E8A5F' },
+  { key: 'red', label: 'Red', colour: '#C62E3A' },
+  { key: 'black', label: 'Classic black', colour: '#23211A' },
+] as const
+export type CardTheme = (typeof THEMES)[number]['key']
+export const themeColour = (t: string | null | undefined) => (THEMES.find((x) => x.key === t) ?? THEMES[0]).colour
+
 export type CardData = {
+  theme: CardTheme
   layout: CardLayout
   paper: CardPaper
   margin: CardMargin
@@ -126,7 +140,7 @@ export function orderedPhotos(p: Pick<CardProperty, 'photos'>) {
 
 export function cardDefaults(p: CardProperty): CardData {
   return {
-    layout: 'portrait', paper: 'a4', margin: 'office', badge: 'auto', badgeText: '', headline: defaultHeadline(p), description: shortDescription(p.summary, p.description),
+    theme: 'blue', layout: 'portrait', paper: 'a4', margin: 'office', badge: 'auto', badgeText: '', headline: defaultHeadline(p), description: shortDescription(p.summary, p.description),
     highlights: defaultHighlights(p), photos: orderedPhotos(p).slice(0, MAX_PHOTOS).map((x) => ({ id: x.id, x: 50, y: 50 })), showQr: true,
   }
 }

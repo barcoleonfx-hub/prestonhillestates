@@ -2,7 +2,7 @@
 
 import { forwardRef } from 'react'
 import { LogoMark } from '@/components/Logo'
-import { badgeFor, bandFor, factsFor, splitPrice, type CardData, type CardProperty } from '@/lib/window-card'
+import { badgeFor, bandFor, factsFor, splitPrice, themeColour, type CardData, type CardProperty } from '@/lib/window-card'
 
 const ICON: Record<string, string> = {
   bed: 'M3 18v-6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v6M3 14h18M3 18v2M21 18v2M6 10V7a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3',
@@ -32,7 +32,7 @@ export const Sheet = forwardRef<HTMLDivElement, {
   )
   const long = data.headline.length > 38
   return (
-    <div ref={ref} className={`wc-sheet ${data.layout}`}>
+    <div ref={ref} className={`wc-sheet ${data.layout}`} style={{ ['--brand' as string]: themeColour(data.theme) }}>
       <header className="wc-top">
         <div className="wc-brand"><LogoMark /><span><b>PRESTON HILL</b><i>ESTATES</i></span></div>
         <div className="wc-band">{band}</div>

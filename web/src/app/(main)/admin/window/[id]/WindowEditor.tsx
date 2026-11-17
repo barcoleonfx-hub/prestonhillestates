@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import QRCode from 'qrcode'
 import type { WindowCardInput } from '@/lib/window-card-data'
-import { DESCRIPTION_MAX, HEADLINE_MAX, MAX_HIGHLIGHTS, MAX_PHOTOS, defaultHighlights, longerDescription, orderedPhotos, paperSize, placement, type BadgeKind, type CardData } from '@/lib/window-card'
+import { DESCRIPTION_MAX, HEADLINE_MAX, MAX_HIGHLIGHTS, MAX_PHOTOS, defaultHighlights, longerDescription, orderedPhotos, paperSize, placement, THEMES, type BadgeKind, type CardData } from '@/lib/window-card'
 import { resetWindowCard, saveWindowCard } from '../../window-actions'
 import { Sheet } from './Sheet'
 
@@ -139,6 +139,14 @@ export function WindowEditor({ input }: { input: WindowCardInput }) {
           {msg ? <p className={`notice ${msg.ok ? 'ok' : 'err'}`}>{msg.text}</p> : null}
           <span className="wc-status">{saved === 'saved' ? 'All changes saved' : saved === 'saving' ? 'Saving…' : 'Changes not saved yet'}</span>
         </div>
+
+        <section>
+          <h2>Colour</h2>
+          <div className="wc-swatches">
+            {THEMES.map((t) => <button key={t.key} type="button" className={`wc-swatch${(d.theme ?? 'blue') === t.key ? ' on' : ''}`} onClick={() => set({ theme: t.key })}><i style={{ background: t.colour }} />{t.label}</button>)}
+          </div>
+          <p className="wc-hint" style={{ marginTop: 6 }}>Bright colours print cleaner than black, which can come out muddy and uses a lot of ink.</p>
+        </section>
 
         <section>
           <h2>Layout</h2>

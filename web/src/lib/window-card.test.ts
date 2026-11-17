@@ -108,3 +108,14 @@ describe('more words for bigger sheets', () => {
     expect(defaultHighlights(many, MAX_HIGHLIGHTS)).toHaveLength(8)
   })
 })
+
+describe('colour', () => {
+  it('starts in vibrant royal blue, including sheets saved before', async () => {
+    const { themeColour } = await import('./window-card')
+    expect(cardDefaults(p).theme).toBe('blue')
+    expect(mergeCard(p, { headline: 'x' }).theme).toBe('blue')
+    expect(themeColour('blue')).toBe('#1F56B8')
+    expect(themeColour('black')).toBe('#23211A')
+    expect(themeColour('nonsense')).toBe('#1F56B8')
+  })
+})
