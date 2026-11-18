@@ -50,25 +50,65 @@ export type WaContext = {
   address?: string | null
   /** Their next booked viewing or valuation, or the last one if it's happened. */
   appointment?: { kind: 'viewing' | 'valuation' | 'other'; when: string; address: string | null; past: boolean } | null
+  /** Their personal property report (the valuation booklet at its private link). */
+  report?: string | null
+  /** The listing they asked about: its link, price and main facts. */
+  home?: { url: string; price: string | null; specs: string[] } | null
+  /** Our real overall Google rating, when it's been entered in the portal. */
+  rating?: { rating: number; count: number } | null
+  /** Two days to suggest, e.g. "Thursday or Friday". */
+  days?: string | null
 }
 
 const sign = (me: string) => (me ? `\n\n${me}, Preston Hill Estates` : '\n\nPreston Hill Estates')
 const hi = (first: string) => (first ? `Hi ${first}` : 'Hi')
+const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+
+/** The next two days we're open (Monday to Saturday), starting tomorrow, in London: "Thursday or Friday". */
+export function nextTwoDays(at = new Date()): string {
+  const { day } = london(at)
+  const out: string[] = []
+  for (let d = 1; out.length < 2 && d < 8; d++) { const x = (day + d) % 7; if (x !== 0) out.push(x === (day + 1) % 7 ? 'tomorrow' : DAYS[x]) }
+  return out.join(' or ')
+}
+
+/** "We’ve been selling homes around Preston Road since 2004, and we’re rated 4.9★ from 120 Google reviews." Only real figures. */
+function proof(c: WaContext): string {
+  const what = c.isLet ? 'letting homes' : c.kind === 'tenant' ? 'letting homes' : 'selling homes'
+  const r = c.rating && c.rating.count >= 5 ? `, and we’re rated ${c.rating.rating.toFixed(1)}★ from ${c.rating.count} Google reviews` : ''
+  return `We’ve been ${what} around Preston Road since 2004${r}.`
+}
 
 /** The ready-written messages for one lead. None of these are marketing: each is about their own enquiry. */
 export function waTemplates(c: WaContext): WaTemplate[] {
   const me = c.me.split(/\s+/)[0] ?? ''
   const intro = me ? `it’s ${me} from Preston Hill Estates` : 'it’s Preston Hill Estates'
+  const days = c.days || 'this week'
+  const ask = c.days ? `Would *${days}* suit you` : 'When would suit you'
   const out: WaTemplate[] = []
-  const what = c.kind === 'valuation'
-    ? `Thanks for asking about a ${c.isLet ? 'rental' : 'sales'} valuation${c.address ? ` of ${c.address}` : ''}. When would suit you for us to come round? It’s free and there’s no obligation.`
-    : c.kind === 'viewing' && c.address
-      ? `Thanks for your enquiry about ${c.address}. When would suit you to view it? We’re open Monday to Friday 9 to 5.30 and Saturday 10 to 1.`
-      : c.kind === 'buyer' || c.kind === 'tenant'
-        ? `Thanks for registering with us. What are you looking for, and where? I’ll let you know as soon as something suitable comes on.`
-        : 'Thanks for getting in touch. When’s a good time to talk?'
-  out.push({ key: 'intro', label: 'First reply', text: `${hi(c.first)}, ${intro}. ${what}`, marketing: false })
-  out.push({ key: 'missed', label: 'Tried to call', text: `${hi(c.first)}, ${intro}. I’ve just tried to call you about your enquiry. When’s a good time to ring you back?`, marketing: false })
+  const lines: string[] = [`${hi(c.first)}, ${intro}, the estate agent at 271 Preston Road.`]
+  if (c.kind === 'valuation') {
+    lines.push(`Thank you for asking about a ${c.isLet ? 'rental' : 'sales'} valuation${c.address ? ` of *${c.address}*` : ''}.`)
+    if (c.report) lines.push(`I’ve put together a free personal property report for your home, with recent prices nearby and a guide to your local area:\n${c.report}`)
+    lines.push(`The next step is a short visit (about 30 minutes) so we can give you an accurate ${c.isLet ? 'rent' : 'price'}. It’s free and there’s no obligation. ${proof(c)}`)
+    lines.push(`${ask} for us to come round? Just reply with a day and time that works for you.`)
+  } else if (c.kind === 'viewing' && c.address) {
+    const facts = c.home ? [c.home.price, ...c.home.specs.slice(0, 2)].filter(Boolean).join(' · ') : ''
+    lines.push(`Thanks for your enquiry about *${c.address}*${facts ? ` (${facts})` : ''}.`)
+    if (c.home?.url) lines.push(`Here are the full details and photos:\n${c.home.url}`)
+    lines.push(`${ask} for a viewing? We’re open Monday to Friday 9 to 5.30 and Saturday 10 to 1.`)
+    lines.push(c.isLet
+      ? 'So I can help you best: when are you looking to move, and who would be living there?'
+      : 'So I can help you best: are you buying with a mortgage, and do you have a home to sell?')
+  } else if (c.kind === 'buyer' || c.kind === 'tenant') {
+    lines.push(`Thanks for registering with us. So I can send you the right homes first, could you tell me:\n1. Which areas you’d like\n2. Your ${c.kind === 'tenant' ? 'monthly budget' : 'budget'}\n3. How many bedrooms\n4. When you’d like to move`)
+    lines.push(`I’ll message you as soon as something suitable comes on. ${proof(c)}`)
+  } else {
+    lines.push('Thanks for getting in touch. How can I help? If it’s easier to talk, reply with a good time and I’ll call you.')
+  }
+  out.push({ key: 'intro', label: 'First reply', text: lines.join('\n\n'), marketing: false })
+  const reportLine = c.kind === 'valuation' && c.report ? `\n\nIn the meantime, here’s your free property report:\n${c.report}` : ''
+  out.push({ key: 'missed', label: 'Tried to call', text: `${hi(c.first)}, ${intro}. I’ve just tried to call you about your ${c.kind === 'valuation' ? 'valuation' : 'enquiry'}${c.address ? ` (${c.address})` : ''}.${reportLine}\n\nWhen’s a good time to ring you back?`, marketing: false })
   const a = c.appointment
   if (a && !a.past) {
     const thing = a.kind === 'valuation' ? 'valuation' : a.kind === 'viewing' ? 'viewing' : 'appointment'
@@ -82,7 +122,7 @@ export function waTemplates(c: WaContext): WaTemplate[] {
   out.push({
     key: 'checkin', label: 'Still looking?',
     text: c.kind === 'valuation'
-      ? `${hi(c.first)}, ${intro}. Are you still thinking of ${c.isLet ? 'letting' : 'selling'}? Happy to help whenever you’re ready, just reply here.`
+      ? `${hi(c.first)}, ${intro}. Are you still thinking of ${c.isLet ? 'letting' : 'selling'}${c.address ? ` ${c.address}` : ''}?${c.report ? ` Your free property report is still here if you’d like a look:\n${c.report}\n\n` : ' '}Happy to come round whenever suits you, just reply here.`
       : `${hi(c.first)}, ${intro}. Are you still looking? If anything’s changed, let me know and I’ll keep an eye out for you.`,
     marketing: false,
   })

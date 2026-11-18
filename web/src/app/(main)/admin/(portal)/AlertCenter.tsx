@@ -196,7 +196,9 @@ export function AlertCenter({ me, initialPending }: { me: { id: string; name: st
                 <div className="alert-actions">
                   <button type="button" className="btn btn-gold btn-sm" onClick={() => ack([a.id])}>Got it</button>
                   {ap ? <Link className="btn btn-ghost btn-sm" href={`/admin/diary/${ap.id}`} onClick={() => ack([a.id])}>Open</Link> : null}
-                  {a.kind === 'enquiry' ? <Link className="btn btn-dark btn-sm" href="/admin/enquiries" onClick={() => ack([a.id])}>Open enquiries</Link> : null}
+                  {a.enquiry?.whatsapp ? <Link className="btn btn-wa btn-sm" href={`/admin/enquiries/${a.enquiry.id}?wa=1`} onClick={() => ack([a.id])}>WhatsApp them</Link> : null}
+                  {a.enquiry ? <Link className="btn btn-dark btn-sm" href={`/admin/enquiries/${a.enquiry.id}`} onClick={() => ack([a.id])}>Open the enquiry</Link>
+                    : a.kind === 'enquiry' ? <Link className="btn btn-dark btn-sm" href="/admin/enquiries" onClick={() => ack([a.id])}>Open enquiries</Link> : null}
                   {tk?.contactId ? <button type="button" className="btn btn-dark btn-sm" onClick={() => { ack([a.id]); openCallLog({ contactId: tk.contactId!, direction: 'out' }) }}>Log the call</button> : null}
                   {tk?.contactId ? <Link className="btn btn-ghost btn-sm" href={`/admin/contacts/${tk.contactId}`} onClick={() => ack([a.id])}>Their record</Link> : null}
                 </div>

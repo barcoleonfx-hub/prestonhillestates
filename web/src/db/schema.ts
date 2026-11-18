@@ -284,6 +284,7 @@ export const notifications = sqliteTable('notifications', {
   createdAt: text('created_at').notNull(),
   targetAdminId: text('target_admin_id'),
   taskId: text('task_id'),
+  enquiryId: text('enquiry_id'),
 })
 
 export const notificationReads = sqliteTable('notification_reads', {

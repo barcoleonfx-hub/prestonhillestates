@@ -4,7 +4,8 @@ import 'server-only'
 
 import { and, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm'
 import { db, getClient, ready } from '@/db/client'
-import { admins, appointments, calls, consents, contacts, enquiries, enquiryMessages, enquiryNotes, leadEvents } from '@/db/schema'
+import { admins, appointments, calls, consents, contacts, enquiries, enquiryMessages, enquiryNotes, leadEvents, notifications } from '@/db/schema'
+import { enquiryLabel } from './enquiry-labels'
 import { CONSENT_WORDING, DORMANT_AFTER_DAYS, LEAD_MAGNETS, nextStatus, parseAttribution, statusLabel, ticked, toE164, type Attribution, type ConsentChannel, type LeadEventKind, type LeadStatus } from './lead-rules'
 import { now, uid } from './util'
 
@@ -100,13 +101,30 @@ export async function withdrawConsent(contactId: string, channel: ConsentChannel
  * A lead from a website form: where it came from (advert, pages, which form) and any consent ticked. `field` reads
  * the submitted form (FormData or JSON); `magnet` is the form's own tag unless the page sent a known one.
  */
-export async function captureLead(p: { enquiryId: string | null; contactId: string | null; field: (k: string) => unknown; magnet: string }) {
+export async function captureLead(p: { enquiryId: string | null; contactId: string | null; field: (k: string) => unknown; magnet: string; alert?: boolean }) {
+  if (p.enquiryId && p.alert !== false) await newLeadAlert(p.enquiryId).catch((e) => console.error('new lead alert failed', e))
   try {
     const sent = p.field('magnet')
     const magnet = typeof sent === 'string' && sent in LEAD_MAGNETS ? sent : p.magnet
     if (p.enquiryId) await setLeadSource(p.enquiryId, parseAttribution(p.field('attribution')), magnet)
     await recordConsents({ contactId: p.contactId, enquiryId: p.enquiryId, email: ticked(p.field('consent_email')), whatsapp: ticked(p.field('consent_whatsapp')), source: LEAD_MAGNETS[magnet] ?? magnet })
   } catch (e) { console.error('recording the lead source and consent failed', e) }
+}
+
+/**
+ * The pop-up (with a chime) everyone in the portal gets the moment a new lead comes in, linked to the enquiry so
+ * staff can open it, or send the ready-written WhatsApp introduction, in one tap.
+ */
+export async function newLeadAlert(enquiryId: string, o: { title?: string; body?: string } = {}) {
+  const e = await db.query.enquiries.findFirst({ where: eq(enquiries.id, enquiryId) })
+  if (!e) return
+  const what = e.kind === 'tenant' ? 'Tenant registration' : enquiryLabel(e)
+  const about = (e.message ?? '').split('\n').map((l) => l.trim()).find(Boolean)?.slice(0, 90) ?? ''
+  await db.insert(notifications).values({
+    id: uid(), kind: 'enquiry', appointmentId: null, enquiryId,
+    title: o.title ?? `${what}: ${e.name}`, body: o.body ?? [e.phone, e.postcode, about].filter(Boolean).join(' · '),
+    createdBy: null, createdAt: now(),
+  })
 }
 
 /** Keeps the international phone number in step with the one we hold. */

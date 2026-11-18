@@ -307,7 +307,7 @@ export async function checkMailbox(opts: { force?: boolean; lookBackDays?: numbe
               if (saved) {
                 found++
                 await db.insert(notifications).values({
-                  id: uid(), kind: 'enquiry', appointmentId: null,
+                  id: uid(), kind: 'enquiry', appointmentId: null, enquiryId: saved.enquiryId,
                   title: `${enquiryLabel({ kind: 'email', source: row.source })}: ${row.name}${junk ? ' (found in Junk)' : ''}`,
                   body: [row.name, [row.phone, row.about ?? row.subject].filter(Boolean).join(' · ')].join('\n'),
                   createdBy: null, createdAt: now(),

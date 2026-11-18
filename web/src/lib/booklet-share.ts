@@ -40,5 +40,5 @@ export async function recordView(token: string) {
   const e = await db.query.enquiries.findFirst({ where: eq(enquiries.id, s.bookletId) })
   if (!e) return
   await db.insert(enquiryNotes).values({ id: uid(), enquiryId: e.id, body: 'Opened their property report', createdBy: 'system', createdAt: at })
-  await db.insert(notifications).values({ id: uid(), kind: 'enquiry', appointmentId: null, title: `${e.name} opened their property report`, body: 'A good moment to call them.', createdBy: null, createdAt: at })
+  await db.insert(notifications).values({ id: uid(), kind: 'enquiry', appointmentId: null, enquiryId: e.id, title: `${e.name} opened their property report`, body: 'A good moment to call them.', createdBy: null, createdAt: at })
 }
