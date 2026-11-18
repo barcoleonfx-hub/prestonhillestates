@@ -116,9 +116,9 @@ export function WhatsAppButton({ wa, className = 'btn btn-ghost', autoOpen = fal
                   ) : <p className="notice">They haven’t ticked the box to get WhatsApp messages about other homes, so this one can’t be sent. Messages about their own enquiry are fine.</p>
                 ) : null}
                 <label className="wa-field">Message
-                  <textarea className="textarea" rows={7} value={text} onChange={(e) => setText(e.target.value)} />
+                  <textarea className="textarea" rows={15} style={{ maxHeight: '52vh' }} value={text} onChange={(e) => setText(e.target.value)} />
                 </label>
-                <p className="wa-hint">This opens WhatsApp with the message filled in. Check it and press send there. Use the office phone (07745 203146) or WhatsApp on this computer.</p>
+                <p className="wa-hint">This opens WhatsApp with the message filled in. Check it and press send there (words between *stars* show in bold). Use the office phone (07745 203146) or WhatsApp on this computer.</p>
                 {msg?.error ? <p className="notice err" role="alert">{msg.error}</p> : null}
                 {msg?.ok ? <p className="notice ok" role="status">{msg.ok}</p> : null}
                 <div className="wa-actions">

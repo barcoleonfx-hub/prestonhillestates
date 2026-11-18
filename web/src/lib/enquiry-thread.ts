@@ -74,7 +74,7 @@ export async function attachReply(enquiryId: string, row: ImportRow, how: string
   await db.update(enquiries).set({ handled: false, lastReplyAt: row.date > (e.lastReplyAt ?? '') ? row.date : e.lastReplyAt }).where(eq(enquiries.id, enquiryId))
   await leadEvent(enquiryId, 'inbound', { at: row.date, detail: 'they replied by email' }).catch((x) => console.error('lead status (reply) failed', x))
   await db.insert(notifications).values({
-    id: uid(), kind: 'enquiry', appointmentId: null, title: `${e.name} replied`,
+    id: uid(), kind: 'enquiry', appointmentId: null, enquiryId, title: `${e.name} replied`,
     body: [row.subject, row.reply.text.split('\n').find((l) => l.trim())?.slice(0, 140) ?? ''].filter(Boolean).join('\n'), createdBy: null, createdAt: now(),
   })
   return true

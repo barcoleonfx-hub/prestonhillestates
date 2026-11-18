@@ -1057,4 +1057,11 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       )`,
     ],
   },
+  {
+    id: '048_alert_enquiry',
+    sql: [
+      // Which enquiry an alert is about, so the alert can open it (and its WhatsApp message) in one tap.
+      `ALTER TABLE notifications ADD COLUMN enquiry_id TEXT`,
+    ],
+  },
 ]

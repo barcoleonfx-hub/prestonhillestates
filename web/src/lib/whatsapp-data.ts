@@ -7,9 +7,11 @@ import { db, ready } from '@/db/client'
 import { appointments, type Contact, type Enquiry } from '@/db/schema'
 import { isValuation } from './enquiry-labels'
 import { toE164 } from './lead-rules'
-import { listPublished } from './properties'
-import { knownBase, listingOptions } from './property-email-data'
-import { waBlocked, waTemplates, type WaContext, type WaTemplate } from './whatsapp'
+import { getProperty, listPublished } from './properties'
+import { emailProperty, knownBase, listingOptions } from './property-email-data'
+import { googleSummary } from './reviews-data'
+import { shareFor } from './booklet-share'
+import { nextTwoDays, waBlocked, waTemplates, type WaContext, type WaTemplate } from './whatsapp'
 
 export type WaHome = { id: string; channel: 'sale' | 'let'; label: string; line: string; url: string }
 export type WaProps = {
@@ -47,11 +49,20 @@ export async function waFor(p: { enquiry?: Enquiry | null; contact?: Contact | n
   const e164 = c?.phoneE164 ?? toE164(e?.phone ?? c?.phone)
   const name = (e?.name ?? c?.name ?? '').trim()
   const first = /^(mr|mrs|ms|miss|dr)\.?$/i.test(name.split(/\s+/)[0] ?? '') ? '' : name.split(/\s+/)[0] ?? ''
-  const kind: WaContext['kind'] = !e ? 'general' : isValuation(e) ? 'valuation' : e.kind === 'buyer' ? 'buyer' : e.kind === 'viewing' ? 'viewing' : 'general'
-  const appointment = await appointmentFor(e?.id ?? null, c?.id ?? e?.contactId ?? null)
+  // A portal email about one of our homes (Rightmove, Zoopla…) is a viewing request too.
+  const kind: WaContext['kind'] = !e ? 'general' : isValuation(e) ? 'valuation' : e.kind === 'buyer' ? 'buyer' : e.kind === 'tenant' ? 'tenant'
+    : e.kind === 'viewing' || e.propertyId ? 'viewing' : 'general'
+  const isLet = p.isLet ?? e?.intent === 'rent'
+  const [appointment, base, google] = await Promise.all([appointmentFor(e?.id ?? null, c?.id ?? e?.contactId ?? null), knownBase(), googleSummary().catch(() => null)])
+  // Their personal property report (valuations), and the listing they asked about (viewings).
+  const report = e && kind === 'valuation' ? await shareFor(e.id).then((t) => `${base}/report/${t}`).catch(() => null) : null
+  const listing = e?.propertyId && kind !== 'valuation' ? await getProperty(e.propertyId).catch(() => null) : null
+  const ep = listing ? emailProperty(listing, base) : null
+  const home = ep ? { url: `${ep.url}${ep.url.includes('?') ? '&' : '?'}utm_source=whatsapp`, price: ep.priceText || null, specs: ep.specs } : null
+  const rating = google?.rating && google.count ? { rating: google.rating, count: google.count } : null
   return {
     enquiryId: e?.id ?? null, contactId: c?.id ?? e?.contactId ?? null, e164, first, me: p.me,
-    templates: waTemplates({ first, me: p.me, kind, isLet: p.isLet, address: p.address ?? null, appointment }),
+    templates: waTemplates({ first, me: p.me, kind, isLet, address: p.address ?? null, appointment, report, home, rating, days: nextTwoDays() }),
     homes: p.homes ?? [], consent: !!c?.whatsappOptInAt, blocked: waBlocked({ e164, doNotContact: c?.doNotContact, stoppedAt: c?.whatsappStoppedAt }),
   }
 }

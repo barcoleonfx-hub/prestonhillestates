@@ -7,7 +7,7 @@ import { db, ready } from '@/db/client'
 import { contacts, enquiries, notifications, properties } from '@/db/schema'
 import { now, uid } from '@/lib/util'
 import { upsertContact } from '@/lib/contacts'
-import { captureLead } from '@/lib/leads'
+import { captureLead, newLeadAlert } from '@/lib/leads'
 
 export type EnquiryState = { ok?: boolean; error?: string }
 
@@ -180,9 +180,7 @@ export async function sendChatLead(form: FormData): Promise<ChatState> {
     id: enquiryId, propertyId: null, kind: 'valuation', name, phone, email: null, contactId, postcode, intent: goal.intent,
     message: [`Website chat: ${goal.says}.`, page ? `Started on: ${page}` : ''].filter(Boolean).join('\n'), createdAt: at,
   })
-  await db.insert(notifications).values({
-    id: uid(), kind: 'enquiry', appointmentId: null, title: `${name} ${goal.says}`, body: `From the website chat · ${postcode} · ${phone}`, createdBy: null, createdAt: at,
-  }).catch((e) => console.error('chat alert failed', e))
-  await captureLead({ enquiryId, contactId, field: (k) => form.get(k), magnet: 'chat' })
+  await newLeadAlert(enquiryId, { title: `${name} ${goal.says}`, body: `From the website chat · ${postcode} · ${phone}` }).catch((e) => console.error('chat alert failed', e))
+  await captureLead({ enquiryId, contactId, field: (k) => form.get(k), magnet: 'chat', alert: false })
   return { ok: true }
 }
