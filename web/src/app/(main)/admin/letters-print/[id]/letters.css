@@ -1,0 +1,43 @@
+/* Valuation letters: one A4 page each. The address sits where a DL window envelope shows it (A4 folded in three). */
+@font-face { font-family: 'PH Inter'; src: url(/fonts/inter/inter-regular.woff2) format('woff2'); font-weight: 400; }
+@font-face { font-family: 'PH Inter'; src: url(/fonts/inter/inter-medium.woff2) format('woff2'); font-weight: 500; }
+@font-face { font-family: 'PH Inter'; src: url(/fonts/inter/inter-bold.woff2) format('woff2'); font-weight: 600 700; }
+@font-face { font-family: 'PH Inter'; src: url(/fonts/inter/inter-extrabold.woff2) format('woff2'); font-weight: 800; }
+
+@page { size: A4; margin: 0; }
+.pl-page { background: #E9E6DC; min-height: 100vh; padding: 0 0 40px; font-family: 'PH Inter', 'Helvetica Neue', Arial, sans-serif; color: #1F1D18; }
+.pl-bar { position: sticky; top: 0; z-index: 5; background: #fff; border-bottom: 1px solid #E2DED1; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 12px 20px; font-size: 14px; }
+.pl-bar a { color: #6B6656; }
+.pl-bar p { flex-basis: 100%; margin: 0; font-size: 12.5px; color: #8A8470; }
+.pl-btn { font: inherit; font-weight: 600; font-size: 14px; padding: 9px 18px; border-radius: 999px; border: 1px solid #C4972F; background: #C4972F; color: #fff; cursor: pointer; }
+.pl-btn.ghost { background: #fff; color: #1F1D18; border-color: #D9D4C5; }
+.pl-done { color: #2F6B4E; font-weight: 600; }
+
+.pl-letter { width: 210mm; height: 297mm; margin: 24px auto 0; background: #fff; box-shadow: 0 10px 40px rgba(0,0,0,0.15); position: relative; overflow: hidden; font-size: 10.5pt; line-height: 1.5; }
+.pl-head { position: absolute; left: 20mm; right: 18mm; top: 14mm; display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 5mm; border-bottom: 0.4mm solid #D2552B; }
+.pl-brand { display: flex; align-items: center; gap: 3mm; }
+.pl-brand svg { width: 13mm; height: 13mm; }
+.pl-brand span { display: grid; line-height: 1.05; }
+.pl-brand b { font-size: 13pt; letter-spacing: 0.2em; font-weight: 800; }
+.pl-brand i { font-style: normal; font-size: 7.5pt; letter-spacing: 0.6em; color: #8A8470; margin-top: 1mm; }
+.pl-office { text-align: right; font-size: 8pt; line-height: 1.55; color: #5B574B; }
+.pl-return { position: absolute; left: 22mm; top: 44mm; font-size: 6.5pt; color: #8A8470; }
+.pl-to { position: absolute; left: 22mm; top: 48.5mm; width: 88mm; height: 32mm; font-style: normal; font-size: 10.5pt; line-height: 1.4; display: grid; align-content: start; }
+.pl-date { position: absolute; right: 20mm; top: 49mm; font-size: 10pt; color: #5B574B; }
+.pl-body { position: absolute; left: 22mm; right: 22mm; top: 92mm; }
+.pl-body p { margin: 0 0 3.6mm; }
+.pl-body h2 { font-size: 13pt; font-weight: 800; margin: 1mm 0 3.5mm; color: #1F1D18; letter-spacing: -0.01em; }
+.pl-qr { display: flex; align-items: center; gap: 6mm; margin: 2mm 0 5mm; padding: 4mm 5mm; border: 0.35mm solid #EADFD6; border-radius: 3mm; background: #FBF6F2; }
+.pl-qr img { width: 32mm; height: 32mm; display: block; background: #fff; padding: 1.5mm; border-radius: 1.5mm; }
+.pl-qr b { display: block; font-size: 11.5pt; }
+.pl-qr span { display: block; color: #5B574B; }
+.pl-qr small { display: block; margin-top: 2mm; font-size: 7.5pt; color: #8A8470; word-break: break-all; }
+.pl-sign { margin-top: 5mm !important; }
+.pl-name { margin-top: 10mm !important; }
+.pl-foot { position: absolute; left: 20mm; right: 20mm; bottom: 12mm; padding-top: 3mm; border-top: 0.25mm solid #E2DED1; font-size: 7pt; color: #8A8470; line-height: 1.5; }
+
+@media print {
+  .pl-page { background: #fff; padding: 0; }
+  .pl-bar { display: none; }
+  .pl-letter { margin: 0; box-shadow: none; page-break-after: always; break-after: page; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

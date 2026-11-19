@@ -707,3 +707,28 @@ export const windowCards = sqliteTable('window_cards', {
   updatedBy: text('updated_by'),
   updatedAt: text('updated_at').notNull(),
 })
+
+/** A printing of valuation letters (lib/postal-letters). */
+export const letterBatches = sqliteTable('letter_batches', {
+  id: text('id').primaryKey(),
+  sender: text('sender').notNull(),
+  beforeText: text('before_text').notNull(),
+  afterText: text('after_text').notNull(),
+  createdBy: text('created_by').notNull(),
+  createdAt: text('created_at').notNull(),
+  postedAt: text('posted_at'),
+  postedBy: text('posted_by'),
+})
+
+/** One printed letter: who to, the address as printed, and when it was posted. */
+export const postalLetters = sqliteTable('postal_letters', {
+  id: text('id').primaryKey(),
+  batchId: text('batch_id').notNull(),
+  enquiryId: text('enquiry_id').notNull(),
+  contactId: text('contact_id'),
+  name: text('name').notNull(),
+  address: text('address').notNull(),
+  home: text('home'),
+  createdAt: text('created_at').notNull(),
+  postedAt: text('posted_at'),
+})
