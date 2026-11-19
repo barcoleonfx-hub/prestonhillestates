@@ -44,6 +44,8 @@ export type Reader = {
 export type Listing = {
   id: string; url: string; photo: string | null; channel: 'sale' | 'let'; priceText: string; price: number | null
   address: string; headline: string; specs: string[]; beds: number | null; outward: string | null; place: string | null; publishedAt: string | null
+  /** A portfolio, a block or a lot of several homes: only for investors. */
+  unusual?: boolean
 }
 export type Snapshot = { area: string; label: string; median: number | null; prevMedian: number | null; count: number; prevCount: number; byType: { label: string; median: number; count: number }[]; latest: string | null }
 export type GuideLink = { slug: string; title: string; summary: string; url: string }
@@ -226,6 +228,7 @@ export function listingsFor(b: Extract<Block, { kind: 'listings' }>, r: Reader, 
     if (l.outward && (r.outward === l.outward || areas.toUpperCase().includes(l.outward))) { s += 3; why.push(l.place ? `${l.place}, ${l.outward}` : l.outward) }
     else if (l.place && areas.includes(l.place.toLowerCase())) { s += 2; why.push(l.place) }
     if (r.minBeds && l.beds != null) { if (l.beds >= r.minBeds) { s += 1; why.push(`${l.beds} bed${l.beds === 1 ? '' : 's'}`) } else s -= 2 }
+    if (l.unusual && !roles.includes('landlord')) s -= 6
     return { ...l, s, forYou: s >= 3 ? why.slice(0, 2).join(' · ') : null }
   })
   scored.sort((a, b2) => b2.s - a.s || (b2.publishedAt ?? '').localeCompare(a.publishedAt ?? ''))
@@ -266,15 +269,39 @@ const para = (t: string, color: string = C.body, size = 15) => t.split(/\n{2,}/)
 const section = (inner: string, bg: string = C.card, pad = '34px 40px') => `<tr><td bgcolor="${bg}" class="px" style="padding:${pad}; border-left:1px solid ${C.line}; border-right:1px solid ${C.line};">${inner}</td></tr>`
 const rule = `<tr><td bgcolor="${C.card}" style="padding:0 40px; border-left:1px solid ${C.line}; border-right:1px solid ${C.line};" class="px"><div style="border-top:1px solid ${C.line}; height:1px; line-height:1px; font-size:0;">&nbsp;</div></td></tr>`
 
+/** "4 X 2/3 BED HOUSES, NORTH WEMBLEY HA0" reads as shouting: mostly-capital text in title case, postcodes kept. */
+export function unshout(t: string): string {
+  const letters = t.replace(/[^A-Za-z]/g, '')
+  if (letters.length < 8 || letters.replace(/[^A-Z]/g, '').length / letters.length < 0.8) return t
+  return t.toLowerCase().replace(/\b([a-z])/g, (m) => m.toUpperCase())
+    .replace(/\b([a-z]{1,2}\d[a-z\d]?)(\s*\d[a-z]{2})?\b/gi, (m) => m.toUpperCase())
+    .replace(/\b(Of|And|The|For|In|On|At|To|With)\b/g, (m, w: string, i: number) => (i ? w.toLowerCase() : w))
+}
+
+/** A portfolio, a block or a batch of homes sold together: right for investors, an odd pick for everyone else. */
+export function unusualLot(p: { address: string; headline: string; type: string | null; beds: number | null }): boolean {
+  const text = `${p.address} ${p.headline}`
+  return /\b(portfolio|batch|block of|investment lot|job lot|freehold block)\b|\b\d+\s*x\s*\d/i.test(text) || (p.beds != null && p.beds >= 8) || /^other$/i.test(p.type ?? '')
+}
+
+/** A card's address with its area, so the reader can tell where it is ("35 Church Road" alone could be anywhere). */
+export function whereIs(l: Pick<Listing, 'address' | 'place' | 'outward'>): string {
+  const a = l.address.trim()
+  const has = (t: string | null) => !!t && a.toUpperCase().includes(t.toUpperCase())
+  if (has(l.outward) || (has(l.place) && l.place)) return a
+  const tail = [l.place, l.outward].filter(Boolean).join(' ')
+  return tail ? `${a}, ${tail}` : a
+}
+
 function listingCard(l: Picked, campaign: string, big: boolean) {
   const link = withUtm(l.url, campaign, 'newsletter')
   const img = l.photo ? `<a href="${esc(link)}" target="_blank"><img src="${esc(l.photo)}" width="${big ? 520 : 250}" alt="${esc(l.address)}" style="display:block; width:100%; height:auto; border-radius:${big ? 12 : 10}px
 ${big ? 12 : 10}px 0 0;"/></a>` : ''
-  const badge = l.forYou ? `<p style="margin:0 0 8px;"><span style="display:inline-block; padding:4px 10px; border-radius:999px; background:#F7F0DE; font-family:${SANS}; font-size:10px; font-weight:bold; letter-spacing:1.5px; text-transform:uppercase; color:${C.gold};">Picked for you &middot; ${esc(l.forYou)}</span></p>` : ''
+  const badge = l.forYou ? `<p style="margin:0 0 8px;"><span style="display:inline-block; padding:4px 10px; border-radius:999px; background:#F7F0DE; font-family:${SANS}; font-size:10px; font-weight:bold; letter-spacing:1.5px; text-transform:uppercase; color:${C.gold};">&#10003; ${esc(l.forYou)}</span></p>` : ''
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#FFFFFF" style="border:1px solid ${C.line}; border-radius:${big ? 12 : 10}px;"><tr><td>${img}</td></tr>
 <tr><td style="padding:${big ? '20px 22px 22px' : '14px 16px 16px'};">${badge}
 <p style="margin:0; font-family:${SERIF}; font-size:${big ? 26 : 19}px; line-height:${big ? 32 : 24}px; color:${C.ink};">${esc(l.priceText)}</p>
-<p style="margin:4px 0 0; font-family:${SANS}; font-size:${big ? 14 : 13}px; line-height:20px; color:${C.body};">${esc(l.address)}</p>
+<p style="margin:4px 0 0; font-family:${SANS}; font-size:${big ? 14 : 13}px; line-height:20px; color:${C.body};">${esc(whereIs(l))}</p>
 ${l.specs.length ? `<p style="margin:8px 0 0; font-family:${SANS}; font-size:10px; letter-spacing:1.5px; text-transform:uppercase; color:${C.faint};">${l.specs.slice(0, big ? 5 : 3).map(esc).join(' &middot; ')}</p>` : ''}
 ${big ? `<div style="height:16px; line-height:16px; font-size:0;">&nbsp;</div>${button(link, 'View property')}` : `<p style="margin:12px 0 0; font-family:${SANS}; font-size:12px; font-weight:bold; letter-spacing:2px; text-transform:uppercase;"><a href="${esc(link)}" target="_blank" style="color:${C.gold}; text-decoration:none;">View &rarr;</a></p>`}
 </td></tr></table>`
@@ -462,7 +489,7 @@ ${why.split(/\n{2,}/).map((x) => `<p style="margin:0 0 8px; font-family:${SERIF}
   if (stations.length || places.length) parts.push(section(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>${near('Getting about', stations)}${near('On the doorstep', places)}</tr></table>`, C.card, '8px 40px 8px'))
   if (h.sold && h.sold.sales.length) parts.push(section(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid ${C.line}; border-radius:12px;"><tr><td style="padding:18px 20px;">
 <p style="margin:0 0 4px; font-family:${SANS}; font-size:11px; font-weight:bold; letter-spacing:2px; text-transform:uppercase; color:${C.gold};">What ${esc(h.sold.what)} nearby sold for</p>
-${h.sold.typical ? `<p style="margin:0 0 10px; font-family:${SANS}; font-size:13px; color:${C.body};">Typical price in the last year: <b style="color:${C.ink};">${gbpS(h.sold.typical)}</b></p>` : ''}
+${h.sold.typical ? `<p style="margin:0 0 10px; font-family:${SANS}; font-size:13px; color:${C.body};">Typical price nearby over the last 12 months: <b style="color:${C.ink};">${gbpS(h.sold.typical)}</b></p>` : ''}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${h.sold.sales.slice(0, 3).map((x) => `<tr><td style="padding:7px 0; border-top:1px solid ${C.line}; font-family:${SANS}; font-size:14px; color:${C.ink};">${esc(x.where)}${x.beds != null ? ` <span style="color:${C.gold}; font-size:12px; font-weight:bold;">${x.beds} bed</span>` : ''}<br/><span style="font-size:12px; color:${C.faint};">${esc(x.when)}</span></td><td align="right" style="padding:7px 0; border-top:1px solid ${C.line}; font-family:${SERIF}; font-size:17px; color:${C.ink};">${gbpS(x.price)}</td></tr>`).join('')}</table>
 <p style="margin:10px 0 0; font-family:${SANS}; font-size:11px; line-height:16px; color:${C.faint};">HM Land Registry records the type of home but not its bedrooms, so sizes vary. ${esc(s.credit)}</p>
 </td></tr></table>`, C.card, '8px 40px 14px'))
@@ -485,4 +512,42 @@ ${h.sold.typical ? `<p style="margin:0 0 10px; font-family:${SANS}; font-size:13
     }
   }
   return parts.join('\n')
+}
+
+// ---------- the wording staff can edit (for "Fix these for me") ----------
+
+type Field = { key: string; label: string; value: string; note?: string }
+const BLOCK_WORDS: Partial<Record<BlockKind, Record<string, [string, string?]>>> = {
+  letter: { title: ['Section heading', 'words in *single stars* show in gold'], body: ['Message'] },
+  listings: { title: ['Heading over the listings'] },
+  market: { title: ['Market section heading'], note: ['Note under the market figures'] },
+  article: { tag: ['Article label'], headline: ['Article headline'], body: ['Article text'], linkLabel: ['Article link text'] },
+  guides: { title: ['Guides heading'] },
+  spotlight: { label: ['Small label over the featured home'], why: ['“Why we love it” paragraph', 'when empty, the listing’s own summary is shown instead'] },
+}
+
+/** Every piece of wording in a campaign, as fields the AI can change. */
+export function campaignFields(c: Content): Field[] {
+  const out: Field[] = [
+    { key: 'subject', label: 'Subject line', value: c.subject, note: '{spotlight} becomes the featured home, e.g. "3 bed house in Kenton"' },
+    { key: 'preheader', label: 'Preview line (grey text after the subject in an inbox)', value: c.preheader },
+  ]
+  c.blocks.forEach((b, n) => {
+    const words = BLOCK_WORDS[b.kind]
+    for (const [f, [label, note]] of Object.entries(words ?? {})) out.push({ key: `${b.id}.${f}`, label: `Section ${n + 1}: ${label}`, value: String((b as Record<string, unknown>)[f] ?? ''), note })
+  })
+  return out
+}
+
+/** Puts new wording back into a campaign (unknown keys are ignored). */
+export function withCampaignFields(c: Content, values: Record<string, string>): Content {
+  const next: Content = { ...c, blocks: c.blocks.map((b) => ({ ...b })) }
+  for (const [key, v] of Object.entries(values)) {
+    if (key === 'subject' || key === 'preheader') { next[key] = v; continue }
+    const [id, f] = key.split('.')
+    const b = next.blocks.find((x) => x.id === id)
+    const words = b ? BLOCK_WORDS[b.kind] : undefined
+    if (b && f && words && f in words) (b as Record<string, unknown>)[f] = v
+  }
+  return next
 }

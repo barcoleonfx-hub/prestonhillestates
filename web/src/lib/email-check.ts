@@ -67,3 +67,72 @@ export async function checkEmail(r: { what: string; subject: string; preheader: 
     return { error: 'The check couldn’t run. Try again.' }
   }
 }
+
+// ---------- applying the fixes ----------
+
+/** A part of the email staff can edit: its key, what it is, and what it says now (with any {placeholders}). */
+export type EditableField = { key: string; label: string; value: string; note?: string }
+export type FixIssue = CheckResult['issues'][number]
+
+const Fixed = z.object({
+  changes: z.array(z.object({
+    key: z.string().describe('The key of the field you changed, exactly as given'),
+    value: z.string().describe('The whole new text of that field'),
+  })).describe('Only the fields you changed'),
+  done: z.array(z.string()).describe('Each change you made, in a few plain words, e.g. "Subject now names Ealing Broadway"'),
+  left: z.array(z.object({
+    where: z.string().describe('Where in the email, as in the issue'),
+    todo: z.string().describe('What staff should do instead, in one plain sentence, e.g. "Edit the listing’s title on its property page"'),
+  })).describe('Issues that can’t be fixed by editing these fields (they come from the listing, our records or the layout)'),
+})
+export type FixResult = { changes: { key: string; value: string }[]; done: string[]; left: { where: string; todo: string }[] }
+
+const FIX_SYSTEM = `You are the senior editor at Preston Hill Estates, an independent estate agent at 271 Preston Road, Harrow. A careful check of an email found the issues below. Your job is to make the fixes in the parts of the email staff can edit, and say plainly which issues can't be fixed there.
+
+Rules:
+- Change only what the issues need, and leave everything else in a field exactly as it was: the same wording, paragraphs, line breaks and formatting (**bold**, "- " bullets, *gold words* in headings).
+- Keep every placeholder exactly as written: {first_name}, {name}, {first name}, {sender} and the like are filled in for each reader, so the check saw them already filled. If the issue is about how a placeholder reads, change the wording around it. The one exception is {spotlight} (it becomes the featured home's short title): you may replace it with better plain words when the issue is about it.
+- Every fact must come from the facts we hold or the email itself. Never invent a figure, feature, distance, date or claim; if a fix needs a fact we don't hold, leave it and list it under "left".
+- British English, warm and professional; no clichés or pressure ("won't last", "act fast").
+- Make every "fix" you can; make a "consider" only when it clearly improves the email.
+- Some parts are built automatically from our listings and records (property cards, the facts line under a price, sold prices, nearby stations and places, buttons). You can't edit those here: list each such issue under "left" with what staff should do instead (e.g. edit the listing on its property page, untick that property, or choose another home).`
+
+export async function fixEmail(r: { what: string; issues: FixIssue[]; fields: EditableField[]; subject: string; text: string; propertyId: string | null; enquiryId: string | null; contactId: string | null; staffName: string }): Promise<FixResult | { error: string }> {
+  const k = anthropicKey()
+  if ('error' in k) return { error: k.error }
+  if (!r.fields.length) return { changes: [], done: [], left: r.issues.map((i) => ({ where: i.where, todo: i.suggestion })) }
+  const facts = await emailFacts({ propertyId: r.propertyId, enquiryId: r.enquiryId, threadId: null, contactId: r.contactId, staffName: r.staffName }).catch(() => '')
+  const ask = [
+    `The email: ${r.what}.`,
+    `The issues the check found:\n${r.issues.map((i, n) => `${n + 1}. [${i.severity}] ${i.where}: ${i.problem} Suggested: ${i.suggestion}`).join('\n')}`,
+    `The parts staff can edit (key, what it is, and its text now):\n${r.fields.map((f) => `<field key="${f.key}" what="${f.label}${f.note ? ` (${f.note})` : ''}">\n${f.value}\n</field>`).join('\n')}`,
+    `The whole email as the reader saw it (for context; only the fields above can change):\nSubject: ${r.subject}\n\n${r.text.slice(0, 12000)}`,
+    facts ? `The facts we hold:\n${facts}` : null,
+  ].filter(Boolean).join('\n\n')
+  const client = new Anthropic({ apiKey: k.key })
+  try {
+    const res = await client.beta.messages.parse({
+      model: 'claude-opus-5-5',
+      max_tokens: 16000,
+      betas: ['server-side-fallback-2026-07-01'],
+      fallbacks: 'default',
+      system: FIX_SYSTEM,
+      output_config: { effort: 'medium', format: betaZodOutputFormat(Fixed) },
+      messages: [{ role: 'user', content: ask }],
+    })
+    if (res.stop_reason === 'refusal' || !res.parsed_output) return { error: 'The fixes couldn’t be made this time. Try again.' }
+    const out = res.parsed_output
+    const known = new Map(r.fields.map((f) => [f.key, f.value]))
+    // Only real fields, only real changes, and nobody's name lost on the way ({spotlight} may become plain words).
+    const holders = (t: string) => new Set(t.match(/\{(first_name|first name|name)\}/gi) ?? [])
+    const changes = out.changes.filter((c) => known.has(c.key) && c.value.trim() && c.value !== known.get(c.key))
+      .filter((c) => [...holders(known.get(c.key)!)].every((h) => c.value.includes(h)))
+    return { changes, done: out.done.slice(0, 10), left: out.left.slice(0, 8) }
+  } catch (e) {
+    if (e instanceof Anthropic.AuthenticationError) return { error: 'The ANTHROPIC_API_KEY on the server isn’t valid. Check it in Render’s environment settings.' }
+    if (e instanceof Anthropic.RateLimitError) return { error: 'Too many requests just now. Wait a minute and try again.' }
+    if (e instanceof Anthropic.APIError) return { error: `The fixes couldn’t be made (${e.status ?? 'no answer'}). Try again in a minute.` }
+    console.error('email fix failed', e)
+    return { error: 'The fixes couldn’t be made. Try again.' }
+  }
+}

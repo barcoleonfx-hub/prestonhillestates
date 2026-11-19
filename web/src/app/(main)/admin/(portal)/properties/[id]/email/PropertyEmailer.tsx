@@ -44,7 +44,14 @@ export function PropertyEmailer({ propertyId, prop, sender, rows, skipped, canSe
     return renderEmail(prop, row.recipient, { ...row.draft, ...t }, sender).html
   }, [row, edits, prop, sender])
 
-  const check = useEmailCheck({ propertyId, contactId: row?.recipient.contactId ?? null }, `a personal email about one of our homes to someone it matches${row ? ` (this is ${row.recipient.name}'s; each person gets their own)` : ''}`)
+  const check = useEmailCheck({ propertyId, contactId: row?.recipient.contactId ?? null }, `a personal email about one of our homes to someone it matches${row ? ` (this is ${row.recipient.name}'s; each person gets their own)` : ''}`,
+    row ? {
+      fields: [
+        { key: 'subject', label: 'Subject line', value: text(row).subject },
+        { key: 'message', label: 'Personal note', value: text(row).message, note: 'the photos, price, highlights and why we thought of them are added underneath automatically' },
+      ],
+      apply: (v) => setEdits((e) => ({ ...e, [row.recipient.contactId]: { ...text(row), ...(v.subject != null ? { subject: v.subject } : {}), ...(v.message != null ? { message: v.message } : {}) } })),
+    } : undefined)
   const mail = { subject: row ? text(row).subject : '', html: preview }
   // Grow the preview to the email's full height, again once the photos have loaded.
   useEffect(() => {

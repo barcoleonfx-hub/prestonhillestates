@@ -101,7 +101,16 @@ export function LetterEditor(p: Props) {
   }
 
   const check = useEmailCheck({ propertyId: c.propertyId, contactId: s.toMode === 'one' ? s.one.contactId : null },
-    s.toMode === 'one' ? 'an email to one client, about one of our homes or in general' : 'an email to a list of people, each with their own copy, about one of our homes or in general')
+    s.toMode === 'one' ? 'an email to one client, about one of our homes or in general' : 'an email to a list of people, each with their own copy, about one of our homes or in general',
+    ro ? undefined : {
+      fields: [
+        { key: 'subject', label: 'Subject line', value: c.subject },
+        { key: 'greeting', label: 'Greeting', value: c.greeting, note: '{first name} is filled in for each person' },
+        { key: 'body', label: 'Message', value: c.body, note: 'blank line between paragraphs, **bold**, "- " bullets' },
+        { key: 'signoff', label: 'Sign-off', value: c.signoff },
+      ],
+      apply: (v) => setC(Object.fromEntries(Object.entries(v).filter(([k]) => ['subject', 'greeting', 'body', 'signoff'].includes(k)))),
+    })
   const mail = { subject: rendered.subject, html: rendered.html }
   const ready = !!c.subject.trim() && !!c.body.trim() && count > 0 && !typed.bad.length && size <= attachLimit(count)
   const roleOn = (r: Role) => s.audience.roles.includes(r)

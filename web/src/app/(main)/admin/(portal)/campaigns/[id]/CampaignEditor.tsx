@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  ALL_ROLES, NEWS_LIBRARY, ROLES, fromLibrary, newBlock, renderCampaign,
+  ALL_ROLES, NEWS_LIBRARY, ROLES, campaignFields, fromLibrary, newBlock, renderCampaign, withCampaignFields,
   type Audience, type Block, type BlockKind, type Content, type Reader, type Role, type Shared,
 } from '@/lib/campaign'
 import { countAudience, loadSpotlight, saveCampaign, startCampaign, testCampaign } from '../../../campaign-actions'
@@ -90,7 +90,8 @@ export function CampaignEditor(p: Props) {
   const rendered = useMemo(() => renderCampaign(content, reader, shared, { campaign: name, sender: p.sender, month: p.month, markers: true }), [content, reader, shared, name, p.sender, p.month])
   // The check before it goes: the email as the reader in the preview gets it.
   const spotlightId = content.blocks.find((b): b is Extract<Block, { kind: 'spotlight' }> => b.kind === 'spotlight')?.propertyId ?? null
-  const check = useEmailCheck({ propertyId: spotlightId, contactId: reader.contactId }, `an email newsletter going to ${summary.total.toLocaleString('en-GB')} people, each personalised (this is how ${reader.name || 'someone we have no name for'} gets it)`)
+  const check = useEmailCheck({ propertyId: spotlightId, contactId: reader.contactId }, `an email newsletter going to ${summary.total.toLocaleString('en-GB')} people, each personalised (this is how ${reader.name || 'someone we have no name for'} gets it)`,
+    p.readOnly ? undefined : { fields: campaignFields(content), apply: (v) => setContent((c) => withCampaignFields(c, v)) })
   const mail = { subject: rendered.subject, preheader: rendered.preheader, html: rendered.html }
   const wrap = useRef<HTMLDivElement>(null)
   const [switched, setSwitched] = useState<string | null>(null)

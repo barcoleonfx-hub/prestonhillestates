@@ -3,7 +3,7 @@ import { and, asc, eq, gte, inArray, isNotNull, sql } from 'drizzle-orm'
 import { db, getClient, ready } from '@/db/client'
 import { campaignRecipients, campaigns, contacts, enquiries, letterRecipients, propertyEmails, settings, soldPrices, type Campaign, type Contact } from '@/db/schema'
 import { enquiryLabel } from './enquiry-labels'
-import { ALL_ROLES, renderCampaign, type Audience, type Content, type Listing, type Reader, type Role, type Shared, type Snapshot, type Spotlight } from './campaign'
+import { ALL_ROLES, renderCampaign, unshout, unusualLot, type Audience, type Content, type Listing, type Reader, type Role, type Shared, type Snapshot, type Spotlight } from './campaign'
 import { GUIDES } from './guides'
 import { bulkSender } from './mailbox'
 import { PROPERTY_TYPES, FURNISHING, labelFor } from './options'
@@ -74,10 +74,12 @@ export async function spotlightFor(id: string, base: string): Promise<Spotlight 
     p.channel !== 'let' && p.postcode ? salesOnStreet(p.street ?? p.addressLine1 ?? null, p.postcode, lrTypeFor(p.propertyType), p.bedrooms).catch(() => null) : Promise.resolve(null),
   ])
   const lr = lrTypeFor(p.propertyType)
-  const sales = sold ? [...sold.onStreet, ...(sold.near?.recent ?? []).filter((x) => !sold.onStreet.some((y) => y.postcode === x.postcode && y.soldOn === x.soldOn && y.price === x.price))].slice(0, 3) : []
+  const sales = sold ? [...sold.onStreet, ...(sold.near?.recent ?? []).filter((x) => !sold.onStreet.some((y) => y.postcode === x.postcode && y.soldOn === x.soldOn && y.price === x.price))].slice(0, 3)
+    .sort((a, b) => (a.soldOn < b.soldOn ? 1 : a.soldOn > b.soldOn ? -1 : 0)) : []
   const typical = sold?.near?.stats.byType.find((t) => t.type === lr)?.median ?? null
   return {
-    id: p.id, url: ep.url, channel: ep.channel, address: ep.address, headline: headlineFor(p), priceText: ep.priceText, place: p.locality || p.town || null,
+    id: p.id, url: ep.url, channel: ep.channel, address: ep.address, headline: unshout(headlineFor(p)), priceText: ep.priceText,
+    place: p.locality || [ep.place, p.town].find((x) => x && !/^(greater )?london$/i.test(x)) || ep.outward || null,
     photos, specs: ep.specs, summary: p.summary?.trim() || null, features,
     // Only what's a genuinely short walk: a station 40 minutes away isn't a selling point.
     stations: (area?.stations ?? []).filter((x) => x.minutes <= STATION_WALK_MAX).slice(0, 2).map((x) => ({ name: x.name, lines: x.lines.join(', '), minutes: x.minutes, distance: distanceText(x.metres) })),
@@ -96,7 +98,8 @@ export async function campaignShared(base: string, content?: Content | null): Pr
     const type = labelFor(PROPERTY_TYPES, p.propertyType)
     return {
       id: p.id, url: `${base}/properties/${slugFor(p)}`, photo: p.cover ? (p.cover.url.startsWith('/') ? `${base}${p.cover.url}` : p.cover.url) : null,
-      channel: p.channel === 'let' ? 'let' : 'sale', priceText: priceLabel(p), price: p.price, address: displayAddressFor(p), headline: headlineFor(p),
+      channel: p.channel === 'let' ? 'let' : 'sale', priceText: priceLabel(p), price: p.price, address: unshout(displayAddressFor(p)), headline: unshout(headlineFor(p)),
+      unusual: unusualLot({ address: displayAddressFor(p), headline: headlineFor(p), type, beds: p.bedrooms }),
       specs: [p.bedrooms ? `${p.bedrooms} bed` : '', p.bathrooms ? `${p.bathrooms} bath` : '', type, p.channel === 'let' && p.furnishing ? labelFor(FURNISHING, p.furnishing) : '', p.status === 'under_offer' ? 'Under offer' : ''].filter(Boolean),
       beds: p.bedrooms, outward: outwardIn(p.postcode) ?? outwardIn(p.displayAddress), place: p.locality || p.town || null, publishedAt: p.publishedAt,
     }

@@ -43,7 +43,13 @@ export function EmailComposer({ id, ctx, to, canSend, blocked, chooseKind, start
   const [state, send, pending] = useActionState<SendState, FormData>(sendEnquiryEmail, {})
   const formRef = useRef<HTMLFormElement>(null)
   const pass = useRef(false)
-  const check = useEmailCheck({ enquiryId: id, propertyId: forListing ? propertyId || null : null }, `an email replying to their enquiry: ${t.label}`)
+  const check = useEmailCheck({ enquiryId: id, propertyId: forListing ? propertyId || null : null }, `an email replying to their enquiry: ${t.label}`, {
+    fields: [
+      { key: 'subject', label: 'Subject line', value: subject },
+      { key: 'message', label: 'Message', value: message, note: t.sections.length ? `boxes added below it automatically: ${t.sections.map((x) => x.replace(/-/g, ' ')).join(', ')}` : undefined },
+    ],
+    apply: (v) => { if (v.subject != null) setSubject(v.subject); if (v.message != null) setMessage(v.message); setEdited(true) },
+  })
 
   // A new template, or a new time typed in: fresh wording, unless staff have rewritten it themselves.
   useEffect(() => {

@@ -104,6 +104,8 @@ export function emailProperty(p: FullProperty, base: string): EmailProperty {
   const specs = [
     p.bedrooms ? `${p.bedrooms} bed` : '', p.bathrooms ? `${p.bathrooms} bath` : '', p.receptions ? `${p.receptions} reception` : '',
     type ?? '', p.channel === 'sale' && p.tenure ? labelFor(TENURES, p.tenure) : '', p.channel === 'let' && p.furnishing ? labelFor(FURNISHING, p.furnishing) : '',
+    // Material information a buyer or tenant needs, where we hold it.
+    p.councilTaxBand?.trim() ? `Council tax ${p.councilTaxBand.trim().toUpperCase()}` : '', p.epcCurrent?.trim() ? `EPC ${p.epcCurrent.trim().toUpperCase()}` : '',
   ].filter(Boolean)
   return {
     id: p.id, ref: p.ref, url: `${base}/properties/${slugFor(p)}`, channel: p.channel === 'let' ? 'let' : 'sale',
