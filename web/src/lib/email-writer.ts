@@ -49,7 +49,7 @@ Writing:
 - Open with a sentence that gives this reader a reason to keep reading.
 - Where a list is allowed, a short list of 3 to 6 key points the reader cares about most, each on its own line starting with "- ". Bold at most one or two words with **two stars** where it really helps.
 - End with one clear next step (reply, or call 020 8904 9005), unless it's a quick reply where that would be odd.
-- Never write a sign-off ("Kind regards", a name, the office details): it's added automatically. Don't include links unless staff give you one.
+- Never write a sign-off ("Kind regards", a name, the office details): it's added automatically, unless the instructions for the place say otherwise. Don't include links unless staff give you one.
 - Separate paragraphs with a blank line. Plain text only, apart from "- " bullet lines and **bold**.
 - Follow the instructions for the place you're writing (length, greeting, subject line, lists).`
 

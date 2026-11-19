@@ -111,15 +111,23 @@ export const AI_PLACES = {
   match: { what: 'a short personal note to one buyer or tenant about a home that matches what they want. The photos, price, highlights and why we thought of them are added underneath automatically, so don’t repeat those', words: '60 to 110', subject: false, greeting: true, bullets: false },
   enquiry: { what: 'an email replying to their enquiry', words: '140 to 240', subject: true, greeting: true, bullets: true },
   'enquiry-reply': { what: 'a reply in an ongoing email conversation about their enquiry (our name and office details are added below it)', words: '30 to 140', subject: false, greeting: true, bullets: false },
+  whatsapp: { what: 'a WhatsApp message to them from our office phone, not an email. Use WhatsApp formatting: *single stars* for bold (never double stars), no headings, short paragraphs, and at most a few "- " bullet lines. Keep any link and any "Reply STOP" line from the brief exactly, and if the brief ends with a name (e.g. "Jamil, Preston Hill Estates"), end the same way', words: '50 to 150', subject: false, greeting: true, bullets: true },
   'thread-reply': { what: 'a reply to the latest email in this conversation (our name and office details are added below it, with their email quoted underneath)', words: '30 to 140', subject: false, greeting: true, bullets: false },
 } as const
 export type AiPlace = keyof typeof AI_PLACES
 
 /** Tidy for a place: the greeting stays where the message includes one, and goes where the email adds its own. */
 export function tidyFor(place: AiPlace, body: string): string {
-  if (!AI_PLACES[place].greeting) return tidyBody(body)
-  const lines = body.replace(/\r/g, '').trim().split('\n')
-  const greeting = /^(dear|hi|hello|good (morning|afternoon|evening))\b.{0,40},?$/i.test(lines[0]?.trim() ?? '') ? lines.shift()!.trim() : null
-  const rest = tidyBody(lines.join('\n'))
-  return greeting ? `${greeting}\n\n${rest}` : rest
+  // WhatsApp bolds *single stars*.
+  if (place === 'whatsapp') body = body.replace(/\*\*(.+?)\*\*/g, '*$1*')
+  let out: string
+  if (!AI_PLACES[place].greeting) out = tidyBody(body)
+  else {
+    const lines = body.replace(/\r/g, '').trim().split('\n')
+    const greeting = /^(dear|hi|hello|good (morning|afternoon|evening))\b.{0,40},?$/i.test(lines[0]?.trim() ?? '') ? lines.shift()!.trim() : null
+    const rest = tidyBody(lines.join('\n'))
+    out = greeting ? `${greeting}\n\n${rest}` : rest
+  }
+  // WhatsApp messages use "•" bullets, like the ready-written ones.
+  return place === 'whatsapp' ? out.replace(/^- /gm, '• ') : out
 }

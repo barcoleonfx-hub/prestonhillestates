@@ -47,6 +47,8 @@ describe('tidying for each place', () => {
     const t = 'Hi Sam,\n\nThanks for your email.\n\nKind regards,\nJamil'
     expect(tidyFor('thread-reply', t)).toBe('Hi Sam,\n\nThanks for your email.')
     expect(tidyFor('letter', t)).toBe('Thanks for your email.')
+    expect(tidyFor('whatsapp', 'Hi Sam,\n\nThe **3 bedroom house** is still available.')).toBe('Hi Sam,\n\nThe *3 bedroom house* is still available.')
+    expect(tidyFor('whatsapp', 'Hi Sam,\n\n• Garden\n- Parking')).toBe('Hi Sam,\n\n• Garden\n• Parking')
     expect(tidyFor('campaign-letter', 'Hello {first_name},\n\nNews from the branch.')).toBe('Hello {first_name},\n\nNews from the branch.')
   })
 })
