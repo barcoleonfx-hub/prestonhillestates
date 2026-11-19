@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation'
 import { ROLES, type Role } from '@/lib/campaign'
 import { SEND_NOW_MAX, attachLimit, parseAddresses, renderLetter, type LetterProperty } from '@/lib/letter-email'
 import type { LetterFile, ToMode } from '@/lib/letters'
-import { aiWriteLetter, findContacts, groupCount, propertyBox, removeLetterFile, saveLetter, sendLetterAction, testLetter, uploadLetterFile, type LetterState } from '../../../../letter-actions'
-import { AUDIENCES, LENGTHS, TONES, type AudienceKey, type LengthKey, type ToneKey } from '@/lib/email-writer-rules'
+import { findContacts, groupCount, propertyBox, removeLetterFile, saveLetter, sendLetterAction, testLetter, uploadLetterFile, type LetterState } from '../../../../letter-actions'
+import { AiWrite } from '../../../AiWrite'
 
 type Props = {
   id: string; initial: LetterState; files: LetterFile[]; properties: { id: string; channel: 'sale' | 'let'; label: string }[]
@@ -35,11 +35,6 @@ export function LetterEditor(p: Props) {
     const email = EMAIL_OK(typedOne.email) ? typedOne.email.trim().toLowerCase() : ''
     if (email !== s.one.email || typedOne.name.trim() !== s.one.name) setS((x) => ({ ...x, one: { contactId: null, email, name: typedOne.name.trim() } }))
   }, [typedOne]) // eslint-disable-line react-hooks/exhaustive-deps
-  // Writing the message with AI: the choices, what it said about who it wrote for, and the words before (to undo).
-  const [ai, setAi] = useState<{ audience: AudienceKey; length: LengthKey; tone: ToneKey; notes: string }>({ audience: 'auto', length: 'standard', tone: 'warm', notes: '' })
-  const [aiBusy, setAiBusy] = useState<'' | 'write' | 'improve'>('')
-  const [aiSaid, setAiSaid] = useState<{ ok: boolean; text: string; who?: string } | null>(null)
-  const [undo, setUndo] = useState<{ subject: string; body: string } | null>(null)
   const first = useRef(true)
   const ro = p.sent
   const c = s.content
@@ -102,20 +97,6 @@ export function LetterEditor(p: Props) {
     setNote({ ok: true, text: res.queued ? `Sending to ${res.queued} people in the background.${skipped}` : `Sent to ${res.sent}${res.failed ? `; ${res.failed} couldn’t be sent` : ''}.${skipped}` })
     router.refresh()
   }
-
-  async function writeWithAi(mode: 'write' | 'improve') {
-    if (mode === 'write' && c.body.trim() && !window.confirm('Replace your message with a new one written by AI? (You can undo it.)')) return
-    setAiBusy(mode); setAiSaid(null)
-    const r = await aiWriteLetter({ propertyId: c.propertyId, ...ai, mode, subject: c.subject, draft: c.body, contactId: s.toMode === 'one' ? s.one.contactId : null })
-      .catch(() => ({ error: 'The AI couldn’t be reached. Try again.' }))
-    setAiBusy('')
-    if ('error' in r) { setAiSaid({ ok: false, text: r.error }); return }
-    setUndo({ subject: c.subject, body: c.body })
-    setC({ subject: r.subject || c.subject, body: r.body })
-    setAiSaid({ ok: true, who: r.audience, text: r.why })
-  }
-  const channel = p.properties.find((x) => x.id === c.propertyId)?.channel
-  const audiences = AUDIENCES.filter((a) => (channel === 'let' ? a.key !== 'first-time' && a.key !== 'downsizer' : a.key !== 'tenant'))
 
   const ready = !!c.subject.trim() && !!c.body.trim() && count > 0 && !typed.bad.length && size <= attachLimit(count)
   const roleOn = (r: Role) => s.audience.roles.includes(r)
@@ -186,35 +167,9 @@ export function LetterEditor(p: Props) {
 
         <section className="card card-pad">
           <h2 className="cmp-h">The email</h2>
-          {!ro ? (
-            <div className="ai-box">
-              <div className="ai-head"><b>Write it with AI</b><span>Uses everything on the chosen property’s listing (description, key features, rooms and facts) and only that. Check it before you send.</span></div>
-              <div className="ai-grid">
-                <label className="field ai-who"><span className="flabel">Written for</span>
-                  <select className="select" value={ai.audience} onChange={(e) => setAi({ ...ai, audience: e.target.value as AudienceKey })}>{audiences.map((a) => <option key={a.key} value={a.key}>{a.label}</option>)}</select>
-                </label>
-                <label className="field"><span className="flabel">Length</span>
-                  <select className="select" value={ai.length} onChange={(e) => setAi({ ...ai, length: e.target.value as LengthKey })}>{(Object.keys(LENGTHS) as LengthKey[]).map((k) => <option key={k} value={k}>{LENGTHS[k].replace(/ \(.*$/, '')}</option>)}</select>
-                </label>
-                <label className="field"><span className="flabel">Tone</span>
-                  <select className="select" value={ai.tone} onChange={(e) => setAi({ ...ai, tone: e.target.value as ToneKey })}>{(Object.keys(TONES) as ToneKey[]).map((k) => <option key={k} value={k}>{TONES[k].replace(/ and .*$/, '').replace(/^Short /, '')}</option>)}</select>
-                </label>
-              </div>
-              <label className="field"><span className="flabel">Anything to mention? <span className="hint">(optional)</span></span>
-                <input className="input" value={ai.notes} maxLength={600} onChange={(e) => setAi({ ...ai, notes: e.target.value })} placeholder="e.g. Open house Saturday 11 to 1. Chain free. New kitchen fitted this year." />
-              </label>
-              <div className="ai-actions">
-                <button type="button" className="btn btn-dark" disabled={!!aiBusy || !c.propertyId} onClick={() => writeWithAi('write')}>{aiBusy === 'write' ? 'Writing… (about 20 seconds)' : 'Write it for me'}</button>
-                <button type="button" className="btn btn-ghost" disabled={!!aiBusy || !c.body.trim()} onClick={() => writeWithAi('improve')}>{aiBusy === 'improve' ? 'Improving…' : 'Improve my message'}</button>
-                {undo && !aiBusy ? <button type="button" className="btn btn-ghost" onClick={() => { setC(undo); setUndo(null); setAiSaid(null) }}>Undo</button> : null}
-              </div>
-              {!c.propertyId ? <p className="hint">Choose the property under “The property” first. “Improve my message” works without one.</p> : null}
-              {aiSaid ? <p className={`notice ${aiSaid.ok ? 'ok' : 'err'}`}>{aiSaid.ok ? <>Written for <b>{aiSaid.who}</b>: {aiSaid.text} Read it through and change anything you like.</> : aiSaid.text}</p> : null}
-            </div>
-          ) : null}
           <div className="field"><label htmlFor="lt-subj">Subject line</label><input id="lt-subj" className="input" value={c.subject} onChange={(e) => setC({ subject: e.target.value })} disabled={ro} placeholder="e.g. 3 bed house on Kenton Road: the brochure you asked for" /></div>
           <div className="field"><label htmlFor="lt-greet">Greeting</label><input id="lt-greet" className="input" value={c.greeting} onChange={(e) => setC({ greeting: e.target.value })} disabled={ro} /><span className="hint">{'{first name}'} is filled in for each person; with no name it becomes “Hello,”.</span></div>
-          <div className="field"><label htmlFor="lt-body">Message</label><textarea id="lt-body" className="textarea lt-body" rows={12} value={c.body} onChange={(e) => setC({ body: e.target.value })} disabled={ro} placeholder={'Write it as you would a letter.\n\nLeave a blank line between paragraphs. **Two stars** make words bold, links work as they are, and lines starting with "- " become bullet points.'} /></div>
+          <div className="field"><label htmlFor="lt-body">Message</label>{!ro ? <AiWrite place="letter" ctx={{ propertyId: c.propertyId, contactId: s.toMode === 'one' ? s.one.contactId : null }} value={c.body} onChange={(v) => setC({ body: v })} subject={c.subject} onSubject={(v) => setC({ subject: v })} /> : null}<textarea id="lt-body" className="textarea lt-body" rows={12} value={c.body} onChange={(e) => setC({ body: e.target.value })} disabled={ro} placeholder={'Write it as you would a letter.\n\nLeave a blank line between paragraphs. **Two stars** make words bold, links work as they are, and lines starting with "- " become bullet points.'} /></div>
         </section>
 
         <section className="card card-pad">

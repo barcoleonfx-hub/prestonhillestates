@@ -17,8 +17,6 @@ import { bulkSender } from '@/lib/mailbox'
 import { knownBase } from '@/lib/property-email-data'
 import { isLocalStorage, localPath, writeLocal } from '@/lib/storage'
 import { now, uid } from '@/lib/util'
-import { writePropertyEmail, type WriteRequest, type WriterResult } from '@/lib/email-writer'
-import { AUDIENCES, LENGTHS, TONES, type LengthKey, type ToneKey } from '@/lib/email-writer-rules'
 
 export type LetterState = {
   name: string
@@ -187,28 +185,3 @@ export async function sendLetterAction(id: string, s: LetterState): Promise<{ ok
   return { ok: r.ok, error: r.error, sent: r.sent, failed: r.failed, queued: r.queued, skipped: r.skipped?.map((x) => ({ email: x.email, reason: x.reason })) }
 }
 
-// ---------- writing the message with AI ----------
-
-const aiRecent = new Map<string, number[]>()
-/** At most this many AI drafts per person per hour (each costs a few pence). */
-const AI_PER_HOUR = 40
-
-/** Writes or improves the message with AI, for staff to check. Nothing is saved or sent until they do. */
-export async function aiWriteLetter(r: WriteRequest): Promise<WriterResult | { error: string }> {
-  const me = await requireAdmin()
-  const times = (aiRecent.get(me.id) ?? []).filter((t) => t > Date.now() - 3600_000)
-  if (times.length >= AI_PER_HOUR) return { error: `That’s ${AI_PER_HOUR} AI drafts in the last hour. Try again a little later.` }
-  aiRecent.set(me.id, [...times, Date.now()])
-  const pick = <T extends string>(v: unknown, ok: readonly T[], d: T): T => (ok.includes(v as T) ? (v as T) : d)
-  const res = await writePropertyEmail({
-    propertyId: typeof r.propertyId === 'string' && r.propertyId ? r.propertyId : null,
-    audience: pick(r.audience, AUDIENCES.map((a) => a.key), 'auto'),
-    length: pick(r.length, Object.keys(LENGTHS) as LengthKey[], 'standard'),
-    tone: pick(r.tone, Object.keys(TONES) as ToneKey[], 'warm'),
-    notes: String(r.notes ?? '').slice(0, 600), mode: r.mode === 'improve' ? 'improve' : 'write',
-    subject: String(r.subject ?? '').slice(0, 200), draft: String(r.draft ?? '').slice(0, 6000),
-    contactId: typeof r.contactId === 'string' && r.contactId ? r.contactId : null,
-  })
-  if (!('error' in res)) await audit(me.id, 'AI email draft', 'letter', r.propertyId ?? '-', res.audience)
-  return res
-}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { factSheet, readerNotes, tidyBody, type WriterHome } from './email-writer-rules'
+import { factSheet, readerNotes, tidyBody, tidyFor, type WriterHome } from './email-writer-rules'
 
 const home: WriterHome = {
   channel: 'sale', status: 'available', headline: 'Extended **family** home', address: 'Carlton Avenue East, Wembley HA9', price: 'Guide price £650,000',
@@ -39,5 +39,14 @@ describe('tidying the body', () => {
     expect(tidyBody('Dear Sam,\n\nA lovely home.\n\n• Garden\n* Parking\n\n\n\nCall us.\n\nKind regards,\nJamil')).toBe('A lovely home.\n\n- Garden\n- Parking\n\nCall us.')
     expect(tidyBody('Hi there,\nText')).toBe('Text')
     expect(tidyBody('Plain text only.')).toBe('Plain text only.')
+  })
+})
+
+describe('tidying for each place', () => {
+  it('keeps the greeting where the message has one, and drops it where the email adds its own', () => {
+    const t = 'Hi Sam,\n\nThanks for your email.\n\nKind regards,\nJamil'
+    expect(tidyFor('thread-reply', t)).toBe('Hi Sam,\n\nThanks for your email.')
+    expect(tidyFor('letter', t)).toBe('Thanks for your email.')
+    expect(tidyFor('campaign-letter', 'Hello {first_name},\n\nNews from the branch.')).toBe('Hello {first_name},\n\nNews from the branch.')
   })
 })

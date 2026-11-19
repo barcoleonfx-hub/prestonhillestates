@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { MAX_RECIPIENTS, gapsIn, parseRecipients, renderTailored, type EmailImage, type TailoredContent } from '@/lib/tailored-email'
 import { saveTailored, sendTailored, testTailored, uploadEmailImage, type SendResult } from '../../../../tailored-actions'
+import { AiWrite } from '../../../AiWrite'
 
 export type ListingPick = { id: string; label: string; title: string; address: string; price: string; url: string; facts: string; photos: EmailImage[] }
 
@@ -131,7 +132,7 @@ export function TailoredEditor(p: Props) {
             <div className="field"><label>Greeting <span className="hint">({'{name}'} = their name)</span></label>{tx(c.greeting, (v) => set('greeting', v))}</div>
             <div className="field"><label>When there’s no name</label>{tx(c.fallbackName, (v) => set('fallbackName', v), 'Sir or Madam')}</div>
           </div>
-          <div className="field"><label>Opening</label>{ta(c.intro, (v) => set('intro', v), 6)}<span className="hint">A blank line starts a new paragraph.</span></div>
+          <div className="field"><label>Opening</label><AiWrite place="tailored-intro" ctx={{ about: [c.subject && `Subject: ${c.subject}`, c.eyebrow && `Small heading: ${c.eyebrow}`, c.headline && `Big heading: ${c.headline.replace(/\*/g, '')}`, c.spotlight.show && c.spotlight.title ? `It features a property: ${c.spotlight.title}` : ''].filter(Boolean).join('. ') }} value={c.intro} onChange={(v) => set('intro', v)} disabled={ro} />{ta(c.intro, (v) => set('intro', v), 6)}<span className="hint">A blank line starts a new paragraph.</span></div>
         </section>
 
         <section className="card card-pad">

@@ -1,6 +1,7 @@
 'use client'
 import { useActionState, useEffect, useRef } from 'react'
 import { replyToEnquiry, type ReplyState } from '../../../enquiry-email-actions'
+import { AiWrite } from '../../AiWrite'
 
 /** Reply in the conversation: goes in the same email thread in their inbox, and is added here. */
 export function ReplyBox({ id, name, disabled }: { id: string; name: string; disabled: string | null }) {
@@ -12,6 +13,7 @@ export function ReplyBox({ id, name, disabled }: { id: string; name: string; dis
     <form ref={form} action={send} className="cv-reply">
       <input type="hidden" name="id" value={id} />
       <label htmlFor="cv-body" className="sr-only">Your reply</label>
+      <AiWrite place="enquiry-reply" ctx={{ enquiryId: id }} target="cv-body" />
       <textarea id="cv-body" name="body" className="input" rows={4} placeholder={`Reply to ${name}…`} />
       {state.error ? <div className="notice err">{state.error}</div> : null}
       {state.ok ? <div className="notice ok">Sent, in the same email thread. It’s in the conversation above.</div> : null}

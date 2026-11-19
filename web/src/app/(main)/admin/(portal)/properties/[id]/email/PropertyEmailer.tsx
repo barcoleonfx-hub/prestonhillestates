@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { renderEmail, type Draft, type EmailProperty, type EmailRecipient, type Sender } from '@/lib/property-email'
 import { sendPropertyEmails, sendPropertyEmailTest } from '../../../../property-email-actions'
+import { AiWrite } from '../../../AiWrite'
 
 export type Row = {
   recipient: EmailRecipient
@@ -186,6 +187,7 @@ export function PropertyEmailer({ propertyId, prop, sender, rows, skipped, canSe
           </div>
           <div className="field" style={{ marginTop: 12 }}>
             <label htmlFor="pm-message">Your message</label>
+            <AiWrite place="match" key={row.recipient.contactId} ctx={{ propertyId, contactId: row.recipient.contactId, about: `Writing to ${row.recipient.name}. Why they match: ${row.reasons.join('; ')}.${row.recipient.said.length ? ` They mentioned: ${row.recipient.said.join(', ')}.` : ''}` }} value={text(row).message} onChange={(v) => setText('message', v)} />
             <textarea id="pm-message" className="textarea" rows={9} value={text(row).message} onChange={(e) => setText('message', e.target.value)} maxLength={6000} />
             <span className="hint">The photos, price, “Why we thought of you” and highlights are added underneath automatically, picked for this person.</span>
           </div>
