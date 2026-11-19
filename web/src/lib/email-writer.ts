@@ -8,6 +8,7 @@ import { contacts, enquiries, enquiryMessages, mailMessages, mailThreads } from 
 import { enquiryLabel, isValuation, sortEnquiry } from './enquiry-labels'
 import { shareFor } from './booklet-share'
 import { anthropicKey } from './anthropic-key'
+import { enquiryWorkspace } from './enquiry-workspace'
 import { COUNCIL_TAX_BANDS, FURNISHING, PROPERTY_TYPES, TENURES, labelFor } from './options'
 import { displayAddressFor, getProperty, priceLabel, slugFor } from './properties'
 import { knownBase } from './property-email-data'
@@ -40,6 +41,8 @@ Accuracy rules. These are not negotiable:
 - State the price exactly as given. Where the fact sheet has them, include the material facts a buyer needs: tenure, council tax band and, for leasehold homes, the lease remaining and charges.
 - Never make up things you don't know, such as viewing times, whether an offer was accepted, availability dates or prices. If the reply needs them and you don't have them, say we'll confirm, or ask the person.
 - Describe who a home suits by what they need (space, a garden, a short commute, being easy to let). Never say or imply that anyone is unwelcome or unsuitable because of age, sex, religion, ethnicity, disability or any other personal characteristic.
+
+Every email should be exemplary: the kind of email the best independent agent in London would be proud to send. Specific and generous with useful detail drawn from the facts you have (the home's best features, the rooms, local sold prices, their report, our reviews), never generic or templated. Use the facts; don't pad.
 
 Writing:
 - Warm, confident and specific. Short paragraphs. No clichés ("nestled", "boasting", "deceptively spacious", "early viewing highly recommended", "I hope this email finds you well"), no exclamation marks, no emoji.
@@ -78,25 +81,37 @@ export type AiRequest = {
   about: string
   /** What staff want it to say (optional). */
   instruction: string
+  /** "write": the best version (from the preset or draft in the box, if any). "improve": change it as staff ask. */
   mode: 'write' | 'improve'
   subject: string
   draft: string
+  /** Who's writing (for the enquiry's details). */
+  staffName?: string
 }
 
 const clip = (t: string | null | undefined, n: number) => { const x = (t ?? '').replace(/\r/g, '').trim(); return x.length > n ? `${x.slice(0, n)}…` : x }
 const day = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/London' })
 
 /** The enquiry, in words: who, what kind, what they said, their report link, and the conversation so far. */
-async function enquiryBrief(id: string): Promise<{ text: string; propertyId: string | null; contactId: string | null } | null> {
+async function enquiryBrief(id: string, staffName: string): Promise<{ text: string; propertyId: string | null; contactId: string | null } | null> {
   const e = await db.query.enquiries.findFirst({ where: eq(enquiries.id, id) })
   if (!e) return null
   const side = sortEnquiry(e).side
-  const report = isValuation(e) ? await shareFor(e.id).then(async (t) => `${await knownBase()}/report/${t}`).catch(() => null) : null
+  // The same facts the preset emails use: their home, sold prices near it, our figure and evidence, reviews.
+  const ctx = (await enquiryWorkspace(id, { name: staffName }).catch(() => null))?.ctx ?? null
+  const report = ctx?.report?.url ?? (isValuation(e) ? await shareFor(e.id).then(async (t) => `${await knownBase()}/report/${t}`).catch(() => null) : null)
+  const review = ctx?.brand ? (side === 'lettings' ? ctx.brand.lettings : ctx.brand.sales) ?? ctx.brand.sales ?? ctx.brand.lettings : null
   const msgs = await db.select().from(enquiryMessages).where(eq(enquiryMessages.enquiryId, id)).orderBy(desc(enquiryMessages.sentAt)).limit(6)
   const lines = [
     `The enquiry: ${enquiryLabel(e)}${side ? ` (${side})` : ''}, from ${e.name}, received ${day(e.createdAt)}.`,
     e.message ? `What they sent us:\n${clip(e.message, 2000)}` : null,
-    report ? `Their personal property report (a free report we prepared for their home): ${report}` : null,
+    ctx?.address || ctx?.postcode ? `Their home${isValuation(e) ? ' (the one to value)' : ''}: ${[ctx.address, ctx.postcode].filter(Boolean).join(', ')}` : null,
+    ctx?.sold?.length ? `Recent sales near them (HM Land Registry; you may quote these exactly):\n${ctx.sold.map((x) => `- ${x.where}: ${x.type}, ${x.price}, sold ${x.when}`).join('\n')}` : null,
+    ctx?.figure ? `Our valuation figure: ${ctx.figure}` : null,
+    ctx?.evidence?.length ? `The comparable homes behind our figure:\n${ctx.evidence.map((x) => `- ${x.where}: ${x.price} (${x.what})`).join('\n')}` : null,
+    report ? `Their personal property report (a free report we prepared for their home, at a private link): ${report}` : null,
+    ctx?.brand?.rating && ctx.brand.count && ctx.brand.count >= 5 ? `Our Google rating: ${ctx.brand.rating.toFixed(1)} from ${ctx.brand.count} reviews (you may mention this exactly).` : null,
+    review ? `A real client review you may quote word for word (or not use): "${clip(review.text, 400)}" (${review.name})` : null,
     msgs.length ? `The email conversation so far, newest last:\n${msgs.reverse().map((m) => `--- ${m.direction === 'in' ? `From ${e.name}` : 'From us'}, ${day(m.sentAt)}${m.subject ? ` · ${m.subject}` : ''}\n${clip(m.body, 900)}`).join('\n')}` : null,
   ]
   return { text: lines.filter(Boolean).join('\n\n'), propertyId: e.propertyId, contactId: e.contactId }
@@ -118,15 +133,15 @@ export async function writeEmail(r: AiRequest): Promise<WriterResult | { error: 
   const key = k.key
   await ready()
   const place = AI_PLACES[r.place]
-  const enq = r.enquiryId ? await enquiryBrief(r.enquiryId).catch(() => null) : null
+  const enq = r.enquiryId ? await enquiryBrief(r.enquiryId, r.staffName ?? '').catch(() => null) : null
   const propertyId = r.propertyId ?? enq?.propertyId ?? null
   const home = propertyId ? await writerHome(propertyId).catch(() => null) : null
   const thread = r.threadId ? await threadBrief(r.threadId).catch(() => null) : null
   const contactId = r.contactId ?? enq?.contactId ?? null
   const c = contactId ? await db.query.contacts.findFirst({ where: eq(contacts.id, contactId) }) : null
   const reader = c ? readerNotes({ role: c.roles ? roleLabel(c.roles.split(',')[0]).toLowerCase() : null, minBeds: c.minBeds, maxPrice: c.maxPrice, areas: c.areas, position: c.position }) : null
-  if (r.mode === 'improve' && !r.draft.trim()) return { error: 'There’s nothing to improve yet. Write something first, or use “Write it”.' }
-  if (r.mode === 'write' && !home && !enq && !thread && !r.instruction.trim() && !r.about.trim()) return { error: 'Tell the AI what to say (type it in the box), or choose the property first.' }
+  if (r.mode === 'improve' && !r.draft.trim()) return { error: 'There’s nothing to change yet: press Write with AI first.' }
+  if (!home && !enq && !thread && !r.instruction.trim() && !r.about.trim() && !r.draft.trim()) return { error: 'There’s nothing to write about yet: choose the property first (or type a few words in the box).' }
   const ask = [
     `You're writing ${place.what}. Aim for about ${place.words} words.`,
     place.subject ? 'Also write a subject line (under 70 characters).' : 'No subject line is needed: leave the subject empty.',
@@ -137,8 +152,11 @@ export async function writeEmail(r: AiRequest): Promise<WriterResult | { error: 
     home ? `The home:\n${factSheet(home)}` : null,
     reader ? `What this person told us they're looking for: ${reader} Make it relevant to them, without repeating their details back word for word.` : null,
     r.about.trim() ? `From the page: ${clip(r.about, 600)}` : null,
-    r.instruction.trim() ? `What our staff want it to say (it's true; follow it): ${clip(r.instruction, 800)}` : null,
-    r.mode === 'improve' ? `Improve this draft: keep its facts and anything personal, fix the order and wording, and make it more effective.${place.subject ? ` Current subject: ${r.subject.trim() || '(none)'}` : ''}\nCurrent message:\n${clip(r.draft, 5000)}` : 'Write the message.',
+    r.mode === 'improve'
+      ? `Here is the current message. Change it as our staff ask: ${clip(r.instruction, 800) || 'make it better'}. Keep everything else that works, and every fact in it.${place.subject ? ` Current subject: ${r.subject.trim() || '(none)'}` : ''}\nCurrent message:\n${clip(r.draft, 5000)}`
+      : r.draft.trim()
+        ? `Here is what's in the box now: usually our standard wording for this email, or staff's own notes. Treat it as the brief. Keep its purpose and every specific detail in it (dates, times, prices, figures, names, links) and anything personal, then write the best possible version: richer, more specific and more persuasive, using the facts above.${place.subject ? ` Current subject: ${r.subject.trim() || '(none)'}` : ''}${r.instruction.trim() ? `\nStaff also want: ${clip(r.instruction, 800)}` : ''}\nCurrent message:\n${clip(r.draft, 5000)}`
+        : `Write the message.${r.instruction.trim() ? ` Staff want it to say (it's true; follow it): ${clip(r.instruction, 800)}` : ''}`,
   ].filter(Boolean).join('\n\n')
 
   // A key pasted with a space or line break around it still works.
