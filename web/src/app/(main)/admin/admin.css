@@ -1087,6 +1087,22 @@ kbd { font: 600 0.68rem/1 var(--sans, inherit); padding: 3px 6px; border-radius:
 .wa-hint { font-size: 0.8rem; color: var(--faint); margin: 0; }
 .wa-check { display: flex; gap: 8px; align-items: flex-start; font-size: 0.88rem; }
 .wa-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+/* Messages about one of our homes: what to include, beside the message. */
+.wa-box.wide { width: min(1060px, 100%); }
+.wa-split { display: grid; grid-template-columns: minmax(0, 400px) minmax(0, 1fr); gap: 18px; align-items: start; }
+.wa-split .wa-field textarea { min-height: 420px; }
+@media (max-width: 880px) { .wa-split { grid-template-columns: 1fr; } .wa-split .wa-field textarea { min-height: 0; } }
+.wa-prop { display: grid; gap: 12px; max-height: 64vh; overflow-y: auto; padding-right: 4px; }
+.wa-incl { display: grid; gap: 6px; }
+.wa-incl > span { font-size: 0.78rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); display: flex; align-items: center; gap: 8px; }
+.wa-incl > div { display: flex; flex-wrap: wrap; gap: 6px; }
+.wa-incl button[aria-pressed] { font: inherit; font-size: 0.8rem; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface, #fff); color: var(--ink-soft); cursor: pointer; }
+.wa-incl button[aria-pressed='true'] { background: #E8F5EC; border-color: #1F8F4E; color: #14632F; font-weight: 600; }
+.wa-incl button[aria-pressed='true']::before { content: '✓ '; }
+.wa-all { font: inherit; font-size: 0.75rem; text-transform: none; letter-spacing: 0; background: none; border: 0; color: #1F8F4E; text-decoration: underline; cursor: pointer; padding: 0; }
+.wa-feats { display: grid !important; gap: 5px !important; }
+.wa-feats label { display: flex; gap: 8px; align-items: flex-start; font-size: 0.86rem; color: var(--ink); line-height: 1.35; }
+.wa-feats input { margin-top: 2px; accent-color: #1F8F4E; }
 
 /* ---------- follow-ups ---------- */
 .fu-switch { display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 18px; border-left: 4px solid var(--line); }
