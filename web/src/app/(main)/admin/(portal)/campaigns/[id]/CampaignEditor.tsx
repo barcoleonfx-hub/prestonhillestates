@@ -8,6 +8,7 @@ import {
 } from '@/lib/campaign'
 import { countAudience, loadSpotlight, saveCampaign, startCampaign, testCampaign } from '../../../campaign-actions'
 import { PeopleList } from './PeopleList'
+import { AiWrite } from '../../AiWrite'
 
 const KINDS: { kind: BlockKind; label: string; about: string }[] = [
   { kind: 'spotlight', label: 'Property of the week', about: 'One home told properly: photos, why we love it, the area, sold prices' },
@@ -291,6 +292,7 @@ function BlockFields({ b, update, shared, ro, pickSpotlight }: { b: Block; updat
           {b.propertyId && !h ? <p className="card-sub">Loading its details…</p> : null}
           {h ? <p className="card-sub">{h.photos.length} photo{h.photos.length === 1 ? '' : 's'} · {h.features.length} features · {h.stations.length ? `${h.stations[0].name} ${h.stations[0].minutes} min walk` : 'no station found'}{h.sold ? ` · ${h.sold.sales.length} ${h.sold.what} sold nearby` : h.channel === 'sale' ? ' · no similar sales found nearby' : ''}{h.channel === 'let' ? '. It’s to let: send it to tenants.' : '.'}</p> : null}
           <F label="Why we love it" hint="Two or three sentences in your own words: what you’d tell a friend about it. {first_name} works here. Left blank, the listing’s summary is used.">
+            <AiWrite place="campaign-why" ctx={{ propertyId: b.propertyId }} value={b.why} onChange={(v) => update({ why: v })} disabled={ro || !b.propertyId} />
             <textarea className="textarea" rows={4} value={b.why} onChange={(e) => update({ why: e.target.value })} disabled={ro} placeholder="e.g. The garden gets the sun all afternoon, and you can walk to Preston Road station in five minutes. Homes on this road rarely come up." />
           </F>
           <div className="cmp-two">
@@ -304,7 +306,7 @@ function BlockFields({ b, update, shared, ro, pickSpotlight }: { b: Block; updat
       return (
         <div className="cmp-fields">
           <F label="Heading" hint="Put a word in *asterisks* to make it gold italic, like The Hill *Report*."><input className="input" value={b.title} onChange={(e) => update({ title: e.target.value })} disabled={ro} /></F>
-          <F label="Message" hint="{first_name} becomes each person’s first name. Leave a blank line between paragraphs."><textarea className="textarea" rows={6} value={b.body} onChange={(e) => update({ body: e.target.value })} disabled={ro} /></F>
+          <F label="Message" hint="{first_name} becomes each person’s first name. Leave a blank line between paragraphs."><AiWrite place="campaign-letter" ctx={{ about: `The newsletter section is headed “${b.title.replace(/\*/g, '')}”. Listings and local sold prices follow it in the email.` }} value={b.body} onChange={(v) => update({ body: v })} disabled={ro} /><textarea className="textarea" rows={6} value={b.body} onChange={(e) => update({ body: e.target.value })} disabled={ro} /></F>
         </div>
       )
     case 'listings':

@@ -2,22 +2,6 @@
 // writer may use), the choices staff make, and tidying what comes back so it fits the email (no greeting or sign-off,
 // which the email adds itself; "- " bullets and **bold** as the email understands them).
 
-export const AUDIENCES = [
-  { key: 'auto', label: 'Let the AI decide' },
-  { key: 'first-time', label: 'First-time buyers' },
-  { key: 'family', label: 'Families' },
-  { key: 'investor', label: 'Investors and landlords' },
-  { key: 'downsizer', label: 'Downsizers' },
-  { key: 'professional', label: 'Professionals and couples' },
-  { key: 'tenant', label: 'Tenants' },
-] as const
-export type AudienceKey = (typeof AUDIENCES)[number]['key']
-
-export const LENGTHS = { short: 'Short (about 90 words)', standard: 'Standard (about 160 words)', detailed: 'Detailed (about 260 words)' } as const
-export type LengthKey = keyof typeof LENGTHS
-export const TONES = { warm: 'Warm and personal', polished: 'Polished and professional', punchy: 'Short and punchy' } as const
-export type ToneKey = keyof typeof TONES
-
 /** A home as the writer sees it. Every value comes from the listing; anything missing is simply left out. */
 export type WriterHome = {
   channel: 'sale' | 'let'
@@ -116,4 +100,26 @@ export function tidyBody(body: string): string {
   const cut = lines.findIndex((l) => signoff.test(l.trim()))
   const kept = cut >= 0 ? lines.slice(0, cut) : lines
   return kept.join('\n').replace(/\n{3,}/g, '\n\n').trim()
+}
+
+/** Every place in the portal where the AI can write, and what it's writing there. */
+export const AI_PLACES = {
+  letter: { what: 'an email about one of our homes, to one person or many (it may be sent to a group)', words: '120 to 220', subject: true, greeting: false, bullets: true },
+  'campaign-letter': { what: 'the opening message of an email newsletter to our contacts', words: '60 to 120', subject: false, greeting: true, bullets: false },
+  'campaign-why': { what: 'the "why we love it" paragraph for a featured home in an email newsletter: two or three sentences, as you would tell a friend', words: '40 to 70', subject: false, greeting: false, bullets: false },
+  'tailored-intro': { what: 'the opening paragraphs of a one-off email to a list of people (the greeting is added separately)', words: '80 to 160', subject: false, greeting: false, bullets: false },
+  match: { what: 'a short personal note to one buyer or tenant about a home that matches what they want. The photos, price, highlights and why we thought of them are added underneath automatically, so don’t repeat those', words: '40 to 90', subject: false, greeting: true, bullets: false },
+  enquiry: { what: 'an email replying to their enquiry', words: '90 to 180', subject: true, greeting: true, bullets: true },
+  'enquiry-reply': { what: 'a reply in an ongoing email conversation about their enquiry (our name and office details are added below it)', words: '30 to 140', subject: false, greeting: true, bullets: false },
+  'thread-reply': { what: 'a reply to the latest email in this conversation (our name and office details are added below it, with their email quoted underneath)', words: '30 to 140', subject: false, greeting: true, bullets: false },
+} as const
+export type AiPlace = keyof typeof AI_PLACES
+
+/** Tidy for a place: the greeting stays where the message includes one, and goes where the email adds its own. */
+export function tidyFor(place: AiPlace, body: string): string {
+  if (!AI_PLACES[place].greeting) return tidyBody(body)
+  const lines = body.replace(/\r/g, '').trim().split('\n')
+  const greeting = /^(dear|hi|hello|good (morning|afternoon|evening))\b.{0,40},?$/i.test(lines[0]?.trim() ?? '') ? lines.shift()!.trim() : null
+  const rest = tidyBody(lines.join('\n'))
+  return greeting ? `${greeting}\n\n${rest}` : rest
 }
