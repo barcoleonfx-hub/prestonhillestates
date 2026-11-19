@@ -38,7 +38,7 @@ export default async function ContactPage({ params, searchParams }: { params: Pr
   ])
   // WhatsApp from their record: about their latest enquiry, if they have one.
   const [latest] = await db.select().from(enquiries).where(eq(enquiries.contactId, c.id)).orderBy(desc(enquiries.createdAt)).limit(1)
-  const wa = await waFor({ enquiry: latest ?? null, contact: c, me: me.name, address: latest?.postcode ?? null, homes: c.whatsappOptInAt ? await waHomes() : [] })
+  const wa = await waFor({ enquiry: latest ?? null, contact: c, me: me.name, address: latest?.propertyId ? null : latest?.postcode ?? null, allListings: true, homes: c.whatsappOptInAt ? await waHomes() : [] })
   const roles = rolesOf(c.roles)
   const today = todayLondon()
   const wants = [c.minBeds != null ? (c.minBeds === 0 ? 'Studio' : `${c.minBeds}+ bedrooms`) : '', c.areas ? `in ${c.areas}` : '', c.maxPrice ? `up to ${moneyShort(c.maxPrice)}` : ''].filter(Boolean).join(' ')

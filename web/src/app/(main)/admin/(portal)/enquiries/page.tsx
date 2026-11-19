@@ -48,7 +48,10 @@ export default async function EnquiriesPage({ searchParams }: { searchParams: Pr
   else if (property) where.push(eq(enquiries.propertyId, property))
   if (q) {
     const t = `%${q.toLowerCase()}%`
-    where.push(or(like(sql`lower(${enquiries.name})`, t), like(sql`lower(coalesce(${enquiries.email}, ''))`, t), like(sql`replace(coalesce(${enquiries.phone}, ''), ' ', '')`, `%${q.replace(/\s/g, '')}%`), like(sql`lower(coalesce(${enquiries.message}, ''))`, t))!)
+    where.push(or(like(sql`lower(${enquiries.name})`, t), like(sql`lower(coalesce(${enquiries.email}, ''))`, t), like(sql`replace(coalesce(${enquiries.phone}, ''), ' ', '')`, `%${q.replace(/\s/g, '')}%`), like(sql`lower(coalesce(${enquiries.message}, ''))`, t),
+      // The home it's about: its address, street, postcode or reference.
+      like(sql`lower(coalesce(${properties.displayAddress}, '') || ' ' || coalesce(${properties.street}, '') || ' ' || coalesce(${properties.postcode}, '') || ' ' || coalesce(${properties.ref}, ''))`, t),
+      like(sql`lower(coalesce(${enquiries.postcode}, ''))`, t))!)
   }
   if (source) where.push(eq(enquiries.source, source))
   if (mine) where.push(eq(enquiries.ownerId, me.id))

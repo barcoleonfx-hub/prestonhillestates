@@ -10,6 +10,7 @@ import { removeLicensingFiles } from '@/lib/cleanup'
 import { runTenantAlerts } from '@/lib/tenants'
 import { sortFromEmails } from '@/lib/enquiry-sort'
 import { repairPortalSmallPrint, repairZooplaValuations } from '@/lib/enquiry-repair'
+import { backfillCallEnquiries } from '@/lib/call-enquiry'
 import { refreshAreaPlaces } from '@/lib/area-places'
 import { runFollowups } from '@/lib/followups'
 import { runReconnects } from '@/lib/reconnect'
@@ -54,6 +55,8 @@ export async function GET(req: Request) {
     // Zoopla valuations read before their address was picked up: read again from the original email (light).
     await repairZooplaValuations().catch((e) => console.error('repairing Zoopla valuations failed', e))
     await repairPortalSmallPrint().catch((e) => console.error('repairing portal small print failed', e))
+    // Once: phone calls logged before calls made enquiries get theirs.
+    await backfillCallEnquiries().catch((e) => console.error('enquiries from earlier calls failed', e))
     // Our own copy of places near homes (schools, shops, parks…) for the booklets: two small squares a run (light).
     await refreshAreaPlaces().catch((e) => console.error('area places failed', e))
     const heavy = [

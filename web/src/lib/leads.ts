@@ -118,7 +118,7 @@ export async function captureLead(p: { enquiryId: string | null; contactId: stri
 export async function newLeadAlert(enquiryId: string, o: { title?: string; body?: string } = {}) {
   const e = await db.query.enquiries.findFirst({ where: eq(enquiries.id, enquiryId) })
   if (!e) return
-  const what = e.kind === 'tenant' ? 'Tenant registration' : enquiryLabel(e)
+  const what = enquiryLabel(e)
   const about = (e.message ?? '').split('\n').map((l) => l.trim()).find(Boolean)?.slice(0, 90) ?? ''
   await db.insert(notifications).values({
     id: uid(), kind: 'enquiry', appointmentId: null, enquiryId,

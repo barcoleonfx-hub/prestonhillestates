@@ -6,6 +6,7 @@ import { db, ready } from '@/db/client'
 import { admins, calls, contacts, enquiries, enquiryNotes, properties, tasks } from '@/db/schema'
 import { requireAdmin, requireRole } from '@/lib/auth'
 import { audit, notifyTask, upsertContact } from '@/lib/contacts'
+import { enquiryFromCall } from '@/lib/call-enquiry'
 import { CALL_NEXT, CALLER_TYPES, DIRECTIONS, addRole, normEmail, normPhone, parseMoney, prettyPhone, SOURCES } from '@/lib/crm-options'
 import { londonToIso } from '@/lib/time'
 import { now, uid } from '@/lib/util'
@@ -109,6 +110,8 @@ export async function logCall(_prev: CallState, form: FormData): Promise<CallSta
   }
 
   if (enquiryId) await db.update(enquiries).set({ handled: true, contactId }).where(eq(enquiries.id, enquiryId))
+  // Someone asking about a home, or about selling or letting theirs, is an enquiry too (shown in the enquiry lists).
+  else await enquiryFromCall({ contactId, callerType, direction, propertyId, notes, by: me.id }).catch((e) => console.error('enquiry from call failed', e))
   await audit(me.id, 'log_call', 'contact', contactId, `${direction} ${callerType} → ${next}`)
 
   revalidatePath('/admin', 'layout')
