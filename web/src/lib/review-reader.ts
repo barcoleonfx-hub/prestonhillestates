@@ -2,6 +2,7 @@ import 'server-only'
 import Anthropic from '@anthropic-ai/sdk'
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod'
 import { z } from 'zod'
+import { anthropicKey } from './anthropic-key'
 
 // Reads screenshots of Google reviews (phone or computer) with Claude's vision, and returns each review word for
 // word, for staff to check before it's added. Needs ANTHROPIC_API_KEY on the server.
@@ -47,11 +48,12 @@ type ImageType = (typeof TYPES)[number]
 
 /** Reads up to 6 screenshots in one go. Returns the reviews found, or a plain-English error. */
 export async function readReviewScreenshots(images: { type: string; data: Buffer }[]): Promise<{ reviews: ReadReview[]; error?: string }> {
-  if (!process.env.ANTHROPIC_API_KEY) return { reviews: [], error: 'Screenshot reading isn’t switched on yet: add ANTHROPIC_API_KEY to the server’s environment settings on Render.' }
+  const k = anthropicKey()
+  if ('error' in k) return { reviews: [], error: `Screenshot reading isn’t switched on yet. ${k.error}` }
   const ok = images.filter((i) => (TYPES as readonly string[]).includes(i.type))
   if (!ok.length) return { reviews: [], error: 'Choose PNG, JPEG or WebP screenshots.' }
   if (ok.some((i) => i.data.length > 5 * 1024 * 1024)) return { reviews: [], error: 'One of the screenshots is over 5 MB. Crop it, or save it as a JPEG, and try again.' }
-  const client = new Anthropic()
+  const client = new Anthropic({ apiKey: k.key })
   try {
     const res = await client.beta.messages.parse({
       model: 'claude-opus-5-5',
