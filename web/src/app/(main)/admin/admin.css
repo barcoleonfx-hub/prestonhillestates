@@ -1204,3 +1204,7 @@ kbd { font: 600 0.68rem/1 var(--sans, inherit); padding: 3px 6px; border-radius:
 .ec-tag.consider { background: #EEF2F8; color: #3F5878; }
 .ec-fix { color: var(--ink-soft); }
 .ec-hint { margin: 0; font-size: 0.8rem; color: var(--faint); }
+.ec-box.fixed { border-color: #BFE0CB; background: #F6FBF8; }
+.ec-tag.ok { background: #DDF1E4; color: #2F6B4E; }
+.ec-sub { margin: 4px 0 0; font-size: 0.82rem; color: var(--ink-soft); }
+.ec-actions { margin: 2px 0 0; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }

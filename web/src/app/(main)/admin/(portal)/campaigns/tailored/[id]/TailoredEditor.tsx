@@ -37,6 +37,28 @@ function AddPicture({ label, onAdd, disabled }: { label: string; onAdd: (img: Em
   )
 }
 
+/** The wording of a one-off email, as fields "Fix these for me" can change. */
+const TOP = { subject: 'Subject line', preheader: 'Preview line (grey text after the subject in an inbox)', greeting: 'Greeting', eyebrow: 'Small heading', headline: 'Big heading', intro: 'Opening', body: 'The rest of the letter' } as const
+const SPOT = { label: 'Property spotlight: small label', title: 'Property spotlight: title', facts: 'Property spotlight: facts line', linkLabel: 'Property spotlight: link text' } as const
+const TERMS = { title: 'Terms box: heading', rows: 'Terms box: rows ("Label: what it is", one per line)', note: 'Terms box: small print' } as const
+function tailoredFields(c: TailoredContent) {
+  return [
+    ...Object.entries(TOP).map(([k, label]) => ({ key: k, label, value: c[k as keyof typeof TOP], note: k === 'greeting' ? '{name} is filled in for each person' : k === 'headline' ? 'words in *single stars* show in gold' : undefined })),
+    ...(c.spotlight.show ? Object.entries(SPOT).map(([k, label]) => ({ key: `spotlight.${k}`, label, value: c.spotlight[k as keyof typeof SPOT] })) : []),
+    ...(c.terms.show ? Object.entries(TERMS).map(([k, label]) => ({ key: `terms.${k}`, label, value: c.terms[k as keyof typeof TERMS] })) : []),
+  ]
+}
+function withTailoredFields(c: TailoredContent, v: Record<string, string>): TailoredContent {
+  const next = { ...c, spotlight: { ...c.spotlight }, terms: { ...c.terms } }
+  for (const [k, val] of Object.entries(v)) {
+    const [a, b] = k.split('.')
+    if (!b && a in TOP) next[a as keyof typeof TOP] = val
+    else if (a === 'spotlight' && b in SPOT) next.spotlight[b as keyof typeof SPOT] = val
+    else if (a === 'terms' && b in TERMS) next.terms[b as keyof typeof TERMS] = val
+  }
+  return next
+}
+
 export function TailoredEditor(p: Props) {
   const router = useRouter()
   const [name, setName] = useState(p.initialName)
@@ -71,7 +93,8 @@ export function TailoredEditor(p: Props) {
   const gaps = useMemo(() => gapsIn(c), [c])
   const previewAs = people.list[as] ?? { email: 'someone@example.com', name: '' }
   const rendered = useMemo(() => renderTailored(c, previewAs, { base: p.base, senderEmail: p.senderEmail }), [c, previewAs, p.base, p.senderEmail])
-  const check = useEmailCheck({}, `a one-off email to ${people.list.length} people, each with their own copy (this is ${previewAs.name || previewAs.email}'s)`)
+  const check = useEmailCheck({}, `a one-off email to ${people.list.length} people, each with their own copy (this is ${previewAs.name || previewAs.email}'s)`,
+    p.sent ? undefined : { fields: tailoredFields(c), apply: (v) => setC((x) => withTailoredFields(x, v)) })
   const mail = { subject: rendered.subject, html: rendered.html }
 
   const fill = (id: string) => {
