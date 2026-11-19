@@ -1064,4 +1064,34 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       `ALTER TABLE notifications ADD COLUMN enquiry_id TEXT`,
     ],
   },
+  {
+    id: '049_postal_letters',
+    sql: [
+      // Printed letters to people who asked for a valuation (lib/postal-letters): one batch per printing, one row per
+      // letter, so nobody is written to twice by mistake and each lead's history shows the letter.
+      `CREATE TABLE letter_batches (
+        id TEXT PRIMARY KEY,
+        sender TEXT NOT NULL,
+        before_text TEXT NOT NULL,
+        after_text TEXT NOT NULL,
+        created_by TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        posted_at TEXT,
+        posted_by TEXT
+      )`,
+      `CREATE TABLE postal_letters (
+        id TEXT PRIMARY KEY,
+        batch_id TEXT NOT NULL,
+        enquiry_id TEXT NOT NULL,
+        contact_id TEXT,
+        name TEXT NOT NULL,
+        address TEXT NOT NULL,
+        home TEXT,
+        created_at TEXT NOT NULL,
+        posted_at TEXT
+      )`,
+      `CREATE INDEX postal_letters_enquiry_idx ON postal_letters (enquiry_id, posted_at)`,
+      `CREATE INDEX postal_letters_batch_idx ON postal_letters (batch_id)`,
+    ],
+  },
 ]

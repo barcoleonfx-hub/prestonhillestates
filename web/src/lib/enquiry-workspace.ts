@@ -1,7 +1,7 @@
 import 'server-only'
 import { eq } from 'drizzle-orm'
 import { db, ready } from '@/db/client'
-import { contacts, enquiries } from '@/db/schema'
+import { contacts, enquiries, type Enquiry } from '@/db/schema'
 import { isValuation, sortEnquiry, type SideResult } from './enquiry-labels'
 import type { EnquiryEmailContext, EnquiryEmailKind } from './enquiry-email'
 import { mailboxStatus } from './mailbox'
@@ -47,6 +47,25 @@ function quote(list: Review[]) {
 }
 
 /** Everything the enquiry page needs: the enquiry, its property, how it was sorted, and the email context. */
+/**
+ * Their home (valuations) or the address of the listing they asked about, from the enquiry's own details, and its
+ * postcode. Never a portal's small print (it has the portal's own postcode in it). For a valuation, their own
+ * address is the home to value. The address comes without its postcode.
+ */
+export function homeOf(e: Pick<Enquiry, 'message' | 'postcode'>, valuation: boolean): { address: string | null; postcode: string | null } {
+  const lines = detailLines(e.message)
+  const field = (re: RegExp) => lines.find((l) => l.label && re.test(l.label))?.value ?? null
+  const ok = (v: string | null) => (v && !isBoilerplate(v) ? v : null)
+  const junk = [field(/^(address|property)$/i), field(/^about$/i)].find((v) => v && isBoilerplate(v)) ?? null
+  const named = ok(field(/^(address|property)$/i)) ?? (() => { const a = ok(field(/^about$/i)); return a && !/^£/.test(a) ? a : null })()
+    ?? (valuation ? ok(field(/^their address$/i)) : null)
+  const address = named?.replace(/,?\s*[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\s*$/i, '').trim() || null
+  // A postcode saved from the small print is ignored too.
+  const savedPc = e.postcode && !(junk && junk.toUpperCase().replace(/\s+/g, '').includes(e.postcode.toUpperCase().replace(/\s+/g, ''))) ? e.postcode : null
+  const pcMatch = (savedPc ?? named ?? '').match(POSTCODE)
+  return { address, postcode: pcMatch ? `${pcMatch[1]} ${pcMatch[2]}`.toUpperCase() : null }
+}
+
 export async function enquiryWorkspace(id: string, me: { name: string }) {
   await ready()
   const e = await db.query.enquiries.findFirst({ where: eq(enquiries.id, id) })
@@ -63,19 +82,8 @@ export async function enquiryWorkspace(id: string, me: { name: string }) {
   const sorted = sortEnquiry(e, p?.channel, contact?.roles)
   const valuation = isValuation(e)
   const lines = detailLines(e.message)
-  const field = (re: RegExp) => lines.find((l) => l.label && re.test(l.label))?.value ?? null
-  // Their home (valuations) or the listing they asked about.
-  // Never a portal's small print (it has the portal's own postcode in it). For a valuation, their own address is
-  // the home to value.
-  const ok = (v: string | null) => (v && !isBoilerplate(v) ? v : null)
-  const junk = [field(/^(address|property)$/i), field(/^about$/i)].find((v) => v && isBoilerplate(v)) ?? null
-  const named = ok(field(/^(address|property)$/i)) ?? (() => { const a = ok(field(/^about$/i)); return a && !/^£/.test(a) ? a : null })()
-    ?? (valuation ? ok(field(/^their address$/i)) : null)
-  const address = (p ? null : named?.replace(/,?\s*[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\s*$/i, '').trim()) || null
-  // A postcode saved from the small print is ignored too.
-  const savedPc = e.postcode && !(junk && junk.toUpperCase().replace(/\s+/g, '').includes(e.postcode.toUpperCase().replace(/\s+/g, ''))) ? e.postcode : null
-  const pcMatch = (savedPc ?? named ?? '').match(POSTCODE)
-  const postcode = pcMatch ? `${pcMatch[1]} ${pcMatch[2]}`.toUpperCase() : null
+  const { address: homeAddress, postcode } = homeOf(e, valuation)
+  const address = p ? null : homeAddress
   const kind = emailKindFor(sorted.side, valuation)
   const ep = p ? emailProperty(p, base) : null
   const home = homeFrom(e.message)

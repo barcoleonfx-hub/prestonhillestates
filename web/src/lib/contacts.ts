@@ -162,7 +162,7 @@ export async function timelineFor(contact: Contact): Promise<TimelineItem[]> {
   for (const { n, ref } of noteRows) items.push({ id: n.id, at: n.createdAt, type: 'note', by: who(n.createdBy), title: `Comment on their enquiry${ref ? ` about ${ref}` : ''}`, body: n.body })
   // WhatsApp messages, consent and stage changes (see lib/leads).
   for (const v of evRows) {
-    if (!['whatsapp', 'consent', 'status', 'import'].includes(v.kind)) continue
+    if (!['whatsapp', 'consent', 'status', 'import', 'letter'].includes(v.kind)) continue
     const [title, ...rest] = (v.detail ?? v.kind).split('\n')
     items.push({ id: v.id, at: v.createdAt, type: v.kind === 'whatsapp' ? 'whatsapp' : 'lead', by: v.createdBy && v.createdBy !== 'system' ? who(v.createdBy) : null, title, body: rest.join('\n') || null })
   }
