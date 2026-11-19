@@ -7,6 +7,7 @@ import { db, ready } from '@/db/client'
 import { contacts, enquiries, enquiryMessages, mailMessages, mailThreads } from '@/db/schema'
 import { enquiryLabel, isValuation, sortEnquiry } from './enquiry-labels'
 import { shareFor } from './booklet-share'
+import { anthropicKey } from './anthropic-key'
 import { COUNCIL_TAX_BANDS, FURNISHING, PROPERTY_TYPES, TENURES, labelFor } from './options'
 import { displayAddressFor, getProperty, priceLabel, slugFor } from './properties'
 import { knownBase } from './property-email-data'
@@ -112,10 +113,9 @@ async function threadBrief(id: string): Promise<string | null> {
 
 /** Writes (or improves) a message for one place in the portal. Returns the draft, or a plain-English error. */
 export async function writeEmail(r: AiRequest): Promise<WriterResult | { error: string }> {
-  const key = (process.env.ANTHROPIC_API_KEY ?? '').trim()
-  if (process.env.ANTHROPIC_API_KEY === undefined) return { error: 'AI writing isn’t switched on yet: the website can’t see ANTHROPIC_API_KEY. Add it in Render (the prestonhill service → Environment), then restart the site (Manual Deploy → Deploy latest commit).' }
-  if (!key) return { error: 'ANTHROPIC_API_KEY is in Render but its value is empty. Paste the key (it starts sk-ant-) as the value, save, and redeploy.' }
-  if (!key.startsWith('sk-ant-')) return { error: 'ANTHROPIC_API_KEY in Render doesn’t look like a Claude API key (they start sk-ant-). Check the value you pasted, then redeploy.' }
+  const k = anthropicKey()
+  if ('error' in k) return { error: k.error }
+  const key = k.key
   await ready()
   const place = AI_PLACES[r.place]
   const enq = r.enquiryId ? await enquiryBrief(r.enquiryId).catch(() => null) : null
