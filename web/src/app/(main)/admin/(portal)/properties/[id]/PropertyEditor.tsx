@@ -8,6 +8,7 @@ import {
 } from '@/lib/options'
 import { saveProperty, type SaveState } from '../../../actions'
 import { MediaManager } from './MediaManager'
+import { AiWrite } from '../../AiWrite'
 
 type P = FullProperty
 const str = (v: unknown) => (v == null ? '' : String(v))
@@ -18,6 +19,28 @@ function Select({ name, options, defaultValue, id }: { name: string; options: Op
       {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
     </select>
   )
+}
+
+/** What's typed in the form now (it may not be saved yet), for the AI to go on. */
+function formBrief(form: HTMLFormElement | null): string {
+  if (!form) return ''
+  const f = new FormData(form)
+  const v = (k: string) => String(f.get(k) ?? '').trim()
+  const label = (k: string) => { const el = form.querySelector<HTMLSelectElement>(`select[name="${k}"]`); return el && el.value ? el.selectedOptions[0]?.textContent?.trim() ?? '' : '' }
+  const rooms = f.getAll('roomName').map((n, i) => [String(n).trim(), String(f.getAll('roomDims')[i] ?? '').trim(), String(f.getAll('roomDesc')[i] ?? '').trim()]).filter((r) => r[0])
+  return [
+    'The listing form as staff have it now (it may not be saved yet; where it differs from the fact sheet, the form is right):',
+    v('headline') && `Headline: ${v('headline')}`,
+    `For ${v('channel') === 'let' ? 'letting' : 'sale'}`,
+    [v('street'), v('town'), v('postcode')].filter(Boolean).length ? `Where: ${[v('street'), v('town'), v('postcode').toUpperCase()].filter(Boolean).join(', ')}` : '',
+    v('price') && `Price: £${Number(v('price').replace(/[^\d]/g, '')).toLocaleString('en-GB')}`,
+    label('propertyType') && `Type: ${label('propertyType')}`,
+    v('bedrooms') && `Bedrooms: ${v('bedrooms')}`, v('bathrooms') && `Bathrooms: ${v('bathrooms')}`, v('receptions') && `Reception rooms: ${v('receptions')}`,
+    label('tenure') && `Tenure: ${label('tenure')}`,
+    f.getAll('keyFeature').map(String).filter((x) => x.trim()).length ? `Key features: ${f.getAll('keyFeature').map(String).filter((x) => x.trim()).join('; ')}` : '',
+    v('summary') && `Summary: ${v('summary')}`,
+    rooms.length ? `Rooms: ${rooms.map(([n, d, x]) => `${n}${d ? ` (${d})` : ''}${x ? `: ${x}` : ''}`).join('; ')}` : '',
+  ].filter(Boolean).join('\n')
 }
 
 export function PropertyEditor({ property: p }: { property: P }) {
@@ -209,6 +232,9 @@ export function PropertyEditor({ property: p }: { property: P }) {
               </div>
               <div className="field">
                 <label htmlFor="desc">Full description</label>
+                <AiWrite place="listing-description" ctx={{ propertyId: p.id }} target="desc" label="Improve with AI"
+                  needsText="Write the description first (rough notes are fine), then press Improve with AI and it makes it better."
+                  brief={() => formBrief(formRef.current)} />
                 <textarea className="textarea" id="desc" name="description" rows={10} defaultValue={str(p.description)} placeholder="The full write-up. Blank lines start a new paragraph." />
               </div>
             </div>

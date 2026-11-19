@@ -148,15 +148,19 @@ export async function writeEmail(r: AiRequest): Promise<WriterResult | { error: 
   const place = AI_PLACES[r.place]
   const enq = r.enquiryId ? await enquiryBrief(r.enquiryId, r.staffName ?? '').catch(() => null) : null
   const propertyId = r.propertyId ?? enq?.propertyId ?? null
-  const home = propertyId ? await writerHome(propertyId).catch(() => null) : null
+  const listing = r.place === 'listing-description'
+  const saved = propertyId ? await writerHome(propertyId).catch(() => null) : null
+  // For a listing description, staff's new words are the description: the saved one may be out of date.
+  const home = saved && listing ? { ...saved, description: null } : saved
   const thread = r.threadId ? await threadBrief(r.threadId).catch(() => null) : null
   const contactId = r.contactId ?? enq?.contactId ?? null
   const c = contactId ? await db.query.contacts.findFirst({ where: eq(contacts.id, contactId) }) : null
   const reader = c ? readerNotes({ role: c.roles ? roleLabel(c.roles.split(',')[0]).toLowerCase() : null, minBeds: c.minBeds, maxPrice: c.maxPrice, areas: c.areas, position: c.position }) : null
   if (r.mode === 'improve' && !r.draft.trim()) return { error: 'There’s nothing to change yet: press Write with AI first.' }
+  if (listing && !r.draft.trim()) return { error: 'Write the description first (even rough notes), then the AI makes it better.' }
   if (!home && !enq && !thread && !r.instruction.trim() && !r.about.trim() && !r.draft.trim()) return { error: 'There’s nothing to write about yet: choose the property first (or type a few words in the box).' }
   const ask = [
-    `You're writing ${place.what}. Aim for about ${place.words} words.`,
+    `You're writing ${place.what}. Aim for ${place.words.startsWith('about') ? place.words : `about ${place.words}`} words.`,
     place.subject ? 'Also write a subject line (under 70 characters).' : 'No subject line is needed: leave the subject empty.',
     place.greeting ? 'Start with a short greeting using their first name if you know it (e.g. "Hi Sam,"); in a newsletter use "Hello {first_name}," exactly, as it is filled in for each reader.' : 'Do not write a greeting.',
     place.bullets ? 'A short "- " list of key points is fine where it helps.' : 'No bullet points: paragraphs only.',
@@ -164,8 +168,10 @@ export async function writeEmail(r: AiRequest): Promise<WriterResult | { error: 
     thread,
     home ? `The home:\n${factSheet(home)}` : null,
     reader ? `What this person told us they're looking for: ${reader} Make it relevant to them, without repeating their details back word for word.` : null,
-    r.about.trim() ? `From the page: ${clip(r.about, 600)}` : null,
-    r.mode === 'improve'
+    r.about.trim() ? `From the page: ${clip(r.about, listing ? 3000 : 600)}` : null,
+    listing && r.mode !== 'improve'
+      ? `Here is the description staff have written. It is the source of truth: keep every fact in it (rooms, sizes, features, condition, location details) and add nothing that isn't in it or the facts above; where they differ, staff's description and the form win over the saved listing. Make it read beautifully: better structure, flow and wording, the strongest points first, every cliché and repetition gone.${r.instruction.trim() ? `\nStaff also want: ${clip(r.instruction, 800)}` : ''}\nThe description:\n${clip(r.draft, 8000)}`
+      : r.mode === 'improve'
       ? `Here is the current message. Change it as our staff ask: ${clip(r.instruction, 800) || 'make it better'}. Keep everything else that works, and every fact in it.${place.subject ? ` Current subject: ${r.subject.trim() || '(none)'}` : ''}\nCurrent message:\n${clip(r.draft, 5000)}`
       : r.draft.trim()
         ? `Here is what's in the box now: usually our standard wording for this email, or staff's own notes. Treat it as the brief. Keep its purpose and every specific detail in it (dates, times, prices, figures, names, links) and anything personal, then write the best possible version: richer, more specific and more persuasive, using the facts above.${place.subject ? ` Current subject: ${r.subject.trim() || '(none)'}` : ''}${r.instruction.trim() ? `\nStaff also want: ${clip(r.instruction, 800)}` : ''}\nCurrent message:\n${clip(r.draft, 5000)}`

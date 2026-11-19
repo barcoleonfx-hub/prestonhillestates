@@ -112,6 +112,7 @@ export const AI_PLACES = {
   enquiry: { what: 'an email replying to their enquiry', words: '140 to 240', subject: true, greeting: true, bullets: true },
   'enquiry-reply': { what: 'a reply in an ongoing email conversation about their enquiry (our name and office details are added below it)', words: '30 to 140', subject: false, greeting: true, bullets: false },
   whatsapp: { what: 'a WhatsApp message to them from our office phone, not an email. Use WhatsApp formatting: *single stars* for bold (never double stars), no headings, short paragraphs, and at most a few "- " bullet lines. Keep any link and any "Reply STOP" line from the brief exactly, and if the brief ends with a name (e.g. "Jamil, Preston Hill Estates"), end the same way', words: '50 to 150', subject: false, greeting: true, bullets: true },
+  'listing-description': { what: 'the full description of one of our homes for its listing on our website and the property portals, not an email: no greeting, no sign-off, no subject. Staff have written a description; make it the best version of it. Open with what makes the home stand out for the people it suits best, then walk through the accommodation in a natural order (as the description and rooms give it), then the outside space, then the location and transport only as stated, and end with one short line inviting a viewing. Plain paragraphs separated by blank lines: no headings, no bullet points, no bold (the key features list is shown separately)', words: 'about the same number as staff wrote, or up to a third more if the facts allow', subject: false, greeting: false, bullets: false },
   'thread-reply': { what: 'a reply to the latest email in this conversation (our name and office details are added below it, with their email quoted underneath)', words: '30 to 140', subject: false, greeting: true, bullets: false },
 } as const
 export type AiPlace = keyof typeof AI_PLACES
@@ -128,6 +129,8 @@ export function tidyFor(place: AiPlace, body: string): string {
     const rest = tidyBody(lines.join('\n'))
     out = greeting ? `${greeting}\n\n${rest}` : rest
   }
+  // A listing description is plain text: no bold and no bullets.
+  if (place === 'listing-description') return out.replace(/\*\*(.+?)\*\*/g, '$1').replace(/^- /gm, '')
   // WhatsApp messages use "•" bullets, like the ready-written ones.
   return place === 'whatsapp' ? out.replace(/^- /gm, '• ') : out
 }

@@ -226,10 +226,14 @@ export async function setCoverPhoto(id: string) {
   await ready()
   const m = await db.query.media.findFirst({ where: eq(media.id, id) })
   if (!m || m.kind !== 'photo') return
+  // The main picture is also the first one, everywhere it's shown.
+  const photos = await db.query.media.findMany({ where: and(eq(media.propertyId, m.propertyId), eq(media.kind, 'photo')), orderBy: (t, { asc }) => [asc(t.position)] })
+  const ids = [id, ...photos.map((x) => x.id).filter((x) => x !== id)]
   await db.batch([
     db.update(media).set({ isCover: false }).where(and(eq(media.propertyId, m.propertyId), eq(media.kind, 'photo'))),
     db.update(media).set({ isCover: true }).where(eq(media.id, id)),
-  ])
+    ...ids.map((mid, i) => db.update(media).set({ position: i }).where(eq(media.id, mid))),
+  ] as unknown as [never, ...never[]])
   await touch(m.propertyId, admin.email)
 }
 
@@ -240,7 +244,12 @@ export async function reorderMedia(propertyId: string, orderedIds: string[]) {
   const ownedIds = new Set(owned.map((m) => m.id))
   const ids = orderedIds.filter((i) => ownedIds.has(i))
   if (!ids.length) return
-  await db.batch(ids.map((mid, i) => db.update(media).set({ position: i }).where(eq(media.id, mid))) as [never, ...never[]])
+  // Photos: whichever is first is the main picture.
+  const first = owned.find((m) => m.id === ids[0])
+  const cover = first && first.kind === 'photo' && first.status === 'ready' && !first.isCover
+    ? [db.update(media).set({ isCover: false }).where(and(eq(media.propertyId, propertyId), eq(media.kind, 'photo'))), db.update(media).set({ isCover: true }).where(eq(media.id, first.id))]
+    : []
+  await db.batch([...cover, ...ids.map((mid, i) => db.update(media).set({ position: i }).where(eq(media.id, mid)))] as unknown as [never, ...never[]])
   await touch(propertyId, admin.email)
 }
 
