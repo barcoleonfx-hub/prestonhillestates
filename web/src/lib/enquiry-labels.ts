@@ -9,6 +9,7 @@ export function enquiryLabel(e: { kind: string; source?: string | null }): strin
   const src = ENQUIRY_SOURCES[e.source ?? 'website'] ?? 'Website'
   if (e.kind === 'valuation') return `${src} valuation request`
   if (e.kind === 'buyer') return `${src} buyer registration`
+  if (e.kind === 'tenant') return `${src} tenant registration`
   if (e.kind === 'email') return e.source === 'email' ? 'Email enquiry' : `${src} enquiry`
   return `${src} viewing request`
 }
