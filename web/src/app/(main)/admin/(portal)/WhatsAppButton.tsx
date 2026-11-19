@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import type { WaProps } from '@/lib/whatsapp-data'
 import { defaultPropertyOptions, newHomeMessage, positionMessage, propertyMessage, quietEnds, quietReason, waLink, type WaListing, type WaPropertyOptions } from '@/lib/whatsapp'
 import { logWhatsApp, logWhatsAppReply } from '../lead-actions'
+import { AiWrite } from './AiWrite'
 
 /** Messages about one of our homes, besides the first reply. */
 const PROPERTY_KEYS = [
@@ -206,6 +207,9 @@ export function WhatsAppButton({ wa, className = 'btn btn-ghost', autoOpen = fal
                     </div>
                   ) : null}
                   <label className="wa-field">Message
+                    <AiWrite key={`${key}-${listingId}-${homeId}`} place="whatsapp" value={text} onChange={setText}
+                      ctx={{ enquiryId: wa.enquiryId, contactId: wa.contactId, propertyId: marketing ? homeId || null : listing?.id ?? null,
+                        about: `The message is: ${label2}.${marketing ? ' It tells them about a new home that may suit them: they agreed to WhatsApp messages about other homes. Keep the "Reply STOP" line.' : ''}` }} />
                     <textarea className="textarea" rows={15} style={{ maxHeight: '52vh' }} value={text} onChange={(e) => setText(e.target.value)} />
                   </label>
                 </div>
