@@ -9,6 +9,7 @@ import {
 import { countAudience, loadSpotlight, saveCampaign, startCampaign, testCampaign } from '../../../campaign-actions'
 import { PeopleList } from './PeopleList'
 import { AiWrite } from '../../AiWrite'
+import { useEmailCheck } from '../../EmailCheck'
 
 const KINDS: { kind: BlockKind; label: string; about: string }[] = [
   { kind: 'spotlight', label: 'Property of the week', about: 'One home told properly: photos, why we love it, the area, sold prices' },
@@ -87,6 +88,10 @@ export function CampaignEditor(p: Props) {
 
   const reader = (as === 'generic' ? null : as.startsWith('example-') ? example(shared.base, as.slice(8) as Role) : p.samples.find((s) => s.contactId === as)) ?? generic(shared.base)
   const rendered = useMemo(() => renderCampaign(content, reader, shared, { campaign: name, sender: p.sender, month: p.month, markers: true }), [content, reader, shared, name, p.sender, p.month])
+  // The check before it goes: the email as the reader in the preview gets it.
+  const spotlightId = content.blocks.find((b): b is Extract<Block, { kind: 'spotlight' }> => b.kind === 'spotlight')?.propertyId ?? null
+  const check = useEmailCheck({ propertyId: spotlightId, contactId: reader.contactId }, `an email newsletter going to ${summary.total.toLocaleString('en-GB')} people, each personalised (this is how ${reader.name || 'someone we have no name for'} gets it)`)
+  const mail = { subject: rendered.subject, preheader: rendered.preheader, html: rendered.html }
   const wrap = useRef<HTMLDivElement>(null)
   const [switched, setSwitched] = useState<string | null>(null)
   const [showPeople, setShowPeople] = useState(false)
@@ -141,6 +146,7 @@ export function CampaignEditor(p: Props) {
     setNote(r.ok ? { ok: true, text: `Test sent to ${r.to}, as ${as === 'generic' ? 'a general reader' : reader.name} would get it.` } : { ok: false, text: r.error ?? 'The test didn’t send.' })
   }
   async function go() {
+    if (!(await check.ensure(mail))) return
     const days = Math.ceil(summary.total / p.perDay)
     if (!window.confirm(`Send “${content.subject}” to ${summary.total.toLocaleString('en-GB')} people from ${p.sender.email}?\n\nIt goes out in the background, up to ${p.perDay} a day${days > 1 ? `, so it will take about ${days} days` : ''}. You can pause or stop it at any time.`)) return
     setBusy(true); setNote(null)
@@ -246,6 +252,7 @@ export function CampaignEditor(p: Props) {
         {!p.readOnly ? (
           <section className="card card-pad cmp-send">
             {note ? <div className={`notice ${note.ok ? 'ok' : 'err'}`}>{note.text}</div> : null}
+            {check.panel(mail)}
             <div className="cmp-send-row">
               <span className={`cmp-saved ${saved}`}>{{ saved: 'Saved', saving: 'Saving…', unsaved: 'Changes not saved yet', error: 'Not saved' }[saved]}</span>
               <button type="button" className="btn btn-ghost" disabled={busy || !p.canSend} onClick={test}>Send me a test</button>

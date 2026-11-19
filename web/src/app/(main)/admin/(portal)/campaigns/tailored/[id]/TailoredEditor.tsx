@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { MAX_RECIPIENTS, gapsIn, parseRecipients, renderTailored, type EmailImage, type TailoredContent } from '@/lib/tailored-email'
 import { saveTailored, sendTailored, testTailored, uploadEmailImage, type SendResult } from '../../../../tailored-actions'
 import { AiWrite } from '../../../AiWrite'
+import { useEmailCheck } from '../../../EmailCheck'
 
 export type ListingPick = { id: string; label: string; title: string; address: string; price: string; url: string; facts: string; photos: EmailImage[] }
 
@@ -70,6 +71,8 @@ export function TailoredEditor(p: Props) {
   const gaps = useMemo(() => gapsIn(c), [c])
   const previewAs = people.list[as] ?? { email: 'someone@example.com', name: '' }
   const rendered = useMemo(() => renderTailored(c, previewAs, { base: p.base, senderEmail: p.senderEmail }), [c, previewAs, p.base, p.senderEmail])
+  const check = useEmailCheck({}, `a one-off email to ${people.list.length} people, each with their own copy (this is ${previewAs.name || previewAs.email}'s)`)
+  const mail = { subject: rendered.subject, html: rendered.html }
 
   const fill = (id: string) => {
     const l = p.listings.find((x) => x.id === id)
@@ -84,6 +87,7 @@ export function TailoredEditor(p: Props) {
     setNote(r.ok ? { ok: true, text: `Test sent to ${r.to}. Check how it looks, then send it for real.` } : { ok: false, text: r.error ?? 'Couldn’t send the test.' })
   }
   const send = async () => {
+    if (!(await check.ensure(mail))) return
     const n = people.list.length
     if (!confirm(`Send this to ${n} ${n === 1 ? 'person' : 'people'}?\n\n${people.list.map((r) => r.name ? `${r.name} <${r.email}>` : r.email).join('\n')}`)) return
     setBusy(true); setNote(null)
@@ -224,6 +228,7 @@ export function TailoredEditor(p: Props) {
         <section className="card card-pad cmp-send">
           {note ? <div className={`notice ${note.ok ? 'ok' : 'err'}`}>{note.text}</div> : null}
           {!ro && gaps.length ? <div className="notice warn">Fill in or delete before sending: {gaps.join(', ')}</div> : null}
+          {!ro ? check.panel(mail) : null}
           {!ro ? (
             <div className="cmp-send-row">
               <span className={`cmp-saved ${saved}`}>{{ saved: 'Saved', saving: 'Saving…', unsaved: 'Changes not saved yet', error: 'Not saved' }[saved]}</span>

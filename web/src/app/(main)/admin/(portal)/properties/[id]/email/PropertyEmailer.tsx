@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { renderEmail, type Draft, type EmailProperty, type EmailRecipient, type Sender } from '@/lib/property-email'
 import { sendPropertyEmails, sendPropertyEmailTest } from '../../../../property-email-actions'
 import { AiWrite } from '../../../AiWrite'
+import { useEmailCheck } from '../../../EmailCheck'
 
 export type Row = {
   recipient: EmailRecipient
@@ -43,6 +44,8 @@ export function PropertyEmailer({ propertyId, prop, sender, rows, skipped, canSe
     return renderEmail(prop, row.recipient, { ...row.draft, ...t }, sender).html
   }, [row, edits, prop, sender])
 
+  const check = useEmailCheck({ propertyId, contactId: row?.recipient.contactId ?? null }, `a personal email about one of our homes to someone it matches${row ? ` (this is ${row.recipient.name}'s; each person gets their own)` : ''}`)
+  const mail = { subject: row ? text(row).subject : '', html: preview }
   // Grow the preview to the email's full height, again once the photos have loaded.
   useEffect(() => {
     const f = frame.current
@@ -64,6 +67,7 @@ export function PropertyEmailer({ propertyId, prop, sender, rows, skipped, canSe
 
   async function send() {
     if (!chosen.length) return
+    if (row && !(await check.ensure(mail))) return
     const msg = `Send ${chosen.length} email${chosen.length === 1 ? '' : 's'} from ${sender.email}?${resending ? `\n\n${resending} of them were already emailed about this property.` : ''}`
     if (!window.confirm(msg)) return
     setBusy(true); setNote(null)
@@ -162,6 +166,7 @@ export function PropertyEmailer({ propertyId, prop, sender, rows, skipped, canSe
         </ul>
         <div className="pmail-send">
           {note ? <div className={`notice ${note.ok ? 'ok' : 'err'}`}>{note.text}</div> : null}
+          {row ? check.panel(mail) : null}
           <button type="button" className="btn btn-gold" disabled={!canSend || busy || !chosen.length} onClick={send}>
             {busy ? 'Sending…' : `Send ${chosen.length} email${chosen.length === 1 ? '' : 's'}`}
           </button>

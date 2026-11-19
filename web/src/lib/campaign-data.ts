@@ -50,6 +50,11 @@ async function marketSnapshots(): Promise<Record<string, Snapshot>> {
  * The property of the week: its photos, best features, the nearest stations and places, and what the same kind of
  * home nearby has sold for (houses with houses of the same type; bedrooms where we know them).
  */
+/** In emails: stations within a 20 minute walk, local places within 15, and "What makes it special" with 3 points or more. */
+export const STATION_WALK_MAX = 20
+export const PLACE_WALK_MAX = 15
+export const MIN_POINTS = 3
+
 export async function spotlightFor(id: string, base: string): Promise<Spotlight | null> {
   const p = await getProperty(id).catch(() => null)
   if (!p || !p.published) return null
@@ -61,7 +66,9 @@ export async function spotlightFor(id: string, base: string): Promise<Spotlight 
   const keys = ep.features.filter((f) => f.from === 'key')
   const covered = new Set(keys.flatMap((f) => f.tags))
   const facts = ep.features.filter((f) => f.from === 'fact' && (/sq ft/.test(f.text) || !f.tags.some((t) => covered.has(t))))
-  const features = [...keys, ...facts].map((f) => f.text).slice(0, 6)
+  // Tenure isn't a selling point (it's in the facts line), and one or two points look thin: then the section is left out.
+  const points = [...keys, ...facts].map((f) => f.text).filter((t) => !/^(freehold|leasehold|share of freehold|commonhold)\b/i.test(t.trim()))
+  const features = points.length >= MIN_POINTS ? points.slice(0, 6) : []
   const [area, sold] = await Promise.all([
     listingArea(p).catch(() => null),
     p.channel !== 'let' && p.postcode ? salesOnStreet(p.street ?? p.addressLine1 ?? null, p.postcode, lrTypeFor(p.propertyType), p.bedrooms).catch(() => null) : Promise.resolve(null),
@@ -72,8 +79,9 @@ export async function spotlightFor(id: string, base: string): Promise<Spotlight 
   return {
     id: p.id, url: ep.url, channel: ep.channel, address: ep.address, headline: headlineFor(p), priceText: ep.priceText, place: p.locality || p.town || null,
     photos, specs: ep.specs, summary: p.summary?.trim() || null, features,
-    stations: (area?.stations ?? []).slice(0, 2).map((x) => ({ name: x.name, lines: x.lines.join(', '), minutes: x.minutes, distance: distanceText(x.metres) })),
-    places: (area?.places ?? []).filter((x) => x.kind === 'school' || x.kind === 'shop' || x.kind === 'park').slice(0, 3).map((x) => ({ name: x.name, detail: x.detail, minutes: x.minutes })),
+    // Only what's a genuinely short walk: a station 40 minutes away isn't a selling point.
+    stations: (area?.stations ?? []).filter((x) => x.minutes <= STATION_WALK_MAX).slice(0, 2).map((x) => ({ name: x.name, lines: x.lines.join(', '), minutes: x.minutes, distance: distanceText(x.metres) })),
+    places: (area?.places ?? []).filter((x) => (x.kind === 'school' || x.kind === 'shop' || x.kind === 'park') && x.minutes <= PLACE_WALK_MAX).slice(0, 3).map((x) => ({ name: x.name, detail: x.detail, minutes: x.minutes })),
     sold: sales.length && lr ? {
       what: typePlural(lr), typical,
       sales: sales.map((x) => ({ where: x.street ?? x.postcode, price: x.price, beds: x.beds ?? null, when: new Date(`${x.soldOn}T12:00:00Z`).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }) })),

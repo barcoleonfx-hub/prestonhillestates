@@ -7,6 +7,7 @@ import { SEND_NOW_MAX, attachLimit, parseAddresses, renderLetter, type LetterPro
 import type { LetterFile, ToMode } from '@/lib/letters'
 import { findContacts, groupCount, propertyBox, removeLetterFile, saveLetter, sendLetterAction, testLetter, uploadLetterFile, type LetterState } from '../../../../letter-actions'
 import { AiWrite } from '../../../AiWrite'
+import { useEmailCheck } from '../../../EmailCheck'
 
 type Props = {
   id: string; initial: LetterState; files: LetterFile[]; properties: { id: string; channel: 'sale' | 'let'; label: string }[]
@@ -86,6 +87,7 @@ export function LetterEditor(p: Props) {
     setNote('error' in r && r.error ? { ok: false, text: r.error } : { ok: true, text: `Test sent to ${(r as { to?: string }).to}. Check your inbox.` })
   }
   async function send() {
+    if (!(await check.ensure(mail))) return
     const who = s.toMode === 'one' ? (s.one.name || s.one.email) : `${count} ${count === 1 ? 'person' : 'people'}`
     if (!window.confirm(`Send “${c.subject}” to ${who}?${count > SEND_NOW_MAX ? ' It will go out over the next while, a few at a time.' : ''}`)) return
     setBusy(true); setNote(null)
@@ -98,6 +100,9 @@ export function LetterEditor(p: Props) {
     router.refresh()
   }
 
+  const check = useEmailCheck({ propertyId: c.propertyId, contactId: s.toMode === 'one' ? s.one.contactId : null },
+    s.toMode === 'one' ? 'an email to one client, about one of our homes or in general' : 'an email to a list of people, each with their own copy, about one of our homes or in general')
+  const mail = { subject: rendered.subject, html: rendered.html }
   const ready = !!c.subject.trim() && !!c.body.trim() && count > 0 && !typed.bad.length && size <= attachLimit(count)
   const roleOn = (r: Role) => s.audience.roles.includes(r)
 
@@ -218,6 +223,7 @@ export function LetterEditor(p: Props) {
 
         <section className="card card-pad cmp-send">
           {note ? <div className={`notice ${note.ok ? 'ok' : 'err'}`}>{note.text}</div> : null}
+          {!ro ? check.panel(mail) : null}
           {!ro ? (
             <div className="cmp-send-row">
               <span className={`cmp-saved ${saved}`}>{{ saved: 'Saved', saving: 'Saving…', unsaved: 'Changes not saved yet', error: 'Not saved' }[saved]}</span>
