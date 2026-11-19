@@ -6,7 +6,7 @@ import { MEDIA_RULES, type MediaKind } from '@/lib/options'
 import { deleteMedia, reorderMedia, setCoverPhoto, updateMediaCaption } from '../../../actions'
 
 const GROUPS: { kind: MediaKind; hint: string; multiple: boolean }[] = [
-  { kind: 'photo', hint: 'JPG, PNG or WebP, up to 25 MB each. Drag to reorder; the cover photo shows first.', multiple: true },
+  { kind: 'photo', hint: 'JPG, PNG or WebP, up to 25 MB each. The first photo is the main picture. Drag them into order, or use the arrows.', multiple: true },
   { kind: 'floorplan', hint: 'Image or PDF, up to 25 MB.', multiple: true },
   { kind: 'video', hint: 'MP4, MOV or WebM, up to 1 GB. Or paste a YouTube link below.', multiple: true },
   { kind: 'epc', hint: 'The EPC graph, as an image or PDF.', multiple: false },
@@ -38,7 +38,7 @@ function Group({ propertyId, kind, hint, multiple, items }: { propertyId: string
   const router = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
   const [uploads, setUploads] = useState<Upload[]>([])
-  const [order, setOrder] = useState(items)
+  const [order, setOrder] = useState(() => (kind === 'photo' ? [...items].sort((a, b) => Number(b.isCover) - Number(a.isCover)) : items))
   const [dragId, setDragId] = useState<string | null>(null)
   const [overId, setOverId] = useState<string | null>(null)
   const [dropActive, setDropActive] = useState(false)
@@ -47,8 +47,10 @@ function Group({ propertyId, kind, hint, multiple, items }: { propertyId: string
 
   // Keep local order in step with the server after refreshes (not on every parent re-render).
   const sig = items.map((m) => `${m.id}:${m.position}:${m.isCover}:${m.status}`).join('|')
+  // The main picture always shows first (older listings may have it further along).
+  const shown = (xs: MediaItem[]) => (kind === 'photo' ? [...xs].sort((a, b) => Number(b.isCover) - Number(a.isCover)) : xs)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => setOrder(items), [sig])
+  useEffect(() => setOrder(shown(items)), [sig])
 
   async function uploadFiles(files: FileList | File[]) {
     const list = Array.from(files)
@@ -82,18 +84,31 @@ function Group({ propertyId, kind, hint, multiple, items }: { propertyId: string
     router.refresh()
   }
 
-  function onDropTile(targetId: string) {
-    if (!dragId || dragId === targetId) return
-    const ids = order.map((m) => m.id)
-    const from = ids.indexOf(dragId)
-    ids.splice(from, 1)
-    ids.splice(ids.indexOf(targetId), 0, dragId)
-    const next = ids.map((id) => order.find((m) => m.id === id)!)
+  /** Saves a new order. For photos, the first one becomes the main picture. */
+  function saveOrder(ids: string[]) {
+    const next = ids.map((id, i) => ({ ...order.find((m) => m.id === id)!, ...(kind === 'photo' ? { isCover: i === 0 } : {}) }))
     setOrder(next)
     startTransition(async () => {
       await reorderMedia(propertyId, ids)
       router.refresh()
     })
+  }
+  function onDropTile(targetId: string) {
+    if (!dragId || dragId === targetId) return
+    const ids = order.map((m) => m.id)
+    const from = ids.indexOf(dragId)
+    const to = ids.indexOf(targetId)
+    ids.splice(from, 1)
+    // Dropped on a later tile: it goes after it; on an earlier one: before it.
+    ids.splice(from < to ? ids.indexOf(targetId) + 1 : ids.indexOf(targetId), 0, dragId)
+    saveOrder(ids)
+  }
+  function move(id: string, by: number) {
+    const ids = order.map((m) => m.id)
+    const from = ids.indexOf(id), to = Math.max(0, Math.min(ids.length - 1, from + by))
+    if (from === to) return
+    ids.splice(from, 1); ids.splice(to, 0, id)
+    saveOrder(ids)
   }
 
   const accept = Object.keys(rule.types).join(',')
@@ -125,7 +140,13 @@ function Group({ propertyId, kind, hint, multiple, items }: { propertyId: string
                     : <span className="doc">PDF</span>}
               </div>
               {m.status !== 'ready' ? <span className="badge pill warn">Incomplete</span>
-                : m.isCover ? <span className="badge pill gold">Cover</span> : null}
+                : m.isCover ? <span className="badge pill gold">★ Main picture</span> : null}
+              {order.length > 1 ? (
+                <div className="mmove">
+                  {order[0].id !== m.id ? <button type="button" aria-label="Move earlier" title="Move earlier" onClick={() => move(m.id, -1)}>←</button> : null}
+                  {order[order.length - 1].id !== m.id ? <button type="button" aria-label="Move later" title="Move later" onClick={() => move(m.id, 1)}>→</button> : null}
+                </div>
+              ) : null}
               <div className="meta">
                 <input
                   aria-label="Caption"
@@ -138,7 +159,10 @@ function Group({ propertyId, kind, hint, multiple, items }: { propertyId: string
                 <div className="fname" title={m.originalName || ''}>{m.originalName}</div>
                 <div className="tools">
                   {kind === 'photo' && !m.isCover && m.status === 'ready' ? (
-                    <button type="button" onClick={() => startTransition(async () => { await setCoverPhoto(m.id); router.refresh() })}>Make cover</button>
+                    <button type="button" onClick={() => {
+                      setOrder([{ ...m, isCover: true }, ...order.filter((x) => x.id !== m.id).map((x) => ({ ...x, isCover: false }))])
+                      startTransition(async () => { await setCoverPhoto(m.id); router.refresh() })
+                    }}>★ Make main picture</button>
                   ) : <a href={m.url} target="_blank" rel="noreferrer" style={{ fontSize: '0.74rem', fontWeight: 600, color: 'var(--ink-soft)' }}>Open</a>}
                   <button type="button" className="del" onClick={() => {
                     if (!confirm('Delete this file?')) return

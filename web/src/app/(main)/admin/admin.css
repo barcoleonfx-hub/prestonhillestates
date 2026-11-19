@@ -135,6 +135,10 @@ table.list tr.rowlink:hover td { background: var(--gold-wash); }
 .mtile .preview img, .mtile .preview video { width: 100%; height: 100%; object-fit: cover; }
 .mtile .preview .doc { font-size: 0.74rem; font-weight: 700; color: var(--faint); letter-spacing: 0.1em; }
 .mtile .badge { position: absolute; top: 8px; left: 8px; }
+.mtile .mmove { position: absolute; top: 8px; right: 8px; display: flex; gap: 4px; }
+.mtile .mmove button { width: 30px; height: 30px; border-radius: 999px; border: 0; background: rgba(28, 27, 25, 0.72); color: #fff; font-size: 0.95rem; line-height: 1; cursor: pointer; display: grid; place-items: center; }
+.mtile .mmove button:hover:not(:disabled) { background: rgba(28, 27, 25, 0.92); }
+.mtile .mmove button:disabled { opacity: 0.3; cursor: default; }
 .mtile .meta { padding: 8px 9px; display: flex; flex-direction: column; gap: 6px; }
 .mtile .meta input { font: inherit; font-size: 0.78rem; border: 1px solid transparent; border-radius: 6px; padding: 4px 6px; background: var(--bg); width: 100%; }
 .mtile .meta input:focus { outline: none; border-color: var(--gold); background: #fff; }

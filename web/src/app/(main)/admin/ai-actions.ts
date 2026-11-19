@@ -20,7 +20,7 @@ export async function aiWrite(r: AiRequest): Promise<WriterResult | { error: str
   const place: AiPlace = r.place in AI_PLACES ? r.place : 'letter'
   const res = await writeEmail({
     place, propertyId: id(r.propertyId), enquiryId: id(r.enquiryId), threadId: id(r.threadId), contactId: id(r.contactId),
-    about: String(r.about ?? '').slice(0, 800), instruction: String(r.instruction ?? '').slice(0, 800), mode: r.mode === 'improve' ? 'improve' : 'write',
+    about: String(r.about ?? '').slice(0, place === 'listing-description' ? 3000 : 800), instruction: String(r.instruction ?? '').slice(0, 800), mode: r.mode === 'improve' ? 'improve' : 'write',
     subject: String(r.subject ?? '').slice(0, 200), draft: String(r.draft ?? '').slice(0, 8000), staffName: me.name,
   })
   if (!('error' in res)) await audit(me.id, 'AI email draft', place, r.enquiryId ?? r.propertyId ?? r.threadId ?? '-', res.note)
