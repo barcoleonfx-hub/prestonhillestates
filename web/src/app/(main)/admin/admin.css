@@ -1178,14 +1178,14 @@ kbd { font: 600 0.68rem/1 var(--sans, inherit); padding: 3px 6px; border-radius:
 @media (max-width: 760px) { .vl-row { grid-template-columns: 1fr; } }
 
 /* "Write with AI" beside a message box */
-.aiw { margin: 2px 0 6px; }
+.aiw { margin: 2px 0 6px; display: grid; gap: 6px; }
+.aiw-acts { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .aiw-open { font: inherit; font-size: 0.8rem; font-weight: 600; color: #7A5A12; background: #FBF4E2; border: 1px solid #EBDDB6; border-radius: 999px; padding: 4px 12px; cursor: pointer; }
-.aiw-open:hover { background: #F6EBCF; }
+.aiw-open:hover:not(:disabled) { background: #F6EBCF; }
+.aiw-open:disabled { opacity: 0.75; cursor: progress; }
 .aiw-open span { color: #C4972F; }
-.aiw-box { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid #EBDDB6; background: #FDFAF1; border-radius: 10px; }
-.aiw-box .input { font-size: 0.88rem; }
-.aiw-acts { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-.aiw-close { margin-left: auto; background: none; border: 0; color: var(--faint); cursor: pointer; font-size: 0.9rem; width: 28px; height: 28px; border-radius: 50%; }
-.aiw-close:hover { background: var(--line-soft); color: var(--ink); }
+.aiw-link { font: inherit; font-size: 0.8rem; background: none; border: 0; padding: 0; color: var(--ink-soft); text-decoration: underline; cursor: pointer; }
+.aiw-change { display: flex; gap: 6px; }
+.aiw-change .input { font-size: 0.85rem; padding: 6px 10px; }
 .aiw-note { margin: 0; font-size: 0.8rem; color: #2F6B4E; }
 .aiw-note.err { color: var(--danger); }

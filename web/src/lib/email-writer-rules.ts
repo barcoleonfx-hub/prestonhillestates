@@ -104,12 +104,12 @@ export function tidyBody(body: string): string {
 
 /** Every place in the portal where the AI can write, and what it's writing there. */
 export const AI_PLACES = {
-  letter: { what: 'an email about one of our homes, to one person or many (it may be sent to a group)', words: '120 to 220', subject: true, greeting: false, bullets: true },
-  'campaign-letter': { what: 'the opening message of an email newsletter to our contacts', words: '60 to 120', subject: false, greeting: true, bullets: false },
+  letter: { what: 'an email about one of our homes, to one person or many (it may be sent to a group)', words: '160 to 260', subject: true, greeting: false, bullets: true },
+  'campaign-letter': { what: 'the opening message of an email newsletter to our contacts', words: '70 to 130', subject: false, greeting: true, bullets: false },
   'campaign-why': { what: 'the "why we love it" paragraph for a featured home in an email newsletter: two or three sentences, as you would tell a friend', words: '40 to 70', subject: false, greeting: false, bullets: false },
-  'tailored-intro': { what: 'the opening paragraphs of a one-off email to a list of people (the greeting is added separately)', words: '80 to 160', subject: false, greeting: false, bullets: false },
-  match: { what: 'a short personal note to one buyer or tenant about a home that matches what they want. The photos, price, highlights and why we thought of them are added underneath automatically, so don’t repeat those', words: '40 to 90', subject: false, greeting: true, bullets: false },
-  enquiry: { what: 'an email replying to their enquiry', words: '90 to 180', subject: true, greeting: true, bullets: true },
+  'tailored-intro': { what: 'the opening paragraphs of a one-off email to a list of people (the greeting is added separately)', words: '100 to 180', subject: false, greeting: false, bullets: false },
+  match: { what: 'a short personal note to one buyer or tenant about a home that matches what they want. The photos, price, highlights and why we thought of them are added underneath automatically, so don’t repeat those', words: '60 to 110', subject: false, greeting: true, bullets: false },
+  enquiry: { what: 'an email replying to their enquiry', words: '140 to 240', subject: true, greeting: true, bullets: true },
   'enquiry-reply': { what: 'a reply in an ongoing email conversation about their enquiry (our name and office details are added below it)', words: '30 to 140', subject: false, greeting: true, bullets: false },
   'thread-reply': { what: 'a reply to the latest email in this conversation (our name and office details are added below it, with their email quoted underneath)', words: '30 to 140', subject: false, greeting: true, bullets: false },
 } as const
