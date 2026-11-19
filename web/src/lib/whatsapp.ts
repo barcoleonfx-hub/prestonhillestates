@@ -130,6 +130,121 @@ export function waTemplates(c: WaContext): WaTemplate[] {
   return out
 }
 
+// ---------- messages about one of our homes ----------
+
+/** One of our homes, as the WhatsApp messages describe it. Everything comes from the listing itself. */
+export type WaListing = {
+  id: string
+  channel: 'sale' | 'let'
+  /** available, under_offer, sold_stc, sold, let_agreed, let, withdrawn */
+  status: string
+  /** "3 bedroom semi-detached house" */
+  what: string
+  address: string
+  /** "Guide price £650,000", "£1,850 pcm" */
+  price: string
+  /** The main facts, each of which can be left in or out ("on": in the message to start with). */
+  facts: { key: string; text: string; on: boolean }[]
+  /** The listing's own words, short (a couple of sentences) and longer. */
+  short: string
+  long: string
+  /** The listing's key features. */
+  features: string[]
+  url: string
+  tour: string | null
+}
+
+/** What goes into a message about a home. */
+export type WaPropertyOptions = {
+  facts: string[]
+  text: 'none' | 'short' | 'long'
+  features: string[]
+  link: boolean
+  tour: boolean
+  viewing: boolean
+  ask: boolean
+}
+
+export const defaultPropertyOptions = (l: WaListing): WaPropertyOptions => ({
+  facts: ['price', ...l.facts.filter((f) => f.on).map((f) => f.key)], text: l.short ? 'short' : 'none', features: l.features.slice(0, 5),
+  link: true, tour: false, viewing: true, ask: true,
+})
+
+/** "the *3 bedroom semi-detached house* on *Carlton Avenue East, Wembley HA9*" */
+const homeName = (l: WaListing) => `the *${l.what}* ${/^[a-z]/i.test(l.address) && !/^flat\b/i.test(l.address) ? 'on' : 'at'} *${l.address}*`
+
+/** Under offer, sold or let: said plainly, so nobody arranges to see a home they can't have. */
+function availability(l: WaListing): string | null {
+  if (l.status === 'under_offer') return 'Just so you know, it’s currently *under offer*.'
+  if (l.status === 'sold_stc') return 'Just so you know, it’s now *sold subject to contract*.'
+  if (l.status === 'let_agreed') return 'Just so you know, it’s now *let agreed*.'
+  if (['sold', 'let', 'withdrawn'].includes(l.status)) return 'Just so you know, it’s *no longer available*.'
+  return null
+}
+const isAvailable = (l: WaListing) => l.status === 'available'
+
+/** The questions that help us help them: how they're buying, or who's moving in and when. */
+export const positionQuestion = (isLet: boolean) => isLet
+  ? 'So I can help you best: when are you looking to move, and who would be living there?'
+  : 'So I can help you best: are you buying with a mortgage, and do you have a home to sell?'
+
+/** The details block: price and facts, the description, key features and links, as chosen. */
+function details(l: WaListing, o: WaPropertyOptions): string[] {
+  const out: string[] = []
+  const facts = l.facts.filter((f) => o.facts.includes(f.key)).map((f) => f.text)
+  const price = o.facts.includes('price') ? `*${l.price}*` : ''
+  if (price || facts.length) out.push([price, facts.join(' · ')].filter(Boolean).join('\n'))
+  const words = o.text === 'long' ? l.long || l.short : o.text === 'short' ? l.short : ''
+  if (words) out.push(words)
+  const feats = l.features.filter((f) => o.features.includes(f))
+  if (feats.length) out.push(`*Key features*\n${feats.map((f) => `• ${f}`).join('\n')}`)
+  if (o.link) out.push(`Full details and photos:\n${l.url}`)
+  if (o.tour && l.tour) out.push(`Virtual tour:\n${l.tour}`)
+  return out
+}
+
+/** The close: a viewing on two real days (or, if it's gone, an offer to help), and the question about them. */
+function close(l: WaListing, o: WaPropertyOptions, days: string | null | undefined): string[] {
+  const out: string[] = []
+  if (o.viewing) {
+    out.push(isAvailable(l)
+      ? `${days ? `Would *${days}* suit you` : 'When would suit you'} for a viewing? We’re open Monday to Friday 9 to 5.30 and Saturday 10 to 1.`
+      : 'I can let you know straight away if anything changes, and send you similar homes in the meantime. Would that help?')
+  }
+  if (o.ask) out.push(positionQuestion(l.channel === 'let'))
+  return out
+}
+
+/**
+ * A message about one of our homes. "first": the first reply to their enquiry. "details": the details on their own,
+ * to send after a call. "viewing": a short note to book a viewing.
+ */
+export function propertyMessage(c: { first: string; me: string; days?: string | null }, l: WaListing, o: WaPropertyOptions, style: 'first' | 'details' | 'viewing' = 'first'): string {
+  const me = c.me.split(/\s+/)[0] ?? ''
+  const name = homeName(l)
+  const gone = availability(l)
+  if (style === 'viewing') {
+    if (!isAvailable(l)) return [`${hi(c.first)}, about ${name}. ${gone}`, 'I can let you know straight away if anything changes, and send you similar homes in the meantime. Would that help?'].join('\n\n') + sign(me)
+    return [`${hi(c.first)}, would you like to view ${name}?`,
+      `${c.days ? `I can arrange *${c.days}*, or` : 'Just'} reply with a day and time that suits you. We’re open Monday to Friday 9 to 5.30 and Saturday 10 to 1.`].join('\n\n') + sign(me)
+  }
+  const intro = style === 'first'
+    ? `${hi(c.first)}, it’s ${me ? `${me} from ` : ''}Preston Hill Estates. Thank you for your enquiry about ${name}.${gone ? ` ${gone}` : ''}`
+    : `${hi(c.first)}, here are the details of ${name}.${gone ? ` ${gone}` : ''}`
+  const end = style === 'details' ? [...close(l, { ...o, ask: false }, c.days), 'Any questions, just reply here.'] : close(l, o, c.days)
+  return [intro, ...details(l, o), ...end].join('\n\n') + (style === 'details' ? sign(me) : '')
+}
+
+/** A few quick questions about where they are, so we know how to help. */
+export function positionMessage(c: { first: string; me: string }, isLet: boolean, l?: WaListing | null): string {
+  const me = c.me.split(/\s+/)[0] ?? ''
+  const about = l ? ` with ${homeName(l)}` : ''
+  const qs = isLet
+    ? ['When would you like to move in?', 'Who would be living there, and are there any pets?', 'Are you working, or would you need a guarantor?']
+    : ['Are you buying with a mortgage, and do you have an agreement in principle?', 'Do you have a home to sell, and is it on the market yet?', 'When would you ideally like to move?']
+  return `${hi(c.first)}, so I can help you${about}, could I ask a few quick questions?\n\n${qs.map((q, i) => `${i + 1}. ${q}`).join('\n')}${sign(me)}`
+}
+
 /** A new home that might suit them. This is marketing: only for people who ticked the WhatsApp box. */
 export function newHomeMessage(first: string, me: string, home: { line: string; url: string }): string {
   return `${hi(first)}, a new home has just come on that might suit you: ${home.line}.\n\n${home.url}\n\nWould you like to see it?${sign(me.split(/\s+/)[0] ?? '')}\n\nReply STOP if you’d rather not get messages like this.`

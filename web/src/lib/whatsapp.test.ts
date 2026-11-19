@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canReach, isStop, newHomeMessage, nextTwoDays, quietEnds, quietReason, waBlocked, waLink, waTemplates } from './whatsapp'
+import { canReach, defaultPropertyOptions, isStop, newHomeMessage, nextTwoDays, positionMessage, propertyMessage, quietEnds, quietReason, waBlocked, waLink, waTemplates, type WaListing } from './whatsapp'
 
 // London times in November are GMT, so these UTC times are the same on the clock.
 const at = (iso: string) => new Date(iso)
@@ -109,5 +109,68 @@ describe('messages', () => {
     const m = newHomeMessage('Sam', 'Jamil Ahmed', { line: '3 bed house, Kenton, £650,000', url: 'https://example.com/p' })
     expect(m).toContain('https://example.com/p')
     expect(m).toMatch(/Reply STOP/)
+  })
+})
+
+const home: WaListing = {
+  id: 'p1', channel: 'sale', status: 'available', what: '3 bedroom semi-detached house', address: 'Carlton Avenue East, Wembley HA9', price: 'Guide price £650,000',
+  facts: [{ key: 'beds', text: '3 bedrooms', on: true }, { key: 'baths', text: '2 bathrooms', on: true }, { key: 'tenure', text: 'Freehold', on: true }, { key: 'epc', text: 'EPC C', on: false }],
+  short: 'A bright, extended family home on a quiet road.', long: 'A bright, extended family home on a quiet road. The kitchen opens onto a 90ft garden.',
+  features: ['Extended kitchen', '90ft garden', 'Off-street parking', 'Close to station', 'Two bathrooms', 'Loft room'],
+  url: 'https://example.com/properties/p1?utm_source=whatsapp', tour: 'https://tour.example.com/p1',
+}
+const who = { first: 'Priya', me: 'Jamil Ahmed', days: 'tomorrow or Friday' }
+
+describe('messages about one of our homes', () => {
+  it('writes an accurate first reply from the listing, with what staff chose to include', () => {
+    const o = defaultPropertyOptions(home)
+    expect(o.facts).toEqual(['price', 'beds', 'baths', 'tenure'])
+    expect(o.features).toHaveLength(5)
+    const m = propertyMessage(who, home, o, 'first')
+    expect(m).toMatch(/^Hi Priya, it’s Jamil from Preston Hill Estates\. Thank you for your enquiry about the \*3 bedroom semi-detached house\* on \*Carlton Avenue East, Wembley HA9\*\./)
+    expect(m).toContain('*Guide price £650,000*\n3 bedrooms · 2 bathrooms · Freehold')
+    expect(m).not.toContain('EPC C')
+    expect(m).toContain('A bright, extended family home on a quiet road.')
+    expect(m).toContain('*Key features*\n• Extended kitchen\n• 90ft garden')
+    expect(m).not.toContain('Loft room')
+    expect(m).toContain('Full details and photos:\nhttps://example.com/properties/p1?utm_source=whatsapp')
+    expect(m).not.toContain('tour.example.com')
+    expect(m).toContain('Would *tomorrow or Friday* suit you for a viewing?')
+    expect(m).toContain('are you buying with a mortgage, and do you have a home to sell?')
+  })
+  it('leaves out whatever is switched off, and adds the tour and longer description when asked', () => {
+    const m = propertyMessage(who, home, { facts: ['epc'], text: 'long', features: ['Loft room'], link: false, tour: true, viewing: false, ask: false })
+    expect(m).not.toContain('£650,000')
+    expect(m).toContain('EPC C')
+    expect(m).toContain('The kitchen opens onto a 90ft garden.')
+    expect(m).toContain('• Loft room')
+    expect(m).not.toContain('Full details')
+    expect(m).toContain('Virtual tour:\nhttps://tour.example.com/p1')
+    expect(m).not.toMatch(/viewing|mortgage/)
+  })
+  it('says plainly when a home is under offer, and offers help instead of a viewing', () => {
+    const gone = { ...home, status: 'under_offer' }
+    const m = propertyMessage(who, gone, defaultPropertyOptions(gone))
+    expect(m).toContain('it’s currently *under offer*')
+    expect(m).not.toContain('suit you for a viewing')
+    expect(m).toContain('send you similar homes')
+    expect(propertyMessage(who, gone, defaultPropertyOptions(gone), 'viewing')).toContain('*under offer*')
+  })
+  it('sends the details on their own, and a short viewing note', () => {
+    const d = propertyMessage(who, home, defaultPropertyOptions(home), 'details')
+    expect(d).toMatch(/^Hi Priya, here are the details of the \*3 bedroom/)
+    expect(d).toContain('Any questions, just reply here.')
+    expect(d).toMatch(/Jamil, Preston Hill Estates$/)
+    expect(d).not.toContain('mortgage')
+    const v = propertyMessage(who, home, defaultPropertyOptions(home), 'viewing')
+    expect(v).toContain('would you like to view the *3 bedroom semi-detached house*')
+    expect(v).toContain('I can arrange *tomorrow or Friday*')
+  })
+  it('asks lettings questions for homes to rent', () => {
+    const flat = { ...home, channel: 'let' as const, what: '2 bedroom flat', address: 'Flat 3, 10 High Road, HA9', price: '£1,850 pcm' }
+    expect(propertyMessage(who, flat, defaultPropertyOptions(flat))).toContain('when are you looking to move')
+    expect(propertyMessage(who, flat, defaultPropertyOptions(flat))).toContain('the *2 bedroom flat* at *Flat 3, 10 High Road, HA9*')
+    expect(positionMessage(who, true, flat)).toContain('2. Who would be living there, and are there any pets?')
+    expect(positionMessage(who, false, null)).toContain('1. Are you buying with a mortgage, and do you have an agreement in principle?')
   })
 })
