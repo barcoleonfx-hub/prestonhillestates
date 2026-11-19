@@ -1,10 +1,11 @@
 'use client'
 
-import { useActionState, useEffect, useMemo, useState } from 'react'
+import { useActionState, useEffect, useMemo, useRef, useState } from 'react'
 import { ENQUIRY_TEMPLATES, renderEnquiryEmail, type EnquiryEmailContext, type EnquiryEmailKind } from '@/lib/enquiry-email'
 import type { ListingOption } from '@/lib/property-email-data'
 import { sendEnquiryEmail, type SendState } from '../../../enquiry-email-actions'
 import { AiWrite } from '../../AiWrite'
+import { useEmailCheck } from '../../EmailCheck'
 
 const KIND_LABEL: Record<EnquiryEmailKind, string> = {
   'sales-valuation': 'Sales valuation', 'lettings-valuation': 'Rental valuation', buyer: 'Buyer', tenant: 'Tenant',
@@ -40,6 +41,9 @@ export function EmailComposer({ id, ctx, to, canSend, blocked, chooseKind, start
   const [edited, setEdited] = useState(false)
   const [files, setFiles] = useState<string[]>([])
   const [state, send, pending] = useActionState<SendState, FormData>(sendEnquiryEmail, {})
+  const formRef = useRef<HTMLFormElement>(null)
+  const pass = useRef(false)
+  const check = useEmailCheck({ enquiryId: id, propertyId: forListing ? propertyId || null : null }, `an email replying to their enquiry: ${t.label}`)
 
   // A new template, or a new time typed in: fresh wording, unless staff have rewritten it themselves.
   useEffect(() => {
@@ -71,7 +75,12 @@ export function EmailComposer({ id, ctx, to, canSend, blocked, chooseKind, start
         ))}
       </div>
 
-      <form action={send} className="ew-form">
+      <form ref={formRef} action={send} className="ew-form" onSubmit={async (e) => {
+        // The check runs first; once it's happy (or staff press Send again), the form goes as normal.
+        if (pass.current) { pass.current = false; return }
+        e.preventDefault()
+        if (await check.ensure({ subject, html })) { pass.current = true; formRef.current?.requestSubmit() }
+      }}>
         <input type="hidden" name="id" value={id} />
         {forListing ? <input type="hidden" name="propertyId" value={propertyId} /> : null}
         {forListing && (listings.length || linkedId) ? (
@@ -120,6 +129,7 @@ export function EmailComposer({ id, ctx, to, canSend, blocked, chooseKind, start
         {state.error ? <div className="notice err">{state.error}</div> : null}
         {state.ok ? <div className="notice ok">Sent: “{state.subject}”. It’s noted on the enquiry.</div> : null}
         {blocked ? <div className="notice">{blocked}</div> : null}
+        {check.panel({ subject, html })}
         <div className="actions">
           <button className="btn btn-gold" type="submit" disabled={pending || !canSend || !to}>{pending ? 'Sending…' : `Send to ${to ? to : 'them'}`}</button>
         </div>

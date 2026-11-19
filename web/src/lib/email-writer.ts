@@ -126,6 +126,19 @@ async function threadBrief(id: string): Promise<string | null> {
     ...msgs.map((m) => `--- ${m.direction === 'in' ? `From ${m.fromName || m.fromAddr || 'them'}` : 'From us'}, ${day(m.sentAt)}\n${clip(m.body ?? m.snippet, 1500)}`)].join('\n')
 }
 
+/** The facts an email can be checked against: the enquiry, the home, the thread and the person's requirements. */
+export async function emailFacts(r: { propertyId: string | null; enquiryId: string | null; threadId: string | null; contactId: string | null; staffName?: string }): Promise<string> {
+  await ready()
+  const enq = r.enquiryId ? await enquiryBrief(r.enquiryId, r.staffName ?? '').catch(() => null) : null
+  const propertyId = r.propertyId ?? enq?.propertyId ?? null
+  const home = propertyId ? await writerHome(propertyId).catch(() => null) : null
+  const thread = r.threadId ? await threadBrief(r.threadId).catch(() => null) : null
+  const contactId = r.contactId ?? enq?.contactId ?? null
+  const c = contactId ? await db.query.contacts.findFirst({ where: eq(contacts.id, contactId) }) : null
+  const reader = c ? readerNotes({ role: c.roles ? roleLabel(c.roles.split(',')[0]).toLowerCase() : null, minBeds: c.minBeds, maxPrice: c.maxPrice, areas: c.areas, position: c.position }) : null
+  return [enq?.text, thread, home ? `The home:\n${factSheet(home)}` : null, reader ? `What the reader told us they're looking for: ${reader}` : null].filter(Boolean).join('\n\n')
+}
+
 /** Writes (or improves) a message for one place in the portal. Returns the draft, or a plain-English error. */
 export async function writeEmail(r: AiRequest): Promise<WriterResult | { error: string }> {
   const k = anthropicKey()

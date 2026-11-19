@@ -1189,3 +1189,18 @@ kbd { font: 600 0.68rem/1 var(--sans, inherit); padding: 3px 6px; border-radius:
 .aiw-change .input { font-size: 0.85rem; padding: 6px 10px; }
 .aiw-note { margin: 0; font-size: 0.8rem; color: #2F6B4E; }
 .aiw-note.err { color: var(--danger); }
+
+/* The check before an email goes */
+.ec { margin: 10px 0 4px; }
+.ec-run { font: inherit; font-size: 0.82rem; font-weight: 600; background: none; border: 0; padding: 0; color: #2F6B4E; text-decoration: underline; cursor: pointer; }
+.ec-busy { margin: 0; font-size: 0.85rem; color: var(--ink-soft); }
+.ec-err { margin: 0; font-size: 0.85rem; color: var(--danger); }
+.ec-box { border: 1px solid #EBD3A8; background: #FFF9EC; border-radius: 10px; padding: 12px 14px; display: grid; gap: 8px; }
+.ec-box.ok { border-color: #BFE0CB; background: #F1FAF4; }
+.ec-sum { margin: 0; font-size: 0.9rem; }
+.ec-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 7px; font-size: 0.86rem; line-height: 1.4; }
+.ec-tag { display: inline-block; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 1px 7px; border-radius: 999px; margin-right: 2px; }
+.ec-tag.fix { background: #FBE3D8; color: #A8442E; }
+.ec-tag.consider { background: #EEF2F8; color: #3F5878; }
+.ec-fix { color: var(--ink-soft); }
+.ec-hint { margin: 0; font-size: 0.8rem; color: var(--faint); }
