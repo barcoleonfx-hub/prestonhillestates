@@ -249,7 +249,9 @@ export function ctaFor(variant: Extract<Block, { kind: 'cta' }>['variant'], r: R
 /** Replaces {first_name} and friends. */
 export function personalise(text: string, r: Reader) {
   const first = r.name ? firstName(r.name) : ''
-  return text.replace(/\{first_name\}/g, first || 'there').replace(/\{name\}/g, r.name || 'there')
+  // With no name, "{first_name}, this month on the Hill" becomes "This month on the Hill", not "there, this month…".
+  const t = first ? text : text.replace(/(^|\n)\{first_name\},\s*(\S)/g, (_, b: string, c: string) => `${b}${c.toUpperCase()}`)
+  return t.replace(/\{first_name\}/g, first || 'there').replace(/\{name\}/g, r.name || 'there')
 }
 
 // ---------- rendering ----------
@@ -348,7 +350,7 @@ ${button(withUtm(c.url, campaign, 'newsletter'), c.btn)}
 
 export type CampaignSender = { email: string }
 
-export function renderCampaign(c: Content, r: Reader, s: Shared, opts: { campaign: string; sender: CampaignSender; month: string; markers?: boolean }): { subject: string; html: string; text: string } {
+export function renderCampaign(c: Content, r: Reader, s: Shared, opts: { campaign: string; sender: CampaignSender; month: string; markers?: boolean }): { subject: string; preheader: string; html: string; text: string } {
   const subject = personalise(spotlightText(c.subject || 'News from Preston Hill Estates', c, s), r).slice(0, 150)
   const pre = personalise(spotlightText(c.preheader, c, s), r)
   // In the editor's preview each section is tagged, so the preview can scroll to the one being edited.
@@ -390,7 +392,7 @@ ${sign}
 <p style="margin:0 0 8px; font-family:${SANS}; font-size:12px; line-height:18px;"><a href="${esc(r.unsubscribeUrl)}" style="color:${C.faint};">Unsubscribe from our emails</a></p>
 <p style="margin:0; font-family:${SANS}; font-size:11px; color:#B8B4A2;">Preston Hill Estates Ltd &middot; Company No. 05058532</p>
 </td></tr></table></td></tr></table></body></html>`
-  return { subject, html, text: textVersion(c, r, s, opts.campaign) }
+  return { subject, preheader: pre, html, text: textVersion(c, r, s, opts.campaign) }
 }
 
 function textVersion(c: Content, r: Reader, s: Shared, campaign: string) {
