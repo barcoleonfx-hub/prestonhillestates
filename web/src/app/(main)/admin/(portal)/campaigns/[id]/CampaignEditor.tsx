@@ -25,7 +25,7 @@ const CTA: { value: Extract<Block, { kind: 'cta' }>['variant']; label: string }[
   { value: 'valuation', label: 'Free valuation' }, { value: 'letting', label: 'Rental valuation' },
   { value: 'mortgage', label: 'Borrowing calculator' }, { value: 'register', label: 'Homes to rent' },
 ]
-const generic = (base: string): Reader => ({ contactId: null, name: 'Sam Example', email: 'sam@example.com', roles: ['other'], outward: null, areas: null, budget: null, minBeds: null, position: null, unsubscribeUrl: `${base}/unsubscribe` })
+const generic = (base: string): Reader => ({ contactId: null, name: '', email: 'someone@example.com', roles: ['other'], outward: null, areas: null, budget: null, minBeds: null, position: null, unsubscribeUrl: `${base}/unsubscribe` })
 // Made-up readers for each kind of person, for previewing sections nobody in the sample list would see.
 const EXAMPLES: Record<Role, Partial<Reader>> = {
   buyer: { name: 'Alex Example', budget: 600000, minBeds: 3, outward: 'HA3' }, tenant: { name: 'Alex Example', budget: 1800, minBeds: 2, outward: 'HA9' },
@@ -150,7 +150,6 @@ export function CampaignEditor(p: Props) {
     if ('error' in r && r.error) setNote({ ok: false, text: r.error })
     else router.refresh()
   }
-  const personal = (s: string) => s.replace(/\{first_name\}/g, 'Sam')
   const shown = (b: Block) => b.kind !== 'article' || audience.roles.some((r) => b.show.includes(r))
 
   return (
@@ -241,7 +240,7 @@ export function CampaignEditor(p: Props) {
               <button type="button" className={width === 'mobile' ? 'on' : ''} onClick={() => setWidth('mobile')}>Phone</button>
             </div>
           </div>
-          <div className="cmp-inbox"><b>{rendered.subject}</b><span>{personal(content.preheader).replace(/\{first_name\}/g, '')}</span></div>
+          <div className="cmp-inbox"><b>{rendered.subject}</b><span>{rendered.preheader}</span></div>
           <div className="pmail-frame-wrap cmp-scroll" ref={wrap}><iframe ref={frame} title="Email preview" className={`pmail-frame ${width}`} srcDoc={rendered.html} sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" /></div>
         </section>
         {!p.readOnly ? (
