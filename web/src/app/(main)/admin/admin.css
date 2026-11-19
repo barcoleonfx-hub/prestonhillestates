@@ -1176,3 +1176,15 @@ kbd { font: 600 0.68rem/1 var(--sans, inherit); padding: 3px 6px; border-radius:
 .vl-row.off .fu-main b { color: var(--ink-soft); }
 .vl-addr { font-size: 0.85rem; padding: 7px 10px; }
 @media (max-width: 760px) { .vl-row { grid-template-columns: 1fr; } }
+
+/* Writing a property email with AI */
+.ai-box { border: 1px solid #E6DCC3; background: #FDFBF5; border-radius: 12px; padding: 14px 16px; display: grid; gap: 10px; margin-bottom: 14px; }
+.ai-head { display: grid; gap: 2px; }
+.ai-head b { font-size: 0.95rem; }
+.ai-head span { font-size: 0.8rem; color: var(--faint); }
+.ai-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.ai-grid .ai-who { grid-column: 1 / -1; }
+.ai-grid .field, .ai-box > .field { margin: 0; }
+@media (max-width: 700px) { .ai-grid { grid-template-columns: 1fr; } }
+.ai-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.ai-box .notice { margin: 0; }
