@@ -1,0 +1,44 @@
+/* The Black Friday shop window poster. Drawn at A4 in CSS pixels (794 × 1123), like the window display sheets, and
+   in the same house style (Terracotta, Inter). The sheet's panel and stage styles come from window.css. */
+
+.pf-toggle { display: inline-flex; border: 1px solid #DDD8C8; border-radius: 999px; padding: 3px; gap: 3px; }
+.pf-toggle button { border: 0; background: none; padding: 6px 16px; border-radius: 999px; font: inherit; font-size: 0.84rem; cursor: pointer; color: #5B5748; }
+.pf-toggle button.on { background: #23211A; color: #fff; }
+
+.pf { --display: 'PH Inter Display', 'PH Inter', 'Helvetica Neue', Arial, sans-serif;
+  width: 794px; height: 1123px; background: var(--page); color: var(--ink); font-family: 'PH Inter', 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased;
+  padding: 20px; display: flex; flex-direction: column; justify-content: space-between; gap: 12px; overflow: hidden; }
+.pf > * { flex-shrink: 0; }
+.pf-top { height: 50px; display: flex; align-items: center; justify-content: space-between; padding: 0 4px 0 6px; }
+.pf-tag { background: var(--ink); color: #fff; padding: 10px 26px 11px; border-radius: 999px; font-size: 22px; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; line-height: 1.1; }
+
+.pf-hero { background: var(--brand); color: #fff; border-radius: 22px; text-align: center; padding: 26px 30px 26px; position: relative; overflow: hidden; }
+.pf-hero::after { content: ''; position: absolute; inset: auto -60px -120px auto; width: 300px; height: 300px; border-radius: 50%; background: rgba(255, 255, 255, 0.08); }
+.pf-kicker { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.92; }
+.pf-big { margin: 2px 0 0; font-family: var(--display); font-weight: 900; font-size: 205px; line-height: 0.92; letter-spacing: -0.02em; }
+.pf-big span { font-size: 122px; vertical-align: 52px; margin-right: 12px; }
+.pf-for { margin: 8px 0 0; position: relative; z-index: 1; font-family: var(--display); font-weight: 800; font-size: 40px; line-height: 1.1; letter-spacing: -0.01em; }
+.pf-ends { position: relative; z-index: 1; display: inline-block; margin: 16px 0 0; background: #fff; color: var(--brand); border-radius: 999px; padding: 9px 24px 10px; font-size: 20px; font-weight: 800; letter-spacing: 0.04em; }
+
+.pf-lead { margin: 0 12px; text-align: center; font-size: 22px; line-height: 1.38; font-weight: 500; }
+
+.pf-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.pf-steps > div { background: var(--tint); border-radius: 16px; padding: 16px 18px; }
+.pf-steps b { display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: var(--brand); color: #fff; font-size: 19px; font-weight: 800; }
+.pf-steps h3 { margin: 12px 0 6px; font-size: 21px; font-weight: 800; letter-spacing: -0.01em; }
+.pf-steps p { margin: 0; font-size: 14.5px; line-height: 1.42; color: var(--muted); }
+
+.pf-scan { display: flex; align-items: center; gap: 26px; background: #fff; border: 3px solid var(--brand); border-radius: 18px; padding: 16px 24px; }
+.pf-scan img { width: 158px; height: 158px; display: block; }
+.pf-scan h3 { margin: 0 0 8px; font-family: var(--display); font-size: 34px; font-weight: 800; line-height: 1.08; letter-spacing: -0.01em; }
+.pf-scan p { margin: 0; font-size: 18px; color: var(--muted); }
+.pf-scan .pf-or { margin-top: 12px; font-size: 22px; color: var(--ink); }
+.pf-scan .pf-or b { color: var(--brand); font-weight: 800; }
+
+.pf-foot { border-top: 2px solid var(--tint); padding: 12px 6px 2px; }
+.pf-foot p { margin: 0; font-size: 15px; }
+.pf-foot .pf-small { margin-top: 8px; font-size: 10.5px; line-height: 1.45; color: var(--muted); }
+
+@media print {
+  .pf-zoom { margin: 0 !important; }
+}
