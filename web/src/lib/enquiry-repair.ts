@@ -98,7 +98,8 @@ export async function repairOtmCutOff(): Promise<number> {
   return fixed
 }
 
-const SIDE_FIXED = 'repair_listing_side_v1'
+// v2: also reads "Lettings enquiry" in the email subject (OnTheMarket viewing requests say nothing else).
+const SIDE_FIXED = 'repair_listing_side_v2'
 
 /**
  * Portal enquiries linked to the wrong one of two listings on the same street (a tenant enquiry linked to the flat
