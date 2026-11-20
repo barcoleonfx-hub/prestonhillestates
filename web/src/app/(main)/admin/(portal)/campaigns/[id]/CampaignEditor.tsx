@@ -25,6 +25,7 @@ const CTA: { value: Extract<Block, { kind: 'cta' }>['variant']; label: string }[
   { value: 'auto', label: 'Best for each reader (landlords: rental valuation, sellers: valuation, buyers: calculator, tenants: homes to rent)' },
   { value: 'valuation', label: 'Free valuation' }, { value: 'letting', label: 'Rental valuation' },
   { value: 'mortgage', label: 'Borrowing calculator' }, { value: 'register', label: 'Homes to rent' },
+  { value: 'referral', label: 'Introduce a landlord (£500 referral)' },
 ]
 const generic = (base: string): Reader => ({ contactId: null, name: '', email: 'someone@example.com', roles: ['other'], outward: null, areas: null, budget: null, minBeds: null, position: null, unsubscribeUrl: `${base}/unsubscribe` })
 // Made-up readers for each kind of person, for previewing sections nobody in the sample list would see.

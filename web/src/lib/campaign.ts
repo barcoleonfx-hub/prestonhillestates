@@ -20,7 +20,7 @@ export type Block =
   | { id: string; kind: 'market'; title: string; note: string }
   | { id: string; kind: 'article'; tag: string; headline: string; body: string; link: string; linkLabel: string; show: Role[]; checked: string | null }
   | { id: string; kind: 'guides'; title: string; slugs: string[] }
-  | { id: string; kind: 'cta'; variant: 'auto' | 'valuation' | 'letting' | 'mortgage' | 'register' }
+  | { id: string; kind: 'cta'; variant: 'auto' | 'valuation' | 'letting' | 'mortgage' | 'register' | 'referral' }
   /** One home, told properly: photos, why we love it, what makes it special, the area, what similar homes sold for. */
   | { id: string; kind: 'spotlight'; propertyId: string | null; label: string; why: string; others: number }
 
@@ -130,6 +130,9 @@ export function newBlock(kind: BlockKind): Block {
   }
 }
 
+/** "Introduce a landlord": a reply to the branch, with what we need already laid out. */
+const REFERRAL_MAIL = `mailto:{sender}?subject=${encodeURIComponent('Introducing a landlord')}&body=${encodeURIComponent('Landlord’s name:\nTheir phone or email:\nWhere their property is:\nThey’re happy for you to contact them: Yes\n\nMy name:\nMy phone:')}`
+
 export const TEMPLATES: { key: string; name: string; about: string; audience: Audience; content: (signedBy: string) => Content }[] = [
   {
     key: 'newsletter', name: 'The Hill Report', about: 'Monthly newsletter: a note from the branch, homes picked for each reader, local prices, news and law changes for their situation.',
@@ -189,6 +192,18 @@ export const TEMPLATES: { key: string; name: string; about: string; audience: Au
         { id: uid(), kind: 'market', title: 'What homes are selling for', note: '' },
         { id: uid(), kind: 'listings', title: 'On the market with us', channel: 'auto', ids: null, max: 3 },
         { id: uid(), kind: 'cta', variant: 'valuation' },
+      ],
+    }),
+  },
+  {
+    key: 'referral', name: 'Refer a landlord: £500', about: 'Asks your contacts to introduce landlords they know. £500 to them when a landlord they introduce lets through us (paid once the first month’s rent is in), with the small print and a one-click reply to introduce someone.',
+    audience: { roles: ALL_ROLES, areas: '', activeMonths: null },
+    content: (signedBy) => ({
+      subject: '{first_name}, know a landlord? There’s £500 in it for you', preheader: 'Introduce a landlord who lets with us and we’ll send you £500 once the first rent is in.', signedBy,
+      blocks: [
+        { id: uid(), kind: 'letter', title: '£500 for every landlord you *introduce*', body: 'Hello {first_name},\n\nDo you know a landlord? A friend, relative, neighbour or colleague with a flat or house to let, or one that’s already let through another agent?\n\nIntroduce them to us, and when they let their property with Preston Hill Estates we’ll send you £500 as a thank you, once the tenancy has started and the first month’s rent is in.\n\nIt’s simple. Tell them about us and check they’re happy for us to get in touch. Then reply to this email with their name and number, or ask them to call the branch on 020 8904 9005 and mention your name. We’ll give them a free rental valuation and an honest view of what the new renting rules mean for them. If they go ahead with any of our letting services, fully managed, rent collection or let only, the £500 is yours.\n\nThere’s no limit: introduce two landlords who let with us, and that’s £1,000.' },
+        { id: uid(), kind: 'article', tag: 'The small print', headline: 'How the £500 works', body: 'The landlord must be new to us: not already a client, and not in touch with us about letting in the last 12 months.\n\nThey mention your name when they first contact us, or you introduce them by replying to this email (with their permission).\n\nWe pay you £500 by bank transfer once a tenancy has started on their property through us and we have received the first month’s rent. Any of our letting services counts: fully managed, rent collection or let only.\n\nOne £500 per property introduced, with no limit on how many landlords you introduce. Not open to our staff or their households. We may change or end this offer at any time; anyone you introduced before then still counts.', link: '', linkLabel: 'Read more', show: ALL_ROLES, checked: null },
+        { id: uid(), kind: 'cta', variant: 'referral' },
       ],
     }),
   },
@@ -365,11 +380,12 @@ ${gs.map((g) => `<table role="presentation" width="100%" cellpadding="0" cellspa
         letting: { eye: 'For landlords', h: 'What could your property <em style="color:#C4972F;">rent for?</em>', p: 'A free rental valuation and an honest view of what the new rules mean for your letting, from the branch on Preston Road.', btn: 'Get a rental valuation', url: `${s.base}/valuation?intent=letting` },
         mortgage: { eye: 'Buying?', h: 'How much could you <em style="color:#C4972F;">borrow?</em>', p: 'Our calculator gives you a quick idea in a minute, and tells us what you’re looking for so we can send you the right homes first.', btn: 'Try the calculator', url: `${s.base}/mortgage-calculator` },
         register: { eye: 'Looking to rent?', h: 'Tell us what you’re <em style="color:#C4972F;">looking for.</em>', p: 'Good rentals often let before they reach the portals. Reply with your budget, area and move date and we’ll call you first.', btn: 'See homes to rent', url: `${s.base}/properties?channel=let` },
+        referral: { eye: 'Know a landlord?', h: 'Introduce them, and get <em style="color:#C4972F;">£500.</em>', p: 'Once they’re happy for us to get in touch, press the button and send us their name and number, or ask them to call the branch and mention you.', btn: 'Introduce a landlord', url: REFERRAL_MAIL },
       }[v]
       return `<tr><td bgcolor="${C.dark}" align="center" class="px" style="padding:40px 40px;">${eyebrow(c.eye, C.goldBtn)}
 <p style="margin:0 0 14px; font-family:${SERIF}; font-size:28px; line-height:34px; color:#FFFDF6;">${c.h}</p>
 <p style="margin:0 0 22px; font-family:${SANS}; font-size:14px; line-height:22px; color:#B9B4A0;">${esc(c.p)}</p>
-${button(withUtm(c.url, campaign, 'newsletter'), c.btn)}
+${button(c.url.startsWith('mailto:') ? c.url : withUtm(c.url, campaign, 'newsletter'), c.btn)}
 <p style="margin:16px 0 0; font-family:${SANS}; font-size:13px; color:#98937F;">Or call the branch: <a href="tel:+442089049005" style="color:${C.goldBtn}; text-decoration:none;">020 8904 9005</a></p></td></tr>`
     }
   }
@@ -439,7 +455,8 @@ function textVersion(c: Content, r: Reader, s: Shared, campaign: string) {
     } else if (b.kind === 'spotlight') {
       const h = b.propertyId ? s.spotlights?.[b.propertyId] : null
       if (h) out.push(`${(b.label || 'Property of the week').toUpperCase()}: ${h.headline}`, `${h.priceText} · ${h.address}`, b.why.trim() ? personalise(b.why, r) : h.summary ?? '', ...h.features.map((f) => `- ${f}`), `See it: ${withUtm(h.url, campaign, 'newsletter')}`)
-    } else if (b.kind === 'cta') out.push(`Call the branch on 020 8904 9005, or visit ${s.base}/valuation for a free valuation.`)
+    } else if (b.kind === 'cta' && b.variant === 'referral') out.push('Know a landlord? Once they’re happy for us to get in touch, reply to this email with their name and number, or ask them to call the branch on 020 8904 9005 and mention you.')
+    else if (b.kind === 'cta') out.push(`Call the branch on 020 8904 9005, or visit ${s.base}/valuation for a free valuation.`)
     out.push('')
   }
   if (c.signedBy.trim()) out.push('With best wishes,', c.signedBy, 'Preston Hill Estates · 271 Preston Road, Harrow HA3 0PS · 020 8904 9005', '')
