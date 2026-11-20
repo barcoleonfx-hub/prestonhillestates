@@ -12,6 +12,7 @@ import { enquiryWorkspace } from './enquiry-workspace'
 import { COUNCIL_TAX_BANDS, FURNISHING, PROPERTY_TYPES, TENURES, labelFor } from './options'
 import { displayAddressFor, getProperty, priceLabel, slugFor } from './properties'
 import { knownBase } from './property-email-data'
+import { googleSummary, reviewsFor } from './reviews-data'
 import { roleLabel } from './crm-options'
 import { AI_PLACES, factSheet, readerNotes, tidyFor, type AiPlace, type WriterHome } from './email-writer-rules'
 
@@ -159,6 +160,8 @@ export async function writeEmail(r: AiRequest): Promise<WriterResult | { error: 
   if (r.mode === 'improve' && !r.draft.trim()) return { error: 'There’s nothing to change yet: press Write with AI first.' }
   if (listing && !r.draft.trim()) return { error: 'Write the description first (even rough notes), then the AI makes it better.' }
   if (!home && !enq && !thread && !r.instruction.trim() && !r.about.trim() && !r.draft.trim()) return { error: 'There’s nothing to write about yet: choose the property first (or type a few words in the box).' }
+  // A letter to homeowners: who we are, in facts (our Google rating and what clients actually said), to quote briefly.
+  const proof = r.place === 'valuation-letter' ? await officeProof().catch(() => null) : null
   const ask = [
     `You're writing ${place.what}. Aim for ${place.words.startsWith('about') ? place.words : `about ${place.words}`} words.`,
     place.subject ? 'Also write a subject line (under 70 characters).' : 'No subject line is needed: leave the subject empty.',
@@ -169,6 +172,7 @@ export async function writeEmail(r: AiRequest): Promise<WriterResult | { error: 
     home ? `The home:\n${factSheet(home)}` : null,
     reader ? `What this person told us they're looking for: ${reader} Make it relevant to them, without repeating their details back word for word.` : null,
     r.about.trim() ? `From the page: ${clip(r.about, listing ? 3000 : 600)}` : null,
+    proof,
     listing && r.mode !== 'improve'
       ? `Here is the description staff have written. It is the source of truth: keep every fact in it (rooms, sizes, features, condition, location details) and add nothing that isn't in it or the facts above; where they differ, staff's description and the form win over the saved listing. Make it read beautifully: better structure, flow and wording, the strongest points first, every cliché and repetition gone.${r.instruction.trim() ? `\nStaff also want: ${clip(r.instruction, 800)}` : ''}\nThe description:\n${clip(r.draft, 8000)}`
       : r.mode === 'improve'
@@ -205,4 +209,16 @@ export async function writeEmail(r: AiRequest): Promise<WriterResult | { error: 
     console.error('AI writing failed', e)
     return { error: 'The AI couldn’t write this one. Try again.' }
   }
+}
+
+/** Who we are, for letters to homeowners: our years on Preston Road, Google rating and a few real client reviews. */
+async function officeProof(): Promise<string | null> {
+  const [g, sales] = await Promise.all([googleSummary(), reviewsFor('sales', 4)])
+  const years = new Date().getFullYear() - 2004
+  const lines = [
+    `About us (true; use at most one or two of these, briefly): independent estate agent on Preston Road since 2004 (${years} years); founder-led, so the person who values the home stays with them; prices backed by real HM Land Registry sold prices; our own team does every viewing.`,
+    g.rating && g.count ? `Our Google rating: ${g.rating} out of 5 from ${g.count} reviews.` : null,
+    sales.length ? `What clients said (you may quote a few words from one, credited as "one of our clients" or their first name, word for word, or not at all):\n${sales.slice(0, 4).map((x) => `- ${x.name}: "${x.text.replace(/\s+/g, ' ').slice(0, 300)}"`).join('\n')}` : null,
+  ].filter(Boolean)
+  return lines.join('\n')
 }

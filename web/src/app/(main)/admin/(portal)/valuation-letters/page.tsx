@@ -9,6 +9,7 @@ import { fmtWhen } from '@/lib/time'
 import { printLettersAction } from '../../postal-actions'
 import { TickAll } from '../reconnect/TickAll'
 import { LetterCount } from './LetterCount'
+import { LetterWords } from './LetterWords'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Valuation letters' }
@@ -39,11 +40,8 @@ export default async function ValuationLettersPage({ searchParams }: { searchPar
       <form action={printLettersAction}>
         <section className="card card-pad vl-words">
           <h2>The letter</h2>
-          <p className="card-sub">Starts “Dear {'{first}'},” and the heading “Your free property report for {'{home}'}”. Use {'{first}'} for their first name and {'{home}'} for their house and street. A blank line starts a new paragraph.</p>
-          <div className="vl-grid">
-            <label className="field"><span className="flabel">Before the QR code</span><textarea className="textarea" name="before" rows={5} defaultValue={text.before} /></label>
-            <label className="field"><span className="flabel">After the QR code</span><textarea className="textarea" name="after" rows={7} defaultValue={text.after} /></label>
-          </div>
+          <p className="card-sub">Starts “Dear {'{first}'},” and the heading “Your free property report for {'{home}'}”. Use {'{first}'} for their first name and {'{home}'} for their house and street. A blank line starts a new paragraph. “Write with AI” writes both parts as one letter, using what’s in the boxes, our Google reviews and what their property report holds.</p>
+          <LetterWords before={text.before} after={text.after} />
           <label className="field vl-sender"><span className="flabel">Signed by</span>
             <select className="input" name="sender" defaultValue={me.name}>{staff.map((s) => <option key={s.name}>{s.name}</option>)}</select>
           </label>

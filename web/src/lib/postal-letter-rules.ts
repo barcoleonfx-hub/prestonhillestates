@@ -56,3 +56,23 @@ export function fillLetter(text: string, v: { first: string; home: string | null
   return text.replace(/\{first\}/g, v.first || 'there').replace(/\{home\}/g, v.home || 'your home')
     .split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean)
 }
+
+/** Where the QR code goes in a letter written as one piece (by the AI, or to show both parts together). */
+export const QR_MARK = '[QR CODE]'
+
+/** Both parts as one text, with the QR code's place marked. */
+export const joinLetter = (before: string, after: string) => `${before.trim()}\n\n${QR_MARK}\n\n${after.trim()}`
+
+/**
+ * One text back into the words before and after the QR code. Without the marker, the code goes after the paragraph
+ * that mentions scanning it (or after the first paragraph).
+ */
+export function splitLetter(text: string): { before: string; after: string } {
+  const t = text.replace(/\r/g, '').trim()
+  const m = /^\s*\[\s*qr(?:\s*code)?\s*\]\s*$/im.exec(t)
+  if (m) return { before: t.slice(0, m.index).trim(), after: t.slice(m.index + m[0].length).trim() }
+  const paras = t.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean)
+  const scan = paras.findIndex((p) => /\b(scan|qr|code)\b/i.test(p))
+  const cut = scan >= 0 && scan < paras.length - 1 ? scan + 1 : Math.min(1, paras.length)
+  return { before: paras.slice(0, cut).join('\n\n'), after: paras.slice(cut).join('\n\n') }
+}
