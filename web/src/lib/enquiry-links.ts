@@ -2,7 +2,7 @@ import 'server-only'
 import { and, isNull, like, ne, or, sql } from 'drizzle-orm'
 import { db } from '@/db/client'
 import { enquiries, properties, type Property } from '@/db/schema'
-import { pickListing, type ListingHint } from './listing-match'
+import { hintFrom, pickListing, type ListingHint } from './listing-match'
 
 // Working out which listing an enquiry is about, from the street and postcode area in the email.
 
@@ -51,7 +51,13 @@ export async function unlinkedFor(p: Property) {
   const rows = await db.select({ id: enquiries.id, message: enquiries.message }).from(enquiries)
     .where(and(isNull(enquiries.propertyId), ne(enquiries.kind, 'valuation'), like(sql`lower(coalesce(${enquiries.message}, ''))`, `%${street.toLowerCase()}%`)))
     .limit(500)
+  const side = p.channel === 'let' ? 'let' : 'sale'
   return rows.filter((r) => {
+    // A tenant enquiry is never offered for the flat for sale on the same street, nor a buyer's for the one to let.
+    // Only the portal's own heading counts as "tenant" (a buyer may say they rent now).
+    const header = (r.message ?? '').split('\n').find((l) => /^(zoopla|onthemarket|rightmove)\b.*\b(enquiry|request)$/i.test(l.trim())) ?? ''
+    const said = hintFrom(r.message ?? '', /tenant|renter/i.test(header) ? 'rent' : null).channel
+    if (said && said !== side) return false
     if (!outward) return true
     // Only the line that names the street counts, so "Kenton Road, HA3" doesn't match a Kenton Road in HA9.
     const line = (r.message ?? '').split('\n').find((l) => l.toLowerCase().includes(street.toLowerCase())) ?? ''
