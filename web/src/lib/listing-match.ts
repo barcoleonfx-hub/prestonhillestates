@@ -9,8 +9,11 @@ export function hintFrom(text: string, intent: 'buy' | 'rent' | 'valuation' | nu
   // Only what the portal says about the listing: not their own words ("I'm a tenant at the moment" is a buyer).
   const lines = text.split('\n').filter((l) => !/^\s*(comments|message|situation|my situation|their address|about)\s*:/i.test(l))
   const t = lines.join('\n').toLowerCase()
-  const let_ = intent === 'rent' || /\b(pcm|pw|per month|per week|to rent|to let|tenant enquiry|renter enquiry)\b/.test(t)
-  const sale = !let_ && (intent === 'buy' || /\b(for sale|buyer enquiry)\b/.test(t))
+  // The portal's own words: the subject ("Lettings enquiry from…"), the enquiry type, and the listing card.
+  const saysLet = /\b(pcm|pw|per month|per week|to rent|to let|for rent|tenant enquiry|renter enquiry|lettings? enquiry|rental enquiry)\b/.test(t)
+  const saysSale = /\b(for sale|buyer enquiry|sales enquiry|purchase enquiry)\b/.test(t)
+  const let_ = intent === 'rent' || (saysLet && !saysSale)
+  const sale = !let_ && (intent === 'buy' || saysSale)
   // The price on the listing card ("Listing: £1,750 pcm") rather than any figure in the email.
   const priceLine = lines.find((l) => /^\s*listing\s*:/i.test(l)) ?? lines.find((l) => /£/.test(l)) ?? ''
   const m = /£\s?([\d,]+(?:\.\d+)?)\s*(k\b)?\s*(pcm|pw|per month|per week)?/i.exec(priceLine)

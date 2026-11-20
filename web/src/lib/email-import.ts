@@ -306,6 +306,11 @@ export async function analyse(raw: string, nowMs = Date.now()): Promise<ImportRo
 
   // Portal leads have a known layout: read every field they carry.
   const lead = source === 'zoopla' ? parseZoopla(lines) ?? parseOnTheMarket(lines) : source === 'onthemarket' ? parseOnTheMarket(lines) ?? parseZoopla(lines) : null
+  // OnTheMarket doesn't say sale or let in a "viewing request"; its subject does ("Lettings enquiry from…").
+  if (lead && lead.intent !== 'valuation') {
+    if (/\blettings? enquiry\b|\btenant enquiry\b/i.test(subject)) lead.intent = 'rent'
+    else if (/\bsales enquiry\b|\bbuyer enquiry\b/i.test(subject)) lead.intent = 'buy'
+  }
   // A buyer who has to sell first is also a valuation for us.
   if (lead && /property to sell|home to sell|need to sell|have to sell|selling my/i.test(lead.situation ?? '')) lead.details.push('Has a home to sell: offer a valuation')
 
