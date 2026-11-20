@@ -10,7 +10,8 @@ const OUTWARD = /\b([A-Z]{1,2}\d[A-Z\d]?)(?:\s*\d[A-Z]{2})?\b/i
 /** "169, Chamberlayne Avenue, Wembley, HA9 8ST" → "Chamberlayne Avenue". */
 export function streetOf(text: string | null | undefined): string | null {
   if (!text) return null
-  const s = text.split(',').map((p) => p.trim().replace(/^\d+[a-z]?\s+/i, '')).find((p) => /[a-z]{3,}/i.test(p) && !/^\d/.test(p))
+  // "(HMO)", "(Flat 2)" and the like aren't part of the street's name.
+  const s = text.replace(/\([^)]*\)/g, ' ').split(',').map((p) => p.trim().replace(/\s+/g, ' ').replace(/^\d+[a-z]?\s+/i, '')).find((p) => /[a-z]{3,}/i.test(p) && !/^\d/.test(p))
   return s ?? null
 }
 

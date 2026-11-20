@@ -38,6 +38,22 @@ export async function repairZooplaRow(r: ImportRow): Promise<boolean> {
   return res.rowsAffected > 0
 }
 
+/**
+ * An OnTheMarket enquiry saved before long comments were understood: everything under a long comment (the listing
+ * card) was cut off, so it has no property. Fills in the property, the listing and the link to our listing, and
+ * tidies a name typed in capitals. Only touches enquiries with no "Property:" line; adds nothing new.
+ */
+export async function repairOtmRow(r: Pick<ImportRow, 'source' | 'intent' | 'about' | 'propertyPostcode' | 'key' | 'message' | 'name'>): Promise<boolean> {
+  if (r.source !== 'onthemarket' || r.intent === 'valuation' || !r.about || !r.propertyPostcode) return false
+  const e = await db.query.enquiries.findFirst({ where: eq(enquiries.externalId, r.key) })
+  if (!e || /^property:/im.test(e.message ?? '')) return false
+  const message = [`About: ${r.about}`, r.message].join('\n').slice(0, 2000)
+  const propertyId = e.propertyId ?? await matchProperty(r.about, r.propertyPostcode).catch(() => null)
+  const name = /[a-z]/.test(e.name) ? e.name : r.name || e.name
+  await db.update(enquiries).set({ message, propertyId, name }).where(eq(enquiries.id, e.id))
+  return true
+}
+
 export async function saveEmailRow(r: ImportRow, opts: { by: string | null; handled: boolean; startedAt: string }): Promise<{ enquiryId: string; contactId: string; propertyId: string | null } | null> {
   if (await db.query.enquiries.findFirst({ where: eq(enquiries.externalId, r.key) })) return null
   const contactId = await upsertContact({

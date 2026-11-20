@@ -2,7 +2,8 @@ import 'server-only'
 import { and, eq, inArray, isNull, like, or } from 'drizzle-orm'
 import { db, ready } from '@/db/client'
 import { enquiries, mailMessages, settings } from '@/db/schema'
-import { cleanLines, fixSmallPrint, parseZoopla } from './email-import'
+import { cleanLines, fixSmallPrint, parseOnTheMarket, parseZoopla } from './email-import'
+import { repairOtmRow } from './email-intake'
 import { checkMailbox } from './mailbox'
 import { now } from './util'
 
@@ -60,6 +61,37 @@ export async function repairPortalSmallPrint(): Promise<number> {
     if (!f) continue
     await db.update(enquiries).set({ message: f.message, postcode: f.postcode }).where(eq(enquiries.id, r.id))
     fixed++
+  }
+  return fixed
+}
+
+const OTM_LOOKED = 'repair_otm_cutoff_v1'
+
+/**
+ * OnTheMarket enquiries whose long comment was taken for the email's small print lost the listing underneath it (and
+ * showed only the person's own address). Read again once: from the mail store where it has them, then the last 90
+ * days of the mailbox for any it doesn't. Only enquiries without a property line are touched.
+ */
+export async function repairOtmCutOff(): Promise<number> {
+  await ready()
+  if (await db.query.settings.findFirst({ where: eq(settings.key, OTM_LOOKED) })) return 0
+  // Taken before it starts, so two runs never do it at once; given back if the mailbox couldn't be read.
+  const mine = await db.insert(settings).values({ key: OTM_LOOKED, value: now(), updatedAt: now() }).onConflictDoNothing()
+  if (!mine.rowsAffected) return 0
+  const rows = await db.select({ externalId: enquiries.externalId, message: enquiries.message }).from(enquiries)
+    .where(and(eq(enquiries.source, 'onthemarket'), isNull(enquiries.propertyId))).limit(1000)
+  const ids = rows.filter((r) => !/^property:/im.test(r.message ?? '')).map((r) => r.externalId).filter((x): x is string => !!x)
+  let fixed = 0
+  const mails = !ids.length ? [] : await db.select({ messageId: mailMessages.messageId, subject: mailMessages.subject, body: mailMessages.body }).from(mailMessages).where(inArray(mailMessages.messageId, ids))
+  for (const m of mails) {
+    const lead = m.body ? parseOnTheMarket(cleanLines(m.body)) : null
+    if (!lead) continue
+    const row = { source: 'onthemarket' as const, key: m.messageId, intent: lead.intent, about: lead.about, propertyPostcode: lead.propertyPostcode, name: lead.name, message: [...lead.details, m.subject ? `Email subject: ${m.subject}` : ''].filter(Boolean).join('\n') }
+    if (await repairOtmRow(row).catch(() => false)) fixed++
+  }
+  if (fixed < ids.length) {
+    const r = await checkMailbox({ lookBackDays: 90, repairOnly: true }).catch(() => ({ ran: false, error: 'failed' }) as { ran: boolean; error?: string })
+    if (!r.ran || r.error) await db.delete(settings).where(eq(settings.key, OTM_LOOKED))
   }
   return fixed
 }

@@ -7,7 +7,7 @@ import { eq } from 'drizzle-orm'
 import { db, getClient, ready } from '@/db/client'
 import { notifications, settings } from '@/db/schema'
 import { analyse } from '@/lib/email-import'
-import { repairZooplaRow, saveEmailRow } from '@/lib/email-intake'
+import { repairOtmRow, repairZooplaRow, saveEmailRow } from '@/lib/email-intake'
 import { attachReply, linkSentReplies, matchReply } from '@/lib/enquiry-thread'
 import { enquiryLabel } from '@/lib/enquiry-labels'
 import { open, seal } from '@/lib/secret-box'
@@ -241,7 +241,7 @@ export type CheckResult = { ran: boolean; found?: number; error?: string }
  * Looks for new emails since the last check and saves the enquiries among them.
  * Safe to call often: it does nothing unless the mailbox is switched on and a couple of minutes have passed.
  */
-/** `repairOnly`: read the emails again only to fill in Zoopla valuations saved without an address (adds nothing). */
+/** `repairOnly`: read the emails again only to fill in portal enquiries saved without their property (adds nothing). */
 export async function checkMailbox(opts: { force?: boolean; lookBackDays?: number; repairOnly?: boolean } = {}): Promise<CheckResult> {
   const s = await load()
   if (!s?.enabled || !s.pass) return { ran: false }
@@ -294,7 +294,7 @@ export async function checkMailbox(opts: { force?: boolean; lookBackDays?: numbe
           try {
             const row = await analyse(source)
             if (!row) continue
-            if (opts.repairOnly) { if (await repairZooplaRow(row)) found++; continue }
+            if (opts.repairOnly) { if ((await repairZooplaRow(row)) || (await repairOtmRow(row))) found++; continue }
             // A reply to one of our emails (or a follow-up from someone with an enquiry) joins that enquiry.
             const reply = await matchReply(row).catch(() => null)
             if (reply) { if (await attachReply(reply.enquiryId, row, reply.how)) found++; continue }

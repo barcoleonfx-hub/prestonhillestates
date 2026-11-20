@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fixSmallPrint, isBoilerplate, parseOnTheMarket } from './email-import'
+import { cleanLines, fixSmallPrint, isBoilerplate, parseOnTheMarket, tidyName } from './email-import'
 
 const FOOTER = "OnTheMarket.com and the associated logos are trade marks of Agents' Mutual Limited, a wholly owned subsidiary of OnTheMarket Limited. Company No: 08381458. Registered in England & Wales. Registered Office: C/O Csc Cls (Uk) Limited, 5 Churchill Place, 10th Floor, London, United Kingdom, E14 5HU, England."
 
@@ -59,5 +59,40 @@ describe('OnTheMarket small print', () => {
     const f = fixSmallPrint(`OnTheMarket viewing request\nProperty: ${FOOTER}\nComments: hello`, null)!
     expect(f.message).toBe('OnTheMarket viewing request\nComments: hello')
     expect(f.postcode).toBeNull()
+  })
+})
+
+describe('an OnTheMarket request with a long comment', () => {
+  const text = `Request details
+You have received a details request from JACQUELENE PERALTA.
+Contact information
+JACQUELENE PERALTA
+07557 385092
+jackiejeffyperalta@example.com
+28 Caroline Terrace, London, SW1W 8JT
+Enquiry details
+* I would like: more details for the following property
+* Situation: I am a first-time buyer
+* Comments: Hi goodday !We are looking for a property to buy.we are interested to view this property if possible please thank you very much. Jacquelene&Jeffy Peralta 07828440500 or 07473820669
+£650,000
+468, North Circular Road (HMO), London, NW10 1SP
+5 bedroom semi-detached house for sale
+Your agency ref: ttKudg5UrGI
+User achievements
+OnTheMarket.com and the associated logos are trade marks of Agents' Mutual Limited. Registered Office: 5 Churchill Place, London E14 5HU`
+  it('finds the listing under the comment, not their own address', () => {
+    const lead = parseOnTheMarket(cleanLines(text))!
+    expect(lead.about).toBe('468, North Circular Road (HMO), London, NW10 1SP')
+    expect(lead.propertyPostcode).toBe('NW10 1SP')
+    expect(lead.intent).toBe('buy')
+    expect(lead.applicantAddress).toBe('28 Caroline Terrace, London, SW1W 8JT')
+    expect(lead.comments).toMatch(/^Hi goodday/)
+    expect(lead.details).toContain('Listing: £650,000 – 5 bedroom semi-detached house for sale')
+    expect(lead.name).toBe('Jacquelene Peralta')
+  })
+  it('tidies names typed in capitals, and leaves others alone', () => {
+    expect(tidyName("MARY O'NEILL-SMITH")).toBe("Mary O'Neill-Smith")
+    expect(tidyName('Sam de Souza')).toBe('Sam de Souza')
+    expect(tidyName('JK')).toBe('Jk')
   })
 })
