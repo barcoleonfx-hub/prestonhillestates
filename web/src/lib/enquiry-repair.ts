@@ -1,7 +1,9 @@
 import 'server-only'
 import { and, eq, inArray, isNull, like, or } from 'drizzle-orm'
 import { db, ready } from '@/db/client'
-import { enquiries, mailMessages, settings } from '@/db/schema'
+import { enquiries, mailMessages, properties, settings } from '@/db/schema'
+import { matchProperty } from './enquiry-links'
+import { hintFrom } from './listing-match'
 import { cleanLines, fixSmallPrint, parseOnTheMarket, parseZoopla } from './email-import'
 import { repairOtmRow } from './email-intake'
 import { checkMailbox } from './mailbox'
@@ -92,6 +94,34 @@ export async function repairOtmCutOff(): Promise<number> {
   if (fixed < ids.length) {
     const r = await checkMailbox({ lookBackDays: 90, repairOnly: true }).catch(() => ({ ran: false, error: 'failed' }) as { ran: boolean; error?: string })
     if (!r.ran || r.error) await db.delete(settings).where(eq(settings.key, OTM_LOOKED))
+  }
+  return fixed
+}
+
+const SIDE_FIXED = 'repair_listing_side_v1'
+
+/**
+ * Portal enquiries linked to the wrong one of two listings on the same street (a tenant enquiry linked to the flat
+ * for sale in the same block). Once: each portal enquiry whose email says sale or let, but whose listing is the
+ * other, is linked again to the right one, or unlinked if we have no listing on that side.
+ */
+export async function repairListingSide(): Promise<number> {
+  await ready()
+  const mine = await db.insert(settings).values({ key: SIDE_FIXED, value: now(), updatedAt: now() }).onConflictDoNothing()
+  if (!mine.rowsAffected) return 0
+  const rows = await db.select({ id: enquiries.id, message: enquiries.message, channel: properties.channel })
+    .from(enquiries).innerJoin(properties, eq(enquiries.propertyId, properties.id))
+    .where(and(eq(enquiries.kind, 'email'), inArray(enquiries.source, ['zoopla', 'onthemarket'])))
+  let fixed = 0
+  for (const r of rows) {
+    const msg = r.message ?? ''
+    const intent = /tenant|renter/i.test(msg.split('\n').find((l) => /^(zoopla|onthemarket) .*(enquiry|request)$/i.test(l)) ?? '') ? 'rent' : null
+    const hint = hintFrom(msg, intent)
+    if (!hint.channel || hint.channel === (r.channel === 'let' ? 'let' : 'sale')) continue
+    const about = /^(?:about|property):\s*(.+)$/im.exec(msg)?.[1] ?? null
+    const propertyId = await matchProperty(about, null, hint).catch(() => null)
+    await db.update(enquiries).set({ propertyId }).where(eq(enquiries.id, r.id))
+    fixed++
   }
   return fixed
 }
