@@ -6,39 +6,43 @@
 .pf-toggle button.on { background: #23211A; color: #fff; }
 
 .pf { --display: 'PH Inter Display', 'PH Inter', 'Helvetica Neue', Arial, sans-serif;
-  width: 794px; height: 1123px; background: var(--page); color: var(--ink); font-family: 'PH Inter', 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased;
-  padding: 20px; display: flex; flex-direction: column; justify-content: space-between; gap: 12px; overflow: hidden; }
+  width: 1123px; height: 794px; background: var(--page); color: var(--ink); font-family: 'PH Inter', 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased;
+  padding: 20px; display: flex; flex-direction: column; gap: 14px; overflow: hidden; }
 .pf > * { flex-shrink: 0; }
 .pf-top { height: 50px; display: flex; align-items: center; justify-content: space-between; padding: 0 4px 0 6px; }
 .pf-tag { background: var(--ink); color: #fff; padding: 10px 26px 11px; border-radius: 999px; font-size: 22px; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; line-height: 1.1; }
 
-.pf-hero { background: var(--brand); color: #fff; border-radius: 22px; text-align: center; padding: 26px 30px 26px; position: relative; overflow: hidden; }
-.pf-hero::after { content: ''; position: absolute; inset: auto -60px -120px auto; width: 300px; height: 300px; border-radius: 50%; background: rgba(255, 255, 255, 0.08); }
+.pf-body { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 560px 1fr; gap: 16px; }
+.pf-hero { background: var(--brand); color: #fff; border-radius: 22px; text-align: center; padding: 24px 26px; position: relative; overflow: hidden;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.pf-hero::after { content: ''; position: absolute; inset: auto -70px -130px auto; width: 320px; height: 320px; border-radius: 50%; background: rgba(255, 255, 255, 0.08); }
 .pf-kicker { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.92; }
-.pf-big { margin: 2px 0 0; font-family: var(--display); font-weight: 900; font-size: 205px; line-height: 0.92; letter-spacing: -0.02em; }
-.pf-big span { font-size: 122px; vertical-align: 52px; margin-right: 12px; }
-.pf-for { margin: 8px 0 0; position: relative; z-index: 1; font-family: var(--display); font-weight: 800; font-size: 40px; line-height: 1.1; letter-spacing: -0.01em; }
-.pf-ends { position: relative; z-index: 1; display: inline-block; margin: 16px 0 0; background: #fff; color: var(--brand); border-radius: 999px; padding: 9px 24px 10px; font-size: 20px; font-weight: 800; letter-spacing: 0.04em; }
+.pf-big { margin: 4px 0 0; font-family: var(--display); font-weight: 900; font-size: 196px; line-height: 0.92; letter-spacing: -0.02em; }
+.pf-big span { font-size: 118px; vertical-align: 50px; margin-right: 10px; }
+.pf-for { margin: 12px 0 0; position: relative; z-index: 1; font-family: var(--display); font-weight: 800; font-size: 44px; line-height: 1.08; letter-spacing: -0.01em; max-width: 470px; }
+.pf-ends { position: relative; z-index: 1; display: inline-block; margin: 22px 0 0; background: #fff; color: var(--brand); border-radius: 999px; padding: 10px 26px 11px; font-size: 21px; font-weight: 800; letter-spacing: 0.04em; }
 
-.pf-lead { margin: 0 12px; text-align: center; font-size: 22px; line-height: 1.38; font-weight: 500; }
+.pf-side { display: flex; flex-direction: column; justify-content: space-between; gap: 12px; min-height: 0; }
+.pf-lead { margin: 2px 4px 0; font-size: 21px; line-height: 1.36; font-weight: 500; }
 
-.pf-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-.pf-steps > div { background: var(--tint); border-radius: 16px; padding: 16px 18px; }
+.pf-steps { display: grid; gap: 8px; }
+.pf-steps > div { background: var(--tint); border-radius: 14px; padding: 12px 16px; display: grid; grid-template-columns: 36px 1fr; gap: 14px; align-items: start; }
 .pf-steps b { display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: var(--brand); color: #fff; font-size: 19px; font-weight: 800; }
-.pf-steps h3 { margin: 12px 0 6px; font-size: 21px; font-weight: 800; letter-spacing: -0.01em; }
-.pf-steps p { margin: 0; font-size: 14.5px; line-height: 1.42; color: var(--muted); }
+.pf-steps h3 { margin: 4px 0 3px; font-size: 19px; font-weight: 800; letter-spacing: -0.01em; }
+.pf-steps p { margin: 0; font-size: 14px; line-height: 1.38; color: var(--muted); }
 
-.pf-scan { display: flex; align-items: center; gap: 26px; background: #fff; border: 3px solid var(--brand); border-radius: 18px; padding: 16px 24px; }
-.pf-scan img { width: 158px; height: 158px; display: block; }
-.pf-scan h3 { margin: 0 0 8px; font-family: var(--display); font-size: 34px; font-weight: 800; line-height: 1.08; letter-spacing: -0.01em; }
-.pf-scan p { margin: 0; font-size: 18px; color: var(--muted); }
-.pf-scan .pf-or { margin-top: 12px; font-size: 22px; color: var(--ink); }
+.pf-scan { display: flex; align-items: center; gap: 20px; background: #fff; border: 3px solid var(--brand); border-radius: 18px; padding: 14px 20px; }
+.pf-scan img { width: 136px; height: 136px; display: block; flex-shrink: 0; }
+.pf-scan h3 { margin: 0 0 6px; font-family: var(--display); font-size: 27px; font-weight: 800; line-height: 1.08; letter-spacing: -0.01em; }
+.pf-scan p { margin: 0; font-size: 15px; color: var(--muted); }
+.pf-scan .pf-or { margin-top: 8px; font-size: 19px; color: var(--ink); }
 .pf-scan .pf-or b { color: var(--brand); font-weight: 800; }
 
-.pf-foot { border-top: 2px solid var(--tint); padding: 12px 6px 2px; }
-.pf-foot p { margin: 0; font-size: 15px; }
-.pf-foot .pf-small { margin-top: 8px; font-size: 10.5px; line-height: 1.45; color: var(--muted); }
+.pf-foot { border-top: 2px solid var(--tint); padding: 10px 6px 0; }
+.pf-foot p { margin: 0; font-size: 14px; }
+.pf-foot .pf-small { margin-top: 6px; font-size: 10.5px; line-height: 1.45; color: var(--muted); }
 
 @media print {
-  .pf-zoom { margin: 0 !important; }
+  .pf-zoom { margin: 0 !important; transform: none !important; }
+  .pf-fit { width: auto !important; height: auto !important; }
 }
