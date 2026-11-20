@@ -1094,4 +1094,18 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       `CREATE INDEX postal_letters_batch_idx ON postal_letters (batch_id)`,
     ],
   },
+  {
+    id: '050_qr_scans',
+    sql: [
+      // Scans of the QR codes on posters (lib/qr-links): when, and a one-way daily fingerprint so the same phone
+      // scanning twice counts as one person. No IP address or anything else that identifies anyone is kept.
+      `CREATE TABLE qr_scans (
+        id TEXT PRIMARY KEY,
+        code TEXT NOT NULL,
+        who TEXT NOT NULL,
+        at TEXT NOT NULL
+      )`,
+      `CREATE INDEX qr_scans_code_idx ON qr_scans (code, at)`,
+    ],
+  },
 ]

@@ -3,13 +3,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { LogoMark } from '@/components/Logo'
 import { themeVars } from '@/lib/window-card'
+import type { ScanStats } from '@/lib/qr-links'
 
 const W = 1123, H = 794 // A4 landscape at 96 per inch; A3 is the same, scaled up by √2
 const SIZE = { a4: { w: 297, h: 210, label: 'A4' }, a3: { w: 420, h: 297, label: 'A3' } } as const
 const BORDER = 30.24 // 8 mm at 96 per inch
 
 /** The poster, with A4 / A3 and the office-printer border, as a PDF or straight to the printer. */
-export function PosterEditor({ qr }: { qr: string }) {
+export function PosterEditor({ qr, link, stats }: { qr: string; link: string; stats: ScanStats }) {
   const [paper, setPaper] = useState<'a4' | 'a3'>('a3')
   const [margin, setMargin] = useState<'office' | 'none'>('office')
   const [busy, setBusy] = useState(false)
@@ -77,6 +78,12 @@ export function PosterEditor({ qr }: { qr: string }) {
             <button type="button" className={margin === 'none' ? 'on' : undefined} onClick={() => setMargin('none')}>Print shop</button>
           </div>
           <p className="wc-hint" style={{ marginTop: 6 }}>{margin === 'office' ? 'Keeps everything 8 mm in from the edge, because office printers can’t print right to the edge.' : 'Edge to edge. Only for printers that can print to the edge (most print shops).'}</p>
+        </div>
+        <div>
+          <h2>Scans</h2>
+          <p className="pf-stat"><b>{stats.scans}</b> {stats.scans === 1 ? 'scan' : 'scans'}{stats.scans ? <> by about <b>{stats.people}</b> {stats.people === 1 ? 'person' : 'people'}</> : null} in the last 30 days{stats.today ? <>, <b>{stats.today}</b> today</> : null}.</p>
+          {stats.byDay.length ? <p className="wc-hint">{stats.byDay.slice(0, 7).map((d) => `${new Date(`${d.day}T12:00:00Z`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}: ${d.scans}`).join(' · ')}</p> : null}
+          <p className="wc-hint" style={{ marginTop: 6 }}>The code opens <b>{link.replace(/^https?:\/\//, '')}</b>, which counts the scan and then opens WhatsApp. Refresh this page to see new scans. Your own test scans count too.</p>
         </div>
         <p className="wc-hint">Scan the code with your phone before printing to check it opens WhatsApp. When someone sends it, note their name on the landlord’s enquiry so you know who to pay.</p>
       </aside>

@@ -3,6 +3,8 @@
 
 .pf-toggle { display: inline-flex; border: 1px solid #DDD8C8; border-radius: 999px; padding: 3px; gap: 3px; }
 .pf-toggle button { border: 0; background: none; padding: 6px 16px; border-radius: 999px; font: inherit; font-size: 0.84rem; cursor: pointer; color: #5B5748; }
+.pf-stat { margin: 0 0 6px; font-size: 0.92rem; color: #3C3A31; }
+.pf-stat b { font-size: 1.05rem; }
 .pf-toggle button.on { background: #23211A; color: #fff; }
 
 .pf { --display: 'PH Inter Display', 'PH Inter', 'Helvetica Neue', Arial, sans-serif;
