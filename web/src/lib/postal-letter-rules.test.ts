@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addressLines, chooseByDefault, fillLetter, firstName, LETTER_BEFORE, postable, shortHome } from './postal-letter-rules'
+import { LETTER_BEFORE, addressLines, chooseByDefault, fillLetter, firstName, joinLetter, postable, shortHome, splitLetter } from './postal-letter-rules'
 
 describe('addresses for the envelope window', () => {
   it('puts each part on its own line with the postcode last', () => {
@@ -41,5 +41,16 @@ describe('the letter', () => {
     const [p] = fillLetter(LETTER_BEFORE, { first: 'Kanti', home: '4 Kenton Park Avenue' })
     expect(p).toMatch(/^Thank you for asking us to value 4 Kenton Park Avenue\./)
     expect(fillLetter('A\n\nB {home}', { first: '', home: null })).toEqual(['A', 'B your home'])
+  })
+})
+
+describe('the letter as one piece (for Write with AI)', () => {
+  it('splits at the QR code mark, and joins back the same', () => {
+    expect(splitLetter(joinLetter('Thank you, {first}.', 'Call us.\n\nNo obligation.'))).toEqual({ before: 'Thank you, {first}.', after: 'Call us.\n\nNo obligation.' })
+    expect(splitLetter('Above.\n\n[QR code]\n\nBelow.')).toEqual({ before: 'Above.', after: 'Below.' })
+  })
+  it('without the mark, puts the code after the paragraph about scanning it', () => {
+    expect(splitLetter('Thank you.\n\nScan the code to open it.\n\nCall us.')).toEqual({ before: 'Thank you.\n\nScan the code to open it.', after: 'Call us.' })
+    expect(splitLetter('One.\n\nTwo.')).toEqual({ before: 'One.', after: 'Two.' })
   })
 })
