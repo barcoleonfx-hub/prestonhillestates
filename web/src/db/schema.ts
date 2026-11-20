@@ -709,6 +709,13 @@ export const windowCards = sqliteTable('window_cards', {
 })
 
 /** A printing of valuation letters (lib/postal-letters). */
+export const qrScans = sqliteTable('qr_scans', {
+  id: text('id').primaryKey(),
+  code: text('code').notNull(),
+  who: text('who').notNull(),
+  at: text('at').notNull(),
+})
+
 export const letterBatches = sqliteTable('letter_batches', {
   id: text('id').primaryKey(),
   sender: text('sender').notNull(),
