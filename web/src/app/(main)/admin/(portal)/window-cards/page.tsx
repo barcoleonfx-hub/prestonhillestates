@@ -26,6 +26,13 @@ export default async function WindowCardsPage() {
           <p className="sub">Choose a property: the sheet fills itself in from the listing (photos, price, headline, key details and highlights). Adjust anything you like, then download it as a PDF or print it on A4.</p>
         </div>
       </div>
+      <section className="card fu-list" style={{ marginBottom: 18 }}>
+        <div className="fu-head"><h2>Posters</h2></div>
+        <div className="fu-row">
+          <span className="fu-main"><b>Black Friday: £500 for introducing a landlord</b><small>Until 31 December 2026 · a QR code that opens WhatsApp to the office with the details we need</small></span>
+          <span className="fu-acts"><a className="btn btn-gold btn-sm" href="/admin/posters/black-friday">Open the poster</a></span>
+        </div>
+      </section>
       {(['sale', 'let'] as const).map((ch) => group(ch).length ? (
         <section key={ch} className="card fu-list" style={{ marginBottom: 18 }}>
           <div className="fu-head"><h2>{ch === 'sale' ? 'For sale' : 'To let'} <span>{group(ch).length}</span></h2></div>
