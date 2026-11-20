@@ -9,7 +9,7 @@ import { runCampaigns } from '@/lib/campaign-data'
 import { removeLicensingFiles } from '@/lib/cleanup'
 import { runTenantAlerts } from '@/lib/tenants'
 import { sortFromEmails } from '@/lib/enquiry-sort'
-import { repairPortalSmallPrint, repairZooplaValuations } from '@/lib/enquiry-repair'
+import { repairListingSide, repairOtmCutOff, repairPortalSmallPrint, repairZooplaValuations } from '@/lib/enquiry-repair'
 import { backfillCallEnquiries } from '@/lib/call-enquiry'
 import { refreshAreaPlaces } from '@/lib/area-places'
 import { runFollowups } from '@/lib/followups'
@@ -55,6 +55,10 @@ export async function GET(req: Request) {
     // Zoopla valuations read before their address was picked up: read again from the original email (light).
     await repairZooplaValuations().catch((e) => console.error('repairing Zoopla valuations failed', e))
     await repairPortalSmallPrint().catch((e) => console.error('repairing portal small print failed', e))
+    // Once: OnTheMarket enquiries whose listing was cut off under a long comment.
+    await repairOtmCutOff().catch((e) => console.error('repairing OnTheMarket listings failed', e))
+    // Once: portal enquiries linked to the sale listing when they asked about the one to let (or the other way).
+    await repairListingSide().catch((e) => console.error('repairing listing side failed', e))
     // Once: phone calls logged before calls made enquiries get theirs.
     await backfillCallEnquiries().catch((e) => console.error('enquiries from earlier calls failed', e))
     // Our own copy of places near homes (schools, shops, parks…) for the booklets: two small squares a run (light).

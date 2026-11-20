@@ -179,10 +179,17 @@ export function parseZoopla(lines: string[]): Lead | null {
  * Registered Office: ... 5 Churchill Place, London E14 5HU"). It has a postcode in it, so it must never be taken
  * for an address.
  */
+const SMALL_PRINT = /trade ?marks?|registered (office|in england)|company (no|number|registration)|agents'? mutual|all rights reserved|unsubscribe|privacy (policy|notice)|this (e-?mail|message) (was|has been|is) sent|churchill place|zpg ltd|zoopla limited|onthemarket (plc|limited)/i
 export function isBoilerplate(line: string | null | undefined): boolean {
   const l = (line ?? '').trim()
   if (!l) return false
-  return l.length > 160 || /trade ?marks?|registered (office|in england)|company (no|number|registration)|agents'? mutual|all rights reserved|unsubscribe|privacy (policy|notice)|this (e-?mail|message) (was|has been|is) sent|churchill place|zpg ltd|zoopla limited|onthemarket (plc|limited)/i.test(l)
+  return l.length > 160 || SMALL_PRINT.test(l)
+}
+
+/** "JACQUELENE PERALTA" → "Jacquelene Peralta" (names typed in capitals read as shouting in a greeting). */
+export function tidyName(name: string): string {
+  const t = name.trim()
+  return /[a-z]/.test(t) || !/[A-Z]{2}/.test(t) ? t : t.toLowerCase().replace(/(^|[\s'’-])(\p{L})/gu, (_, b: string, c: string) => b + c.toUpperCase())
 }
 
 /**
@@ -214,11 +221,12 @@ export function parseOnTheMarket(lines: string[]): Lead | null {
   const block = ci >= 0 ? lines.slice(ci + 1, ei > ci ? ei : ci + 6) : []
   const email = block.join(' ').match(EMAIL)?.[0] ?? labelled(lines, ['Email'])?.match(EMAIL)?.[0] ?? null
   const phone = tidyPhone(block.find((l) => (l.match(PHONE) ?? []).length > 0) ?? labelled(lines, ['Telephone', 'Phone']))
-  const name = (from?.[2] ?? block.find((l) => !EMAIL1.test(l) && !(l.match(PHONE) ?? []).length && !fullPostcode(l)) ?? '').trim()
+  const name = tidyName(from?.[2] ?? block.find((l) => !EMAIL1.test(l) && !(l.match(PHONE) ?? []).length && !fullPostcode(l)) ?? '')
   const applicantAddress = block.find((l) => fullPostcode(l) && !EMAIL1.test(l)) ?? null
-  // Everything up to the small print at the bottom.
+  // Everything up to the small print at the bottom. Only its wording marks it: a long comment from the person is
+  // not small print (taking it for that once cut off the listing underneath it).
   const tail = ei >= 0 ? lines.slice(ei + 1) : lines
-  const foot = tail.findIndex((l) => isBoilerplate(l))
+  const foot = tail.findIndex((l) => SMALL_PRINT.test(l))
   const after = foot >= 0 ? tail.slice(0, foot) : tail
   const wants = labelled(after, ['I would like'])
   const situation = labelled(after, ['Situation', 'My situation'])
@@ -227,12 +235,19 @@ export function parseOnTheMarket(lines: string[]): Lead | null {
   // The property is the first line after the details that carries a postcode and isn't their own address.
   const what = from?.[1] ?? wants ?? ''
   // A valuation request is about their own home, which OnTheMarket gives as their address.
-  const property = after.find((l) => fullPostcode(l) && l !== applicantAddress && !isBoilerplate(l) && !/^(comments|situation|i would like)\s*:/i.test(l))
-    ?? (/valuation|apprais/i.test(what) ? applicantAddress : null)
+  const listed = after.findIndex((l) => fullPostcode(l) && l !== applicantAddress && !SMALL_PRINT.test(l) && l.length <= 160 && !/^(comments|message|situation|my situation|i would like)\s*:/i.test(l))
+  const property = (listed >= 0 ? after[listed] : null) ?? (/valuation|apprais/i.test(what) ? applicantAddress : null)
+  // The listing card: its price sits just above the address, and its description just below.
+  const near = listed >= 0 ? after.slice(Math.max(0, listed - 2), listed + 3) : []
+  const price = near.find((l) => /^£\s?[\d,]+/.test(l)) ?? null
+  const listing = listed >= 0 ? after.slice(listed + 1, listed + 3).find((l) => /\b(for sale|to rent|to let)\b/i.test(l)) ?? null : null
+  const agencyRef = labelled(after, ['Your agency ref', 'Agency ref'])
   const details = [
     `OnTheMarket ${(from?.[1] ?? 'enquiry').toLowerCase()}${from?.[1] && !/request|enquiry/i.test(from[1]) ? ' request' : ''}`,
     wants ? `Wants: ${wants}` : '',
     property ? `Property: ${property.replace(/\s+,/g, ',')}` : '',
+    price || listing ? `Listing: ${[price, listing].filter(Boolean).join(' – ')}` : '',
+    agencyRef ? `OnTheMarket reference: ${agencyRef}` : '',
     situation ? `Situation: ${situation}` : '',
     whatsapp ? 'Happy to be contacted on WhatsApp' : '',
     comments ? `Comments: ${comments}` : '',

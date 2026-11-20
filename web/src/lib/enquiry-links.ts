@@ -2,6 +2,7 @@ import 'server-only'
 import { and, isNull, like, ne, or, sql } from 'drizzle-orm'
 import { db } from '@/db/client'
 import { enquiries, properties, type Property } from '@/db/schema'
+import { pickListing, type ListingHint } from './listing-match'
 
 // Working out which listing an enquiry is about, from the street and postcode area in the email.
 
@@ -10,7 +11,8 @@ const OUTWARD = /\b([A-Z]{1,2}\d[A-Z\d]?)(?:\s*\d[A-Z]{2})?\b/i
 /** "169, Chamberlayne Avenue, Wembley, HA9 8ST" → "Chamberlayne Avenue". */
 export function streetOf(text: string | null | undefined): string | null {
   if (!text) return null
-  const s = text.split(',').map((p) => p.trim().replace(/^\d+[a-z]?\s+/i, '')).find((p) => /[a-z]{3,}/i.test(p) && !/^\d/.test(p))
+  // "(HMO)", "(Flat 2)" and the like aren't part of the street's name.
+  const s = text.replace(/\([^)]*\)/g, ' ').split(',').map((p) => p.trim().replace(/\s+/g, ' ').replace(/^\d+[a-z]?\s+/i, '')).find((p) => /[a-z]{3,}/i.test(p) && !/^\d/.test(p))
   return s ?? null
 }
 
@@ -21,16 +23,16 @@ export function outwardOf(text: string | null | undefined): string | null {
 }
 
 /** The listing an enquiry is about, when the street and postcode area match one of ours. */
-export async function matchProperty(about: string | null, postcode: string | null): Promise<string | null> {
+export async function matchProperty(about: string | null, postcode: string | null, hint: ListingHint = { channel: null, price: null }): Promise<string | null> {
   const street = streetOf(about)
   if (!street) return null
   const outward = (postcode ? outwardOf(postcode) : null) ?? outwardOf(about?.split(',').pop())
   const st = `%${street.toLowerCase()}%`
-  const rows = await db.select({ id: properties.id, postcode: properties.postcode }).from(properties)
+  // Every listing on that street: a block can have one flat for sale and another to let.
+  const rows = await db.select({ id: properties.id, postcode: properties.postcode, channel: properties.channel, price: properties.price, status: properties.status }).from(properties)
     .where(or(like(sql`lower(${properties.street})`, st), like(sql`lower(${properties.displayAddress})`, st)))
-    .limit(5)
-  const hit = rows.find((r) => !outward || (r.postcode ?? '').toUpperCase().startsWith(outward)) ?? null
-  return hit?.id ?? null
+    .limit(30)
+  return pickListing(rows, outward, hint)
 }
 
 /** The street we'd expect an enquiry about this listing to mention. */

@@ -1,8 +1,11 @@
 import 'server-only'
 import { and, eq, inArray, isNull, like, or } from 'drizzle-orm'
 import { db, ready } from '@/db/client'
-import { enquiries, mailMessages, settings } from '@/db/schema'
-import { cleanLines, fixSmallPrint, parseZoopla } from './email-import'
+import { enquiries, mailMessages, properties, settings } from '@/db/schema'
+import { matchProperty } from './enquiry-links'
+import { hintFrom } from './listing-match'
+import { cleanLines, fixSmallPrint, parseOnTheMarket, parseZoopla } from './email-import'
+import { repairOtmRow } from './email-intake'
 import { checkMailbox } from './mailbox'
 import { now } from './util'
 
@@ -59,6 +62,65 @@ export async function repairPortalSmallPrint(): Promise<number> {
     const f = fixSmallPrint(r.message, r.postcode)
     if (!f) continue
     await db.update(enquiries).set({ message: f.message, postcode: f.postcode }).where(eq(enquiries.id, r.id))
+    fixed++
+  }
+  return fixed
+}
+
+const OTM_LOOKED = 'repair_otm_cutoff_v1'
+
+/**
+ * OnTheMarket enquiries whose long comment was taken for the email's small print lost the listing underneath it (and
+ * showed only the person's own address). Read again once: from the mail store where it has them, then the last 90
+ * days of the mailbox for any it doesn't. Only enquiries without a property line are touched.
+ */
+export async function repairOtmCutOff(): Promise<number> {
+  await ready()
+  if (await db.query.settings.findFirst({ where: eq(settings.key, OTM_LOOKED) })) return 0
+  // Taken before it starts, so two runs never do it at once; given back if the mailbox couldn't be read.
+  const mine = await db.insert(settings).values({ key: OTM_LOOKED, value: now(), updatedAt: now() }).onConflictDoNothing()
+  if (!mine.rowsAffected) return 0
+  const rows = await db.select({ externalId: enquiries.externalId, message: enquiries.message }).from(enquiries)
+    .where(and(eq(enquiries.source, 'onthemarket'), isNull(enquiries.propertyId))).limit(1000)
+  const ids = rows.filter((r) => !/^property:/im.test(r.message ?? '')).map((r) => r.externalId).filter((x): x is string => !!x)
+  let fixed = 0
+  const mails = !ids.length ? [] : await db.select({ messageId: mailMessages.messageId, subject: mailMessages.subject, body: mailMessages.body }).from(mailMessages).where(inArray(mailMessages.messageId, ids))
+  for (const m of mails) {
+    const lead = m.body ? parseOnTheMarket(cleanLines(m.body)) : null
+    if (!lead) continue
+    const row = { source: 'onthemarket' as const, key: m.messageId, intent: lead.intent, about: lead.about, propertyPostcode: lead.propertyPostcode, name: lead.name, message: [...lead.details, m.subject ? `Email subject: ${m.subject}` : ''].filter(Boolean).join('\n') }
+    if (await repairOtmRow(row).catch(() => false)) fixed++
+  }
+  if (fixed < ids.length) {
+    const r = await checkMailbox({ lookBackDays: 90, repairOnly: true }).catch(() => ({ ran: false, error: 'failed' }) as { ran: boolean; error?: string })
+    if (!r.ran || r.error) await db.delete(settings).where(eq(settings.key, OTM_LOOKED))
+  }
+  return fixed
+}
+
+const SIDE_FIXED = 'repair_listing_side_v1'
+
+/**
+ * Portal enquiries linked to the wrong one of two listings on the same street (a tenant enquiry linked to the flat
+ * for sale in the same block). Once: each portal enquiry whose email says sale or let, but whose listing is the
+ * other, is linked again to the right one, or unlinked if we have no listing on that side.
+ */
+export async function repairListingSide(): Promise<number> {
+  await ready()
+  const mine = await db.insert(settings).values({ key: SIDE_FIXED, value: now(), updatedAt: now() }).onConflictDoNothing()
+  if (!mine.rowsAffected) return 0
+  const rows = await db.select({ id: enquiries.id, message: enquiries.message, channel: properties.channel })
+    .from(enquiries).innerJoin(properties, eq(enquiries.propertyId, properties.id))
+    .where(and(eq(enquiries.kind, 'email'), inArray(enquiries.source, ['zoopla', 'onthemarket'])))
+  let fixed = 0
+  for (const r of rows) {
+    const msg = r.message ?? ''
+    const intent = /tenant|renter/i.test(msg.split('\n').find((l) => /^(zoopla|onthemarket) .*(enquiry|request)$/i.test(l)) ?? '') ? 'rent' : null
+    const hint = hintFrom(msg, intent)
+    if (!hint.channel || hint.channel === (r.channel === 'let' ? 'let' : 'sale')) continue
+    const about = /^(?:about|property):\s*(.+)$/im.exec(msg)?.[1] ?? null
+    const propertyId = await matchProperty(about, null, hint).catch(() => null)
+    await db.update(enquiries).set({ propertyId }).where(eq(enquiries.id, r.id))
     fixed++
   }
   return fixed
