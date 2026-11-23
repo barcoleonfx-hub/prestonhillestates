@@ -1,0 +1,64 @@
+/* The homepage's page CSS: only what sits inside a visual or the kit lacks (the logo's size, the frames' heights,
+   the form's panel). Everything else is the kit's system. */
+
+/* the client's own logo (a house held in an open hand) beside the name */
+.front-mark { width: 30px; height: 30px; flex: none; color: var(--action); margin-right: var(--s-2); }
+.nav__logo { display: inline-flex; align-items: center; }
+
+/* the branch photograph beside the services, and the founder's portrait: as tall as the words beside them */
+.front-shop { aspect-ratio: 4 / 3; }
+.front-portrait { height: min(560px, 62svh); }
+.front-portrait .frame__img { object-position: 50% 20%; }
+@media (max-width: 639px) { .front-portrait { height: 420px; } }
+
+/* picture-develops: Preston Road in about 1960, on the split's right column */
+.develop { margin: 0; border-radius: var(--r-lg); overflow: hidden; height: min(520px, 58svh); }
+.develop > img { display: block; width: 100%; height: 100%; object-fit: cover; }
+@media (max-width: 639px) { .develop { height: 240px; } }
+
+.front-more { margin-top: var(--s-6); }
+.front-h3 { font: var(--display-weight) var(--t-h3)/1.15 var(--font-display); letter-spacing: var(--display-tracking); }
+.front-review blockquote { font-size: var(--t-lead); line-height: 1.5; }
+.front-initial { width: 40px; height: 40px; border-radius: 999px; display: grid; place-items: center; flex: none; background: var(--surface); font: 500 var(--t-small)/1 var(--font-text); }
+
+/* the sold-prices postcode search under the price list */
+.front-search { display: flex; flex-wrap: wrap; align-items: end; gap: var(--s-4); margin-top: var(--s-7); }
+.front-search .field { flex: 0 1 280px; margin: 0; }
+.front-note { margin-top: var(--s-5); font-size: var(--t-label); color: var(--muted); max-width: 90ch; }
+
+/* the valuation form on its panel */
+.front-form .form { background: var(--g-alt, var(--surface)); border-radius: var(--r-lg); padding: var(--s-7); }
+@media (max-width: 639px) { .front-form .form { padding: var(--s-5); } }
+.front-check label { display: grid; grid-template-columns: 1fr auto; gap: var(--s-3); align-items: start; font-size: var(--t-small); line-height: 1.45; font-weight: 400; }
+.front-check input { width: 20px; height: 20px; margin: 0; accent-color: var(--action); }
+.front-hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+
+.front-schemes a { white-space: normal; }
+
+/* the tablet stacks the founder's words over his portrait: a shorter portrait keeps the section to two screens */
+@media (min-width: 640px) and (max-width: 1023px) { .front-portrait { height: 360px; } .front-shop { aspect-ratio: 16 / 9; } .develop { height: 360px; } }
+.front-steps { margin-bottom: var(--s-6); }
+@media (max-width: 639px) { .front-steps { margin-bottom: var(--s-4); } .front-steps > li { padding-block: var(--s-3); } }
+.front-arch { margin: 0; height: 300px; border-radius: var(--r-lg); overflow: hidden; }
+.front-arch > img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.front-visit { margin-top: var(--s-6); }
+.hours dd { white-space: nowrap; }
+.front-review { margin-top: var(--s-7); }
+/* stacked splits: the section's own gap between the words and the picture */
+@media (max-width: 1023px) { .grid--top > .frame, .grid--top > .develop, .grid--top > .start-7 { margin-top: var(--s-7); } }
+/* on a phone the form sits on the page's lines, without its panel */
+@media (max-width: 639px) { .front-form .form { background: none; padding: 0; } .front-search .field { flex: 1 1 100%; } .front-arch { height: 440px; } }
+
+/* on a phone the split's second group (the picture) has a screen of its own: it fills it */
+@media (max-width: 639px) {
+  #services .front-shop { aspect-ratio: auto; height: 64svh; }
+  #story .develop { height: 64svh; }
+}
+@media (max-width: 639px) {
+  #services .section-head > p { display: none; }
+  .front-arch { height: 420px; }
+  .front-visit { display: none; }   /* the footer carries the address and the phone on a phone */
+}
+
+/* text links read in ink, the drawn underline carries the colour */
+main .link { color: var(--ink); }
