@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { postJson, SEND_FAILED } from '@/lib/post-json'
 import { attributionJson, ConsentBoxes, type Consent } from '@/components/LeadCapture'
 import { SoldPanel } from './SoldPanel'
+import { ValuationDone, keepDone, type DoneData, type Estimate } from './ValuationDone'
 
 type Intent = 'selling' | 'letting'
 type Field = 'postcode' | 'address' | 'name' | 'phone' | 'email'
@@ -55,7 +56,6 @@ export function ValuationWizard({ initialIntent, initialPostcode }: { initialInt
   const [sending, setSending] = useState(false)
   const [waiting, setWaiting] = useState(false)
   const [done, setDone] = useState(false)
-  type Estimate = { kind: 'sale' | 'rent'; low: number; high: number; basis: string; onMarket: { address: string; price: string; beds: number | null; url: string }[] }
   const [estimate, setEstimate] = useState<Estimate | null>(null)
   const [estimating, setEstimating] = useState(false)
   const card = useRef<HTMLDivElement>(null)
@@ -134,6 +134,9 @@ export function ValuationWizard({ initialIntent, initialPostcode }: { initialInt
         return r.field && r.field in STEP_OF ? fail(r.field, r.error ?? 'Please check this.') : setError({ text: r.error ?? 'Something went wrong. Please call us on 020 8904 9005.' })
       }
       try { localStorage.setItem(STORE_KEY, String(Date.now() + 365 * 864e5)) } catch { /* private mode */ }
+      // On to the thank-you page (a page of its own, so an advert can count a finished request), with what to show.
+      const result: DoneData = { first: name.trim().split(/\s+/)[0], address: address.trim(), postcode: pc, time, intent, estimate: r.estimate ?? null, ask: { postcode: pc, intent, propertyType: type, bedrooms: beds, address: address.trim() } }
+      if (keepDone(result)) { window.location.assign('/valuation/thank-you'); return }
       setEstimate(r.estimate ?? null)
       setDone(true)
       // If the estimate didn't come back with the request, work it out separately (it isn't saved twice).
@@ -149,36 +152,7 @@ export function ValuationWizard({ initialIntent, initialPostcode }: { initialInt
     setSending(false)
   }
 
-  if (done) {
-    return (
-      <div className="vx-card vx-done" ref={card} role="status">
-        <div className="vx-tick" aria-hidden="true">✓</div>
-        <h2>Thank you, {name.trim().split(/\s+/)[0]}.</h2>
-        <p>Your request for {address.trim()}, {pc} is with the branch.</p>
-        {estimating && !estimate ? <div className="vx-estimate"><span className="vx-est-k">Working out your instant estimate…</span></div> : null}
-        {estimate ? (
-          <div className="vx-estimate">
-            <span className="vx-est-k">{estimate.kind === 'rent' ? 'Your instant rent estimate' : 'Your instant estimate'}</span>
-            <span className="vx-est-v">£{estimate.low.toLocaleString('en-GB')} – £{estimate.high.toLocaleString('en-GB')}{estimate.kind === 'rent' ? <small> a month</small> : null}</span>
-            <span className="vx-est-b">Based on {estimate.basis}.</span>
-            {estimate.onMarket.length ? (
-              <div className="vx-est-mkt">
-                <b>{estimate.kind === 'rent' ? 'Similar homes we’re letting nearby' : 'Similar homes we have for sale nearby'}</b>
-                {estimate.onMarket.map((m) => <a key={m.url} href={m.url}><span>{m.address}{m.beds != null ? ` · ${m.beds === 0 ? 'studio' : `${m.beds} bed`}` : ''}</span><b>{m.price}</b></a>)}
-              </div>
-            ) : null}
-            <span className="vx-est-fine">This price is an estimate only, based on public records. For a more accurate valuation we need to visit the property in person: size, condition, any extensions and the exact street can all make a difference.</span>
-          </div>
-        ) : null}
-        <ol className="vx-next">
-          <li><b>We’ll call you</b> within one working day{time && time !== 'Any time' ? `, in the ${time.toLowerCase()} if we can` : ''}, to arrange a time.</li>
-          <li><b>We visit</b> and walk round the property with you.</li>
-          <li><b>You get our figure</b> and an honest view of how we’d {intent === 'letting' ? 'let' : 'sell'} it. No obligation.</li>
-        </ol>
-        <p className="vx-fine">Can’t wait? Call the branch on <a href="tel:+442089049005">020 8904 9005</a>.</p>
-      </div>
-    )
-  }
+  if (done) return <ValuationDone first={name.trim().split(/\s+/)[0]} address={address.trim()} postcode={pc} time={time} intent={intent} estimate={estimate} estimating={estimating} cardRef={card} />
 
   const labels = ['The property', 'About it', 'Your details']
   return (

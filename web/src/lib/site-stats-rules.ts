@@ -4,6 +4,8 @@
 export function sourceOf(referrer: string, utm: { source?: string | null; medium?: string | null }, own: string[] = []): string {
   const tag = `${utm.source ?? ''} ${utm.medium ?? ''}`.toLowerCase()
   if (tag.trim()) {
+    // Paid adverts (Google Ads links carry utm_medium=cpc, or a gclid click id) are counted apart from ordinary searches.
+    if (/\b(cpc|ppc|paid|ads?)\b/.test(tag)) return /google/.test(tag) || !utm.source ? 'Google Ads' : `${(utm.source ?? '').replace(/[^\w .-]/g, '').slice(0, 24)} ads`
     if (/\bletters?\b|\bpost(al)?\b/.test(tag)) return 'Letters'
     if (/qr|poster|window/.test(tag)) return 'Posters and QR codes'
     if (/whatsapp/.test(tag)) return 'WhatsApp'
