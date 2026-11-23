@@ -1,4 +1,6 @@
 import Script from 'next/script'
+import { BusinessLd } from '@/components/BusinessLd'
+import { portalUrl } from '@/lib/mailer'
 import { ChatPrompt } from '@/components/ChatPrompt'
 import { listPublished, priceLabel, slugFor, displayAddressFor, statusLabel } from '@/lib/properties'
 import { labelFor, PROPERTY_TYPES } from '@/lib/options'
@@ -95,6 +97,7 @@ export default async function HomePage() {
     .replace(/<!--REVIEWS-->[\s\S]*?<!--\/REVIEWS-->/, (m) => reviews ?? m)
   return (
     <>
+      <BusinessLd base={portalUrl()} />
       <div style={{ display: 'contents' }} dangerouslySetInnerHTML={{ __html: html }} />
       <Script id="home-js" strategy="afterInteractive">{SCRIPT}</Script>
       <ChatPrompt />

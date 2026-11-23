@@ -20,7 +20,7 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   const a = areaBySlug((await params).slug)
   if (!a) return { title: 'Area not found' }
   return {
-    title: `${a.name} (${a.districts.join(', ')}): homes for sale, to rent and sold prices`,
+    title: `Estate agents in ${a.name} (${a.districts.join(', ')}): homes for sale, to rent and sold prices`,
     description: `Property in ${a.name}: homes for sale and to rent, what homes have actually sold for, and how the ${a.districts.join(' and ')} market is doing. From Preston Hill Estates, on Preston Road since 2004.`,
   }
 }
