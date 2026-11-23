@@ -253,6 +253,12 @@ export async function checkMailbox(opts: { force?: boolean; lookBackDays?: numbe
     return { ran: true, error: 'password' }
   }
   const c = client(s.host, s.port, s.user, pass)
+  // What to look at again: everything since then, or for a repair only Zoopla and OnTheMarket emails (it only fills
+  // in portal enquiries saved without their address, so there's no need to read anything else).
+  const lookBack = (days: number) => {
+    const since = new Date(Date.now() - days * 86400000)
+    return opts.repairOnly ? { since, or: [{ from: 'zoopla' }, { from: 'onthemarket' }, { subject: 'zoopla' }, { subject: 'onthemarket' }, { subject: 'valuation' }] } : { since }
+  }
   const startedAt = now()
   let found = 0
   let lastUid = s.lastUid ?? 0
@@ -265,7 +271,7 @@ export async function checkMailbox(opts: { force?: boolean; lookBackDays?: numbe
     let uids: number[]
     // Asked to look again at recent days (nothing is added twice), or first run / renumbered mailbox.
     if (opts.lookBackDays) {
-      uids = ((await c.search({ since: new Date(Date.now() - opts.lookBackDays * 86400000) }, { uid: true })) || []) as number[]
+      uids = ((await c.search(lookBack(opts.lookBackDays), { uid: true })) || []) as number[]
       uidValidity = validity
     } else if (!uidValidity || uidValidity !== validity || !lastUid) {
       const since = new Date(Date.now() - FIRST_LOOK_DAYS * 86400000)
@@ -275,8 +281,9 @@ export async function checkMailbox(opts: { force?: boolean; lookBackDays?: numbe
       uids = box.uidNext > lastUid + 1 ? (((await c.search({ uid: `${lastUid + 1}:*` }, { uid: true })) || []) as number[]).filter((u) => u > lastUid) : []
     }
     uids.sort((a, b) => a - b)
-    const limit = opts.lookBackDays ? 800 : MAX_PER_RUN
-    const batch = uids.slice(0, limit)
+    const limit = opts.repairOnly ? 2000 : opts.lookBackDays ? 800 : MAX_PER_RUN
+    // A repair reads the newest first-hand portal emails; a normal check works forward from the oldest it hasn't seen.
+    const batch = opts.repairOnly ? uids.slice(-limit) : uids.slice(0, limit)
     const skipped: SkippedEmail[] = []
     // Reads the given emails in the open folder; saves the enquiries among them. In Junk, only portal and
     // website leads count (anything else there really is junk).
@@ -345,9 +352,9 @@ export async function checkMailbox(opts: { force?: boolean; lookBackDays?: numbe
         const fv = String(fb.uidValidity), st = folders[path]
         const fresh = !st || st.validity !== fv || !st.lastUid
         let list: number[]
-        if (opts.lookBackDays || fresh) list = ((await c.search({ since: new Date(Date.now() - (opts.lookBackDays ?? (st ? FIRST_LOOK_DAYS : NEW_FOLDER_DAYS)) * 86400000) }, { uid: true })) || []) as number[]
+        if (opts.lookBackDays || fresh) list = ((await c.search(lookBack(opts.lookBackDays ?? (st ? FIRST_LOOK_DAYS : NEW_FOLDER_DAYS)), { uid: true })) || []) as number[]
         else list = fb.uidNext > st.lastUid + 1 ? (((await c.search({ uid: `${st.lastUid + 1}:*` }, { uid: true })) || []) as number[]).filter((u) => u > st.lastUid) : []
-        list = list.sort((a, b) => a - b).slice(0, limit)
+        list = opts.repairOnly ? list.sort((a, b) => a - b).slice(-limit) : list.sort((a, b) => a - b).slice(0, limit)
         await take(path, list, fv, path === junkPath, path !== junkPath)
         folders[path] = { validity: fv, lastUid: Math.max(fresh ? 0 : st.lastUid, ...list, list.length ? 0 : (fb.uidNext ?? 1) - 1) }
       } catch (e) { console.error('mailbox: folder check failed', path, e) }
