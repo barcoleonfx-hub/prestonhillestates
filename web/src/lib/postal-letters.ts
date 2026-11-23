@@ -5,7 +5,7 @@ import 'server-only'
 // notes the letter on each lead so nobody is written to twice by mistake.
 
 import QRCode from 'qrcode'
-import { and, desc, eq, gte, inArray, isNotNull, ne } from 'drizzle-orm'
+import { and, desc, eq, gte, inArray, isNotNull, like, ne, or } from 'drizzle-orm'
 import { db, ready } from '@/db/client'
 import { appointments, contacts, enquiries, leadEvents, letterBatches, postalLetters, settings } from '@/db/schema'
 import { ENQUIRY_SOURCES, isValuation } from './enquiry-labels'
@@ -13,7 +13,9 @@ import { homeOf } from './enquiry-workspace'
 import { shareFor } from './booklet-share'
 import { knownBase } from './property-email-data'
 import { leadEvent } from './leads'
-import { addressLines, chooseByDefault, fillLetter, firstName, LETTER_AFTER, LETTER_BEFORE, postable, shortHome } from './postal-letter-rules'
+import { addressLines, chooseByDefault, fillLetter, firstName, LETTER_AFTER, LETTER_BEFORE, OLD_LETTER, postable, shortHome, streetOf } from './postal-letter-rules'
+import { AREAS } from './areas'
+import { lrTypeFor, salesOnStreet } from './sold-prices'
 import { now, uid } from './util'
 
 export type LetterCandidate = {
@@ -63,7 +65,11 @@ export async function letterCandidates(days = 90): Promise<LetterCandidate[]> {
 export async function letterText(): Promise<{ before: string; after: string }> {
   await ready()
   const row = await db.query.settings.findFirst({ where: eq(settings.key, 'valuation_letter_text') })
-  try { const v = JSON.parse(row?.value ?? '{}'); return { before: v.before || LETTER_BEFORE, after: v.after || LETTER_AFTER } } catch { return { before: LETTER_BEFORE, after: LETTER_AFTER } }
+  try {
+    const v = JSON.parse(row?.value ?? '{}')
+    // Words never changed from the old starting ones get the new starting ones.
+    return { before: v.before && v.before !== OLD_LETTER.before ? v.before : LETTER_BEFORE, after: v.after && v.after !== OLD_LETTER.after ? v.after : LETTER_AFTER }
+  } catch { return { before: LETTER_BEFORE, after: LETTER_AFTER } }
 }
 
 /** Saves a printing: the letters as they'll be printed (addresses as corrected), and keeps the words for next time. */
@@ -94,7 +100,56 @@ export async function createBatch(p: { items: { id: string; address: string }[];
   return batchId
 }
 
-export type PrintedLetter = { id: string; name: string; first: string; lines: string[]; home: string | null; before: string[]; after: string[]; report: string; reportShort: string; qr: string }
+/** The facts printed beside the QR code: real sales on or near their road, and who's looking in their area. */
+export type LetterFacts = {
+  street: string | null; area: string | null
+  sales: { where: string; when: string; price: number }[]
+  salesWhere: 'street' | 'near' | null
+  typical: { price: number; count: number; where: string } | null
+  wanting: { count: number; who: 'buyers' | 'tenants' } | null
+}
+export type PrintedLetter = { id: string; name: string; first: string; lines: string[]; home: string | null; before: string[]; after: string[]; report: string; reportShort: string; qr: string; facts: LetterFacts }
+
+const outwardOf = (pc: string | null) => (pc ?? '').toUpperCase().match(/^([A-Z]{1,2}\d[A-Z\d]?)\s*\d[A-Z]{2}$/)?.[1] ?? null
+/** "THE DRIVE" or "the Drive" → "The Drive". */
+const titleCase = (t: string) => (/[a-z]/.test(t) && /^[A-Z]/.test(t) ? t : t.toLowerCase().replace(/(^|[\s'-])([a-z])/g, (_, a: string, b: string) => a + b.toUpperCase()))
+const monthYear = (iso: string) => new Date(`${iso.slice(0, 10)}T12:00:00Z`).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+
+/** People registered with us in the last year looking to buy (or rent) in this postcode district or area. */
+async function wantingIn(outward: string, area: string | null, who: 'buyer' | 'tenant'): Promise<number> {
+  const since = new Date(Date.now() - 365 * 864e5).toISOString()
+  const places = [outward, ...AREAS.filter((a) => a.districts.includes(outward)).map((a) => a.name), ...(area ? [area] : [])]
+  const rows = await db.select({ id: contacts.id }).from(contacts).where(and(
+    like(contacts.roles, `%${who}%`), eq(contacts.doNotContact, false), gte(contacts.lastContactAt, since),
+    or(...places.map((p) => like(contacts.areas, `%${p}%`)), like(contacts.address, `%${outward} %`), like(contacts.address, `%${outward}`)),
+  ))
+  return new Set(rows.map((r) => r.id)).size
+}
+
+/** What's printed beside the QR code for one home. Nothing is invented: anything we can't find is left out. */
+async function letterFacts(lines: string[], letting: boolean, homeType: string | null): Promise<LetterFacts> {
+  const pc = lines.find((l) => /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i.test(l.trim())) ?? null
+  const outward = outwardOf(pc)
+  const street = streetOf(lines)
+  const text = lines.join(' ').toLowerCase()
+  const area = (outward ? AREAS.filter((a) => a.districts.includes(outward)) : []).sort((a, b) => Number(text.includes(b.name.toLowerCase())) - Number(text.includes(a.name.toLowerCase())))[0]?.name ?? null
+  const empty: LetterFacts = { street, area, sales: [], salesWhere: null, typical: null, wanting: null }
+  if (!pc || !outward) return empty
+  const [sold, wanting] = await Promise.all([
+    letting ? Promise.resolve(null) : salesOnStreet(street, pc, lrTypeFor(homeType)).catch(() => null),
+    wantingIn(outward, area, letting ? 'tenant' : 'buyer').catch(() => 0),
+  ])
+  const onStreet = sold?.onStreet ?? []
+  const pick = (onStreet.length ? onStreet : sold?.near?.recent ?? []).slice().sort((a, b) => (a.soldOn < b.soldOn ? 1 : -1)).slice(0, 3)
+  return {
+    street, area,
+    // On their own road the road name is in the heading, so each sale says what kind of home it was instead.
+    sales: pick.map((x) => ({ where: onStreet.length ? x.typeLabel : titleCase(x.street ?? x.postcode), when: monthYear(x.soldOn), price: x.price })),
+    salesWhere: pick.length ? (onStreet.length ? 'street' : 'near') : null,
+    typical: sold?.near?.stats.median12 && sold.near.stats.count12 >= 5 ? { price: sold.near.stats.median12, count: sold.near.stats.count12, where: sold.near.stats.label.replace(/^in\s+/, '') } : null,
+    wanting: wanting >= 3 ? { count: wanting, who: letting ? 'tenants' : 'buyers' } : null,
+  }
+}
 
 /** A batch ready to print: each letter's words, and the QR code for its report. */
 export async function batchView(id: string): Promise<{ id: string; sender: string; createdAt: string; postedAt: string | null; letters: PrintedLetter[] } | null> {
@@ -103,12 +158,19 @@ export async function batchView(id: string): Promise<{ id: string; sender: strin
   if (!b) return null
   const rows = await db.select().from(postalLetters).where(eq(postalLetters.batchId, id)).orderBy(postalLetters.name)
   const base = await knownBase()
+  const es = rows.length ? await db.select({ id: enquiries.id, intent: enquiries.intent, message: enquiries.message }).from(enquiries).where(inArray(enquiries.id, rows.map((r) => r.enquiryId))) : []
+  // Their kind of home, where the enquiry says ("Type: Semi-detached house"), so houses are compared with houses.
+  const typeOf = new Map(es.map((e) => [e.id, /^(?:type|type of property|property type)\s*:\s*(.+)$/im.exec(e.message ?? '')?.[1]?.trim() ?? null]))
+  const letting = new Map(es.map((e) => [e.id, e.intent === 'letting' || /\b(letting|rental valuation|rent(al)? estimate|landlord|to let)\b/i.test(e.message ?? '')]))
   const letters = await Promise.all(rows.map(async (r) => {
     const report = `${base}/report/${await shareFor(r.enquiryId)}?utm_source=letter`
     const first = firstName(r.name)
+    const lines = r.address.split('\n')
+    const facts = await letterFacts(lines, letting.get(r.enquiryId) ?? false, typeOf.get(r.enquiryId) ?? null)
+    const v = { first, home: r.home, street: facts.street, area: facts.area }
     return {
-      id: r.id, name: r.name, first, lines: r.address.split('\n'), home: r.home,
-      before: fillLetter(b.beforeText, { first, home: r.home }), after: fillLetter(b.afterText, { first, home: r.home }),
+      id: r.id, name: r.name, first, lines: r.address.split('\n'), home: r.home, facts,
+      before: fillLetter(b.beforeText, v), after: fillLetter(b.afterText, v),
       report, reportShort: report.replace(/^https?:\/\//, '').replace(/\?.*$/, ''),
       qr: await QRCode.toDataURL(report, { margin: 0, width: 360, errorCorrectionLevel: 'M', color: { dark: '#1C1B19', light: '#FFFFFF' } }),
     }

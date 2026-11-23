@@ -48,12 +48,30 @@ export function chooseByDefault(r: { postable: boolean; booked: boolean; lastLet
   return { tick: true, why: null }
 }
 
-export const LETTER_BEFORE = 'Thank you for asking us to value {home}. I’ve prepared a free personal property report for your home, with recent prices on and around your road and a guide to your local area. Scan the code below with your phone camera to open it.'
-export const LETTER_AFTER = 'An online figure can only go so far. Condition, extensions and layout can make a big difference to the price, so the most accurate figure comes from a short visit. It takes about 30 minutes, it’s free and there’s no obligation.\n\nTo arrange a time that suits you, call me on 020 8904 9005 or send a WhatsApp message to 07745 203146.'
+/** The starting words (staff can change them, and "Write with AI" can rewrite them). */
+export const LETTER_BEFORE = 'Thank you for asking us about {home}. Rather than send you a number worked out by a computer, I’ve put together a personal property report for your home: what homes on and around {street} have actually sold for, how the {area} market is moving, and what buyers will love about where you live.\n\nIt’s free and it’s yours to keep. Scan the code with your phone camera to open it.'
+export const LETTER_AFTER = 'Online estimates can’t see your extension, your kitchen or how much light your garden gets, and two homes on the same road can be tens of thousands of pounds apart. That’s why the figure worth planning around comes from a short visit: about 30 minutes, free, and with no obligation. The person who values your home stays with you from start to finish.\n\nWe’ve been selling and letting homes from Preston Road since 2004. To book a time that suits you, call me on 020 8904 9005 or send a WhatsApp message to 07745 203146.'
+/** The words we started with, before letters named the street and area: replaced by the new ones if still unchanged. */
+export const OLD_LETTER = {
+  before: 'Thank you for asking us to value {home}. I’ve prepared a free personal property report for your home, with recent prices on and around your road and a guide to your local area. Scan the code below with your phone camera to open it.',
+  after: 'An online figure can only go so far. Condition, extensions and layout can make a big difference to the price, so the most accurate figure comes from a short visit. It takes about 30 minutes, it’s free and there’s no obligation.\n\nTo arrange a time that suits you, call me on 020 8904 9005 or send a WhatsApp message to 07745 203146.',
+}
 
-/** The words with {first} and {home} filled in, as paragraphs. */
-export function fillLetter(text: string, v: { first: string; home: string | null }): string[] {
+/** "37 Gordon Road" → "Gordon Road"; "Flat 2, Elm Court, 12 High Street" → "High Street" where it can tell. */
+export function streetOf(lines: string[]): string | null {
+  const rest = lines.filter((l) => !POSTCODE.test(l))
+  for (const l of rest) {
+    const m = /^\s*\d+[a-z]?(?:-\d+[a-z]?)?,?\s+(.+)$/i.exec(l)
+    if (m && /[a-z]{3,}/i.test(m[1])) return m[1].replace(/,.*$/, '').trim()
+  }
+  const named = rest.find((l) => /\b(road|street|avenue|lane|close|drive|way|gardens|crescent|grove|place|court|hill|rise|walk|terrace|park|parade|view|mews)\b/i.test(l) && !/^(flat|apartment|unit)\b/i.test(l))
+  return named?.replace(/^\d+[a-z]?\s+/i, '').trim() ?? null
+}
+
+/** The words with {first}, {home}, {street} and {area} filled in, as paragraphs. */
+export function fillLetter(text: string, v: { first: string; home: string | null; street?: string | null; area?: string | null }): string[] {
   return text.replace(/\{first\}/g, v.first || 'there').replace(/\{home\}/g, v.home || 'your home')
+    .replace(/\{street\}/g, v.street || 'your road').replace(/\{area\}/g, v.area || 'local')
     .split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean)
 }
 
