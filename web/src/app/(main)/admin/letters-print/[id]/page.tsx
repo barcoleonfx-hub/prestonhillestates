@@ -5,6 +5,7 @@ import { batchView } from '@/lib/postal-letters'
 import { LogoMark } from '@/components/Logo'
 import { markPostedAction } from '../../postal-actions'
 import { PrintButton } from './PrintButton'
+import { LR_CREDIT } from '@/lib/sold-prices'
 import './letters.css'
 
 export const dynamic = 'force-dynamic'
@@ -44,16 +45,34 @@ export default async function LettersPrintPage({ params, searchParams }: { param
             <p>Dear {l.first || 'Sir or Madam'},</p>
             <h2>Your free property report for {l.home ?? 'your home'}</h2>
             {l.before.map((p, i) => <p key={`b${i}`}>{p}</p>)}
-            <div className="pl-qr">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={l.qr} alt="" />
-              <div><b>Scan with your phone camera</b><span>to open your personal property report</span><small>or type: {l.reportShort}</small></div>
-            </div>
+            {(() => {
+              const f = l.facts
+              const has = f.sales.length || f.typical || f.wanting
+              const qr = (
+                <div className="pl-qr">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={l.qr} alt="" />
+                  <div><b>Scan with your phone camera</b><span>to open your personal property report</span><small>or type: {l.reportShort}</small></div>
+                </div>
+              )
+              if (!has) return qr
+              return (
+                <div className="pl-band">
+                  <div className="pl-facts">
+                    <b className="pl-facts-h">{f.salesWhere === 'street' && f.street ? `On ${f.street}` : f.street ? `Around ${f.street}` : 'Near you'}</b>
+                    {f.sales.length ? <ul>{f.sales.map((x, i) => <li key={i}><span>{x.where}<small>{x.when}</small></span><b>£{x.price.toLocaleString('en-GB')}</b></li>)}</ul> : null}
+                    {f.typical ? <p>Typical price in {f.typical.where} over the last 12 months: <b>£{f.typical.price.toLocaleString('en-GB')}</b> ({f.typical.count} sales)</p> : null}
+                    {f.wanting ? <p className="pl-want"><b>{f.wanting.count} {f.wanting.who}</b> have registered with us in the last year looking in {f.area ?? 'your area'}.</p> : null}
+                  </div>
+                  {qr}
+                </div>
+              )
+            })()}
             {l.after.map((p, i) => <p key={`a${i}`}>{p}</p>)}
             <p className="pl-sign">Yours sincerely,</p>
             <p className="pl-name"><b>{b.sender}</b><br />Preston Hill Estates</p>
           </div>
-          <footer className="pl-foot">Preston Hill Estates · 271 Preston Road, Harrow HA3 0PS · 020 8904 9005. You’re receiving this because you asked us about a valuation. If you’d rather we didn’t write again, just let us know.</footer>
+          <footer className="pl-foot">Preston Hill Estates · 271 Preston Road, Harrow HA3 0PS · 020 8904 9005. You’re receiving this because you asked us about a valuation. If you’d rather we didn’t write again, just let us know.{l.facts.sales.length || l.facts.typical ? ` Sold prices: ${LR_CREDIT}` : ''}</footer>
         </article>
       ))}
     </div>

@@ -39,7 +39,7 @@ describe('the letter', () => {
     expect(firstName('Kanti Patel')).toBe('Kanti')
     expect(firstName('Mrs Patel')).toBe('Mrs Patel')
     const [p] = fillLetter(LETTER_BEFORE, { first: 'Kanti', home: '4 Kenton Park Avenue' })
-    expect(p).toMatch(/^Thank you for asking us to value 4 Kenton Park Avenue\./)
+    expect(p).toMatch(/^Thank you for asking us about 4 Kenton Park Avenue\./)
     expect(fillLetter('A\n\nB {home}', { first: '', home: null })).toEqual(['A', 'B your home'])
   })
 })
@@ -52,5 +52,18 @@ describe('the letter as one piece (for Write with AI)', () => {
   it('without the mark, puts the code after the paragraph about scanning it', () => {
     expect(splitLetter('Thank you.\n\nScan the code to open it.\n\nCall us.')).toEqual({ before: 'Thank you.\n\nScan the code to open it.', after: 'Call us.' })
     expect(splitLetter('One.\n\nTwo.')).toEqual({ before: 'One.', after: 'Two.' })
+  })
+})
+
+describe('naming their road and area', () => {
+  it('finds the road from the address', async () => {
+    const { streetOf } = await import('./postal-letter-rules')
+    expect(streetOf(['37 Gordon Road', 'Harrow', 'HA3 5RY'])).toBe('Gordon Road')
+    expect(streetOf(['Flat 2', '12 High Street', 'HA3 0PS'])).toBe('High Street')
+    expect(streetOf(['Rose Cottage', 'Kenton Lane', 'HA3 8UF'])).toBe('Kenton Lane')
+  })
+  it('fills in {street} and {area}', () => {
+    expect(fillLetter('Homes on {street} in {area}.', { first: 'Sam', home: '4 Elm Road', street: 'Elm Road', area: 'Kenton' })).toEqual(['Homes on Elm Road in Kenton.'])
+    expect(fillLetter('Homes on {street}.', { first: 'Sam', home: null })).toEqual(['Homes on your road.'])
   })
 })

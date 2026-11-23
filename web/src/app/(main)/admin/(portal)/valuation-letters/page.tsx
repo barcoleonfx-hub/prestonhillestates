@@ -21,7 +21,8 @@ const ago = (iso: string) => { const d = Math.floor((Date.now() - Date.parse(iso
 export default async function ValuationLettersPage({ searchParams }: { searchParams: Promise<{ days?: string; msg?: string }> }) {
   const me = await requireAdmin()
   const sp = await searchParams
-  const days = DAYS.includes(Number(sp.days)) ? Number(sp.days) : 90
+  // A year by default: everyone who asked for a valuation in the last twelve months and hasn't been written to lately.
+  const days = DAYS.includes(Number(sp.days)) ? Number(sp.days) : 365
   await ready()
   const [rows, text, batches, staff] = await Promise.all([letterCandidates(days), letterText(), recentBatches(), db.select({ name: admins.name }).from(admins).where(eq(admins.active, true))])
   const ticked = rows.filter((r) => r.tick).length
@@ -40,7 +41,7 @@ export default async function ValuationLettersPage({ searchParams }: { searchPar
       <form action={printLettersAction}>
         <section className="card card-pad vl-words">
           <h2>The letter</h2>
-          <p className="card-sub">Starts “Dear {'{first}'},” and the heading “Your free property report for {'{home}'}”. Use {'{first}'} for their first name and {'{home}'} for their house and street. A blank line starts a new paragraph. “Write with AI” writes both parts as one letter, using what’s in the boxes, our Google reviews and what their property report holds.</p>
+          <p className="card-sub">Starts “Dear {'{first}'},” and the heading “Your free property report for {'{home}'}”. Use {'{first}'} for their first name, {'{home}'} for their house and street, {'{street}'} for their road and {'{area}'} for their area (e.g. Kenton). Beside the QR code each letter also prints the latest sold prices on their road (from HM Land Registry) and how many buyers or tenants have registered with us looking in their area. A blank line starts a new paragraph. “Write with AI” writes both parts as one letter, using what’s in the boxes, our Google reviews and what their property report holds.</p>
           <LetterWords before={text.before} after={text.after} />
           <label className="field vl-sender"><span className="flabel">Signed by</span>
             <select className="input" name="sender" defaultValue={me.name}>{staff.map((s) => <option key={s.name}>{s.name}</option>)}</select>
