@@ -3,6 +3,7 @@ import { LogoMark } from '@/components/Logo'
 import { AccreditationLinks, PortalLinks } from '@/components/PortalLinks'
 import { ValuationPopup } from '@/components/ValuationPopup'
 import { VisitTracker } from '@/components/LeadCapture'
+import { PageViews } from '@/components/PageViews'
 import './site.css'
 
 export default function SiteLayout({ children }: { children: React.ReactNode }) {
@@ -75,6 +76,7 @@ export default function SiteLayout({ children }: { children: React.ReactNode }) 
       </footer>
       <ValuationPopup />
       <VisitTracker />
+      <PageViews />
     </>
   )
 }

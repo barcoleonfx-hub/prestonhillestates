@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { VisitTracker } from '@/components/LeadCapture'
+import { PageViews } from '@/components/PageViews'
 import './home.css'
 
 // The homepage has its own root layout so its hand-tuned design never mixes with the portal's styles.
@@ -17,7 +18,7 @@ export const metadata: Metadata = {
 export default function HomeLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en-GB">
-      <body>{children}<VisitTracker /></body>
+      <body>{children}<VisitTracker /><PageViews /></body>
     </html>
   )
 }

@@ -61,6 +61,7 @@ export function NavLinks({ newSales, newLettings, today, outcomes, callbacks, fo
       <Link href="/admin/reconnect" className={on('/admin/reconnect')}><Icon name="people" />Reconnect</Link>
       <Link href="/admin/mail" className={on('/admin/mail')}><Icon name="mail" />Inbox</Link>
       <Link href="/admin/campaigns" className={on('/admin/campaigns')}><Icon name="mail" />Email campaigns</Link>
+      <Link href="/admin/website-stats" className={on('/admin/website-stats')}><Icon name="pulse" />Website stats</Link>
       {isAdmin ? <Link href="/admin/staff" className={on('/admin/staff')}><Icon name="team" />Staff</Link> : null}
       {isAdmin ? <Link href="/admin/email-inbox" className={on('/admin/email-inbox')}><Icon name="mail" />Email settings</Link> : null}
       {isAdmin ? <Link href="/admin/import" className={on('/admin/import')}><Icon name="mail" />Import emails</Link> : null}

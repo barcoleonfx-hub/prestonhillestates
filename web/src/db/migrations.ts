@@ -1108,4 +1108,21 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       `CREATE INDEX qr_scans_code_idx ON qr_scans (code, at)`,
     ],
   },
+  {
+    id: '051_page_views',
+    sql: [
+      // Website visits (lib/site-stats): which page, where the visit came from (on its first page only), phone or
+      // computer, and a one-way daily fingerprint so one visitor counts once a day. No IP address, cookie or anything
+      // that identifies anyone is kept. Staff signed in to the portal aren't counted.
+      `CREATE TABLE page_views (
+        id TEXT PRIMARY KEY,
+        path TEXT NOT NULL,
+        source TEXT,
+        device TEXT NOT NULL,
+        visitor TEXT NOT NULL,
+        at TEXT NOT NULL
+      )`,
+      `CREATE INDEX page_views_at_idx ON page_views (at)`,
+    ],
+  },
 ]

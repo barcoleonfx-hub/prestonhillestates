@@ -60,7 +60,7 @@ export default function PrivacyPage() {
             <li>how you first arrived (the page, the site that sent you, and any advert link), for 90 days, sent with any form you fill in;</li>
             <li>that you closed or sent the valuation pop-up or the chat, so we don’t keep showing them.</li>
           </ul>
-          <p>We also count how often the WhatsApp buttons are tapped, and on which page, without keeping anything about who tapped them. Videos on property pages play from YouTube’s privacy-enhanced (no-cookie) service. You can clear these notes at any time in your browser settings.</p>
+          <p>We also count how often the WhatsApp buttons are tapped, and on which page, without keeping anything about who tapped them. To see how the website is used, we count the pages people view, the kind of device (phone, tablet or computer) and the website that sent them (for example Google), using a code worked out from the connection that changes every day and can’t be turned back into who you are; we keep no IP address and set no cookie for this, and the counts are deleted after 13 months. Scans of the QR codes on our posters are counted the same way. Videos on property pages play from YouTube’s privacy-enhanced (no-cookie) service. You can clear these notes at any time in your browser settings.</p>
 
           <h2 className="sect">Your rights</h2>
           <p>You can ask us, free of charge, to:</p>
