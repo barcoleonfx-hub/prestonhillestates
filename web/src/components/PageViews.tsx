@@ -13,7 +13,7 @@ export function PageViews() {
     if (!path || (last.path === path && Date.now() - last.at < 2000)) return
     last = { path, at: Date.now() }
     const q = new URLSearchParams(window.location.search)
-    const body = JSON.stringify({ path, ref: first ? document.referrer : '', first, utm_source: first ? q.get('utm_source') : null, utm_medium: first ? q.get('utm_medium') : null })
+    const body = JSON.stringify({ path, ref: first ? document.referrer : '', first, utm_source: first ? q.get('utm_source') ?? (q.get('gclid') ? 'google' : null) : null, utm_medium: first ? q.get('utm_medium') ?? (q.get('gclid') ? 'cpc' : null) : null })
     first = false
     fetch('/api/public/view', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true }).catch(() => {})
   }, [path])

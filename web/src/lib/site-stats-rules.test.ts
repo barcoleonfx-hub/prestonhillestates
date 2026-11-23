@@ -15,6 +15,7 @@ describe('where a visit came from', () => {
   it('prefers the tag on our own links (emails, letters)', () => {
     expect(sourceOf('', { source: 'email', medium: 'newsletter' }, OWN)).toBe('Our emails')
     expect(sourceOf('', { source: 'letter' }, OWN)).toBe('Letters')
+    expect(sourceOf('https://www.google.com/', { source: 'google', medium: 'cpc' }, OWN)).toBe('Google Ads')
     expect(sourceOf('https://www.google.com/', { source: 'facebook' }, OWN)).toBe('Social media')
   })
 })
