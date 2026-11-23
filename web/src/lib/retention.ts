@@ -59,6 +59,9 @@ export async function runRetention(opts: { force?: boolean } = {}): Promise<Rete
     { sql: `DELETE FROM lead_events WHERE created_at < ? OR (contact_id IS NOT NULL AND contact_id NOT IN (SELECT id FROM contacts) AND (enquiry_id IS NULL OR enquiry_id NOT IN (SELECT id FROM enquiries)))`, args: [cutoff] },
     { sql: 'DELETE FROM consents WHERE contact_id IS NULL OR contact_id NOT IN (SELECT id FROM contacts)', args: [] },
     { sql: 'DELETE FROM site_events WHERE created_at < ?', args: [cutoff] },
+    // Website visits and poster scans are only needed for recent trends: kept for 13 months.
+    { sql: 'DELETE FROM page_views WHERE at < ?', args: [new Date(Date.now() - 395 * 864e5).toISOString()] },
+    { sql: 'DELETE FROM qr_scans WHERE at < ?', args: [new Date(Date.now() - 395 * 864e5).toISOString()] },
     { sql: 'DELETE FROM email_log WHERE created_at < ?', args: [cutoff] },
     { sql: 'DELETE FROM notification_reads WHERE notification_id IN (SELECT id FROM notifications WHERE created_at < ?)', args: [new Date(Date.now() - 30 * 86400000).toISOString()] },
     { sql: 'DELETE FROM notifications WHERE created_at < ?', args: [new Date(Date.now() - 30 * 86400000).toISOString()] },

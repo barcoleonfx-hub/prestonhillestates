@@ -709,6 +709,15 @@ export const windowCards = sqliteTable('window_cards', {
 })
 
 /** A printing of valuation letters (lib/postal-letters). */
+export const pageViews = sqliteTable('page_views', {
+  id: text('id').primaryKey(),
+  path: text('path').notNull(),
+  source: text('source'),
+  device: text('device').notNull(),
+  visitor: text('visitor').notNull(),
+  at: text('at').notNull(),
+})
+
 export const qrScans = sqliteTable('qr_scans', {
   id: text('id').primaryKey(),
   code: text('code').notNull(),
