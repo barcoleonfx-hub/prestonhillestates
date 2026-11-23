@@ -19,5 +19,7 @@ export default async function ReportPage({ params }: { params: Promise<{ token: 
   if (!(await currentAdmin())) await recordView(token).catch(() => {})
   const data = await bookletInput(share.bookletId, { name: 'Preston Hill Estates' })
   if (!data) notFound()
-  return <ReportView data={data} f={merge(data.defaults, data.saved)} />
+  // The guide price and the pages from the OnTheMarket guide only once staff have finalised the report.
+  const shown = data.guide && !data.guide.finalisedAt ? { ...data, guide: null } : data
+  return <ReportView data={shown} f={merge(data.defaults, data.saved)} />
 }

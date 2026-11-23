@@ -13,6 +13,7 @@ import { toE164 } from './lead-rules'
 import { displayAddressFor, getProperty, listPublished, priceLabel, slugFor } from './properties'
 import { knownBase, listingNamedIn, listingOptions } from './property-email-data'
 import { googleSummary } from './reviews-data'
+import { reportFinal } from './report-guide'
 import { shareFor } from './booklet-share'
 import { defaultPropertyOptions, nextTwoDays, propertyMessage, waBlocked, waTemplates, type WaContext, type WaListing, type WaTemplate } from './whatsapp'
 
@@ -115,7 +116,7 @@ export async function waFor(p: { enquiry?: Enquiry | null; contact?: Contact | n
     : e.kind === 'buyer' ? 'buyer' : e.kind === 'tenant' ? 'tenant' : 'general'
   const isLet = asked ? asked.channel === 'let' : p.isLet ?? e?.intent === 'rent'
   // Their personal property report (valuations).
-  const report = e && valuation ? await shareFor(e.id).then((t) => `${base}/report/${t}`).catch(() => null) : null
+  const report = e && valuation && (await reportFinal(e.id).catch(() => false)) ? await shareFor(e.id).then((t) => `${base}/report/${t}`).catch(() => null) : null
   const rating = google?.rating && google.count ? { rating: google.rating, count: google.count } : null
   const days = nextTwoDays()
   // About one of our homes, the dialog builds the first reply from the listing (price, facts, its own description, key

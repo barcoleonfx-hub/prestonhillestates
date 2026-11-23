@@ -6,6 +6,7 @@ import { desc, eq } from 'drizzle-orm'
 import { db, ready } from '@/db/client'
 import { contacts, enquiries, enquiryMessages, mailMessages, mailThreads } from '@/db/schema'
 import { enquiryLabel, isValuation, sortEnquiry } from './enquiry-labels'
+import { reportFinal } from './report-guide'
 import { shareFor } from './booklet-share'
 import { anthropicKey } from './anthropic-key'
 import { enquiryWorkspace } from './enquiry-workspace'
@@ -100,7 +101,7 @@ async function enquiryBrief(id: string, staffName: string): Promise<{ text: stri
   const side = sortEnquiry(e).side
   // The same facts the preset emails use: their home, sold prices near it, our figure and evidence, reviews.
   const ctx = (await enquiryWorkspace(id, { name: staffName }).catch(() => null))?.ctx ?? null
-  const report = ctx?.report?.url ?? (isValuation(e) ? await shareFor(e.id).then(async (t) => `${await knownBase()}/report/${t}`).catch(() => null) : null)
+  const report = ctx?.report?.url ?? (isValuation(e) && (await reportFinal(e.id).catch(() => false)) ? await shareFor(e.id).then(async (t) => `${await knownBase()}/report/${t}`).catch(() => null) : null)
   const review = ctx?.brand ? (side === 'lettings' ? ctx.brand.lettings : ctx.brand.sales) ?? ctx.brand.sales ?? ctx.brand.lettings : null
   const msgs = await db.select().from(enquiryMessages).where(eq(enquiryMessages.enquiryId, id)).orderBy(desc(enquiryMessages.sentAt)).limit(6)
   const lines = [

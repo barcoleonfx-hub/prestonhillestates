@@ -4,6 +4,7 @@ import { gbp, storyLines, type BookletComp, type BookletFields, type BookletInpu
 import { distanceText } from '@/lib/geo'
 import { BookletMap } from './BookletMap'
 import { AerialMap, AreaMap, BranchMap, CompsMap } from './MapboxMaps'
+import { DetailPage, ValuationPage } from './GuidePages'
 
 // The printed booklet: eight A4 pages. Shared by the live preview and the printout, so what staff see is what prints.
 
@@ -101,6 +102,10 @@ export function BookletPages({ data, f }: { data: BookletInput; f: BookletFields
   const [big, ...small] = data.reviews
   const feature = big && big.text.length >= 80 ? big : null
   const shorts = (feature ? small : data.reviews).slice(0, 3)
+  // With the OnTheMarket guide, "Your home, in detail" and "Our valuation" take the place of the comparables page.
+  const guide = data.guide
+  const order = ['cover', 'welcome', 'about', places.length || data.story.facts.length ? 'love' : '', 'story', guide ? 'detail' : '', guide ? 'value' : 'market', 'plan', 'p8', 'p9', 'back'].filter(Boolean)
+  const num = (k: string) => order.indexOf(k) + 1
 
   return (
     <div className="bk">
@@ -140,7 +145,7 @@ export function BookletPages({ data, f }: { data: BookletInput; f: BookletFields
             ? <div><b>{data.google.rating.toFixed(1)}★</b><span>from {data.google.count}<br />Google reviews</span></div>
             : <div><b>3</b><span>places {rent ? 'tenants' : 'buyers'} look: Zoopla,<br />OnTheMarket and our website</span></div>}
         </div>
-        <Foot n={2} />
+        <Foot n={num('welcome')} />
       </section>
 
       {/* 3. Why Preston Hill */}
@@ -185,7 +190,7 @@ export function BookletPages({ data, f }: { data: BookletInput; f: BookletFields
           </div>
           <div className="bk-areas"><b>Where we work</b>{['Preston Road', 'Wembley Park', 'Wembley', 'Kenton', 'Northwick Park', 'Kingsbury', 'Harrow'].map((a) => <span key={a}>{a}</span>)}</div>
         </div>
-        <Foot n={3} />
+        <Foot n={num('about')} />
       </section>
 
       {/* 4. What buyers will love about where they live */}
@@ -226,7 +231,7 @@ export function BookletPages({ data, f }: { data: BookletInput; f: BookletFields
             ) : null}
             <p className="bk-src">These are the things we’ll lead with when we market your {rent ? 'property' : 'home'}. {data.area.walked ? 'Walking times along streets, from your front door' : 'Walking times are approximate, measured from your postcode'}{data.area.walked && data.area.approx ? ' (from your postcode)' : ''}. {data.area.tube.length ? 'Tube and train times door to door on a weekday morning (TfL Journey Planner, powered by TfL Open Data). ' : ''}{data.area.drives.length ? 'Driving times without traffic. ' : ''}Being near a school doesn’t guarantee a place. Places from OpenStreetMap{data.area.mapToken ? `; map${data.area.walked ? ' and walking routes' : ''} from Mapbox` : ''}.</p>
           </div>
-          <Foot n={4} />
+          <Foot n={num('love')} />
         </section>
       ) : null}
 
@@ -271,11 +276,13 @@ export function BookletPages({ data, f }: { data: BookletInput; f: BookletFields
           <div className="bk-story-quote">“Every home has a story. Our job is to tell yours to the right {rent ? 'tenant' : 'buyer'}.”<small>Preston Hill Estates</small></div>
           <p className="bk-src bk-story-src">Sales since 1995: HM Land Registry. {data.story.epcs.length ? 'Energy certificates: the EPC register. ' : ''}Street sales: the last three years.</p>
         </div>
-        <Foot n={5} />
+        <Foot n={num('story')} />
       </section>
 
-      {/* 6. Their home in today's market */}
-      <section className="bk-page">
+      {/* 6. With the guide: the official facts, then our valuation. Without it: their home in today's market. */}
+      {guide ? <DetailPage guide={guide} today={data.today} rent={rent} n={num('detail')} /> : null}
+      {guide ? <ValuationPage guide={guide} evidence={evidenceAll.slice(0, 6)} compsWhere={data.compsWhere} rent={rent} n={num('value')} /> : null}
+      {!guide ? <section className="bk-page">
         <div className="bk-in bk-tight">
           <div className="bk-kicker">{rent ? 'Your property in today’s market' : 'Your home in today’s market'}</div>
           <h2>{rent ? <>What similar homes<br /><em>are letting for.</em></> : <>What similar homes<br /><em>are selling for.</em></>}</h2>
@@ -314,7 +321,7 @@ export function BookletPages({ data, f }: { data: BookletInput; f: BookletFields
             <p>Size, condition, any extensions and the exact street all make a difference: that’s what today’s visit is for. We’ll confirm our figure by email, with the evidence.</p>
           </div>
         </div>
-      </section>
+      </section> : null}
 
       {/* 7. The plan */}
       <section className="bk-page">
@@ -344,7 +351,7 @@ export function BookletPages({ data, f }: { data: BookletInput; f: BookletFields
         <div className="bk-where">
           <div><b>Zoopla</b><span>Listed</span></div><div><b>OnTheMarket</b><span>Listed</span></div><div><b>Our website</b><span>prestonhillestates.com</span></div><div><b>Our window</b><span>271 Preston Road</span></div>
         </div>
-        <Foot n={7} />
+        <Foot n={num('plan')} />
       </section>
 
       {/* 8. Reviews */}
@@ -362,7 +369,7 @@ export function BookletPages({ data, f }: { data: BookletInput; f: BookletFields
           ) : null}
           <div className="bk-google"><div className="bk-stars">★</div><p>{data.google.rating && data.google.count ? <><b>Rated {data.google.rating.toFixed(1)} out of 5 from {data.google.count} reviews on Google.</b> </> : <b>Read every review on Google. </b>}Search “Preston Hill Estates Harrow”. We only ever show real reviews, word for word.</p></div>
         </div>
-        <Foot n={8} />
+        <Foot n={num('p8')} />
       </section>
 
       {/* 9. Peace of mind */}
@@ -402,7 +409,7 @@ export function BookletPages({ data, f }: { data: BookletInput; f: BookletFields
           <div><i>2</i><h3>Straight after</h3><p>{rent ? 'Our rent figure by email, with the homes we compared it with.' : 'Our valuation by email, with the homes we compared it with.'}</p></div>
           <div><i>3</i><h3>When you’re ready</h3><p>{rent ? 'Say the word and we’ll start finding your tenant.' : 'Say the word and we’ll book your photos.'}</p></div>
         </div>
-        <Foot n={9} />
+        <Foot n={num('p9')} />
       </section>
 
       {/* 10. Back cover */}

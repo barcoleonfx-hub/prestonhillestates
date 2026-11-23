@@ -1125,4 +1125,23 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       `CREATE INDEX page_views_at_idx ON page_views (at)`,
     ],
   },
+  {
+    id: '052_report_guides',
+    sql: [
+      // The OnTheMarket guide behind each property report, the guide price and when the report was finalised.
+      `CREATE TABLE report_guides (
+        booklet_id TEXT PRIMARY KEY,
+        file_name TEXT NOT NULL,
+        data TEXT NOT NULL,
+        asking INTEGER,
+        low INTEGER,
+        high INTEGER,
+        price_for TEXT,
+        uploaded_by TEXT,
+        uploaded_at TEXT NOT NULL,
+        finalised_by TEXT,
+        finalised_at TEXT
+      )`,
+    ],
+  },
 ]

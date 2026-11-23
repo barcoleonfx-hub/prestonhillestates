@@ -1269,3 +1269,8 @@ kbd { font: 600 0.68rem/1 var(--sans, inherit); padding: 3px 6px; border-radius:
 .ws-empty { color: var(--faint); font-size: 0.86rem; margin: 0; }
 @media (max-width: 1000px) { .ws-tiles { grid-template-columns: repeat(2, 1fr); } .ws-live { grid-column: 1 / -1; } .ws-grid, .ws-res { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 640px) { .ws-grid { grid-template-columns: 1fr; } .ws-axis { font-size: 0.62rem; } }
+
+/* The property report still needs its OnTheMarket guide and guide price before it can be sent. */
+.ew-report-todo { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 0 0 16px; padding: 12px 16px; border-radius: 12px; background: #fdf3e1; border: 1px solid #ecd6a6; color: #3a2c10; font-size: 14px; line-height: 1.45; }
+.ew-report-todo b { color: #7a5410; }
+.ew-report-todo .btn { margin-left: auto; }
