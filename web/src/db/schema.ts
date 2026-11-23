@@ -229,6 +229,25 @@ export const booklets = sqliteTable('booklets', {
   updatedAt: text('updated_at').notNull(),
 })
 
+/**
+ * The OnTheMarket Market Appraisal Guide uploaded for a report (lib/otm-guide), the facts read from it (with staff's
+ * corrections), the guide price staff set, and when the report was finalised: only a finalised report is sent.
+ */
+export const reportGuides = sqliteTable('report_guides', {
+  bookletId: text('booklet_id').primaryKey(),
+  fileName: text('file_name').notNull(),
+  data: text('data').notNull(),
+  asking: integer('asking'),
+  low: integer('low'),
+  high: integer('high'),
+  /** 'sales' or 'lettings': a price set for a sale isn't a rent. */
+  priceFor: text('price_for'),
+  uploadedBy: text('uploaded_by'),
+  uploadedAt: text('uploaded_at').notNull(),
+  finalisedBy: text('finalised_by'),
+  finalisedAt: text('finalised_at'),
+})
+
 export const enquiryNotes = sqliteTable(
   'enquiry_notes',
   {

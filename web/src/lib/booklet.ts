@@ -8,6 +8,7 @@ import { firstName } from './property-email'
 import type { Place } from './area-facts'
 import type { Epc, OurHome, Sale } from './home-history'
 import type { LatLon } from './geo'
+import type { OtmGuide } from './otm-guide'
 
 export type BookletKind = 'sales' | 'lettings'
 
@@ -93,6 +94,28 @@ export type BookletInput = {
   google: { rating: number | null; count: number | null }
   prepared: string
   base: string
+  /** Today (yyyy-mm-dd, London), e.g. to tell whether the energy certificate has run out. */
+  today: string
+  /**
+   * The OnTheMarket Market Appraisal Guide staff uploaded, the guide price they set and whether the report is
+   * finalised (only then is it sent by email or WhatsApp). With a guide, the report gains "Your home, in detail"
+   * and "Our valuation".
+   */
+  guide: BookletGuide | null
+}
+
+export type BookletGuide = {
+  fileName: string
+  uploadedAt: string
+  finalisedAt: string | null
+  data: OtmGuide
+  asking: number | null
+  low: number | null
+  high: number | null
+  /** Facts the guide didn't give (staff fill them in). */
+  gaps: string[]
+  /** The guide is for a different postcode from the report. */
+  mismatch: string | null
 }
 
 export const FIELDS: (keyof BookletFields)[] = ['kind', 'forName', 'home', 'visit', 'greeting', 'letter', 'figure', 'asking', 'fee', 'hide', 'story', 'showPaid']

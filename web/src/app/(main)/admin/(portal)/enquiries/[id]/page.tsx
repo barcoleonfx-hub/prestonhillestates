@@ -91,9 +91,16 @@ export default async function EnquiryPage({ params, searchParams }: { params: Pr
           {!dnc && e.phone ? <LogCallButton label="Call them" className="btn btn-dark" prefill={{ name: e.name, phone: e.phone ?? undefined, email: e.email ?? undefined, enquiryId: e.id, direction: 'out', propertyId: e.propertyId ?? undefined, callerType, ...(e.contactId ? { contactId: e.contactId } : {}) }} /> : null}
           {!dnc && wa.e164 ? <WhatsAppButton wa={wa} className="btn btn-wa" autoOpen={sp.wa === '1'} /> : null}
           {!dnc ? <Link className="btn btn-gold" href={`/admin/diary/new?enquiry=${e.id}${valuation ? '&kind=valuation' : ''}`}>{valuation ? 'Book valuation' : 'Book viewing'}</Link> : null}
-          {valuation ? <Link className="btn btn-ghost" href={`/admin/booklet/${e.id}`}>Valuation booklet</Link> : null}
+          {valuation ? <Link className="btn btn-ghost" href={`/admin/booklet/${e.id}`}>{w.reportReady ? '✓ Property report' : 'Property report'}</Link> : null}
         </div>
       </div>
+
+      {valuation && !w.reportReady ? (
+        <p className="ew-report-todo">
+          <b>Their property report isn’t finalised yet,</b> so it won’t go out by email or WhatsApp. Open the report, upload the OnTheMarket Market Appraisal Guide for the home and set the guide price.
+          <Link className="btn btn-gold btn-sm" href={`/admin/booklet/${e.id}`}>Finalise the report</Link>
+        </p>
+      ) : null}
 
       {valuation ? (
         <section className="card card-pad ew-check" id="check">

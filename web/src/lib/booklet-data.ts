@@ -23,6 +23,9 @@ import { drivingTimes, geocodeHome, mapboxStatus, mapboxToken, walkingRoute, wal
 import type { BookletArea, BookletStory } from './booklet'
 import { figureText, homeFrom } from './valuation-check'
 import { rentCheck } from './valuation-check-data'
+import { reportGuide } from './report-guide'
+import { guideGaps, lrTypeOf, TYPE_PLURAL, withoutOutliers } from './otm-guide'
+import type { LrType } from './sold-prices'
 
 const POSTCODE = /\b([A-Z]{1,2}\d[A-Z\d]?)\s*(\d[A-Z]{2})\b/i
 const month = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-GB', { month: 'short', year: 'numeric', timeZone: 'UTC' })
@@ -186,6 +189,7 @@ export async function bookletInput(id: string, me: { name: string }): Promise<Bo
     }
   }
   const saved = await savedBooklet(id)
+  const rg = await reportGuide(id).catch(() => null)
   const k: BookletKind = saved.kind ?? kind
   const rent = k === 'lettings'
   // The home staff typed on the booklet wins: if it has a postcode, the map, places, sales and story are for that
@@ -197,16 +201,29 @@ export async function bookletInput(id: string, me: { name: string }): Promise<Bo
     lookAddr = saved.home.replace(/\([^)]*\)/g, '').replace(POSTCODE, '').replace(/[\s,]+$/, '').trim() || null
   }
 
+  // With the OnTheMarket guide, its official facts decide what counts as a similar home (a terraced house is
+  // compared with terraced houses, never flats), and how many bedrooms.
+  const g = rg?.guide ?? null
+  const compType: LrType | null = (g && lrTypeOf(g.type)) || home.type
+  const compBeds = g?.beds ?? home.beds
+  if (g) {
+    if (g.beds != null) home.beds = g.beds
+    if (g.type) home.typeLabel = home.typeLabel ?? g.type.replace(/^Flat-Maisonette House$/i, 'Flat or maisonette')
+  }
+
   // The evidence: what similar homes sold (or let) for nearby, and what's on OnTheMarket now.
-  const [near, rents, otm, base, google, revs] = await Promise.all([
-    !rent && lookPc ? salesNear(lookPc, { type: home.type, beds: home.beds, limit: 10 }).catch(() => null) : Promise.resolve(null),
+  const [nearAll, rents, otm, base, google, revs] = await Promise.all([
+    !rent && lookPc ? salesNear(lookPc, { type: compType, beds: compBeds, limit: g ? 16 : 10 }).catch(() => null) : Promise.resolve(null),
     rent && lookPc ? rentCheck(lookPc, home.beds).catch(() => null) : Promise.resolve(null),
     lookPc ? otmAskingPrices(lookPc, { rent, beds: home.beds }).catch(() => null) : Promise.resolve(null),
     knownBase(),
     googleSummary().catch(() => ({ rating: null, count: null, url: null })),
     reviewsFor(rent ? 'lettings' : 'sales', 20).catch(() => []),
   ])
+  // Like for like: no new builds (they sell at a premium) and nothing far from the rest.
+  const near = nearAll && g ? { ...nearAll, recent: withoutOutliers(nearAll.recent.filter((x) => !x.newBuild)).slice(0, 10) } : nearAll
   const { area, story } = await areaAndStory(lookPc, lookAddr, rent, home)
+  if (g) story.facts = guideFacts(story.facts, g, rent)
   const comps: BookletComp[] = [...savedComps]
   for (const s of near?.recent ?? []) {
     comps.push({ key: `lr:${s.street}|${s.postcode}|${s.soldOn}|${s.price}`, group: 'evidence', where: [s.street, s.postcode].filter(Boolean).join(', '), what: `${s.typeLabel} · sold ${month(s.soldOn)}`, price: s.price, rent: false, source: 'HM Land Registry', metres: s.metres ?? null })
@@ -244,7 +261,9 @@ export async function bookletInput(id: string, me: { name: string }): Promise<Bo
     story: '',
     showPaid: true,
   }
-  const where = rent ? (rents ? `homes we’ve let near ${lookPc}` : null) : near ? `${near.where}${near.typed && home.typeLabel ? `, ${home.typeLabel.toLowerCase()}` : ''}` : null
+  const where = rent ? (rents ? `homes we’ve let near ${lookPc}` : null) : near ? (g && compType && near.typed ? `${TYPE_PLURAL[compType]} ${near.where}` : `${near.where}${near.typed && home.typeLabel ? `, ${home.typeLabel.toLowerCase()}` : ''}`) : null
+  const guidePc = g?.postcode?.replace(/\s/g, '') ?? null
+  const mismatch = g && guidePc && lookPc && guidePc !== lookPc.replace(/\s/g, '') ? `This guide is for ${g.address ?? g.postcode}, but the report is for ${lookPc}. Check you uploaded the right one.` : null
   return {
     id, enquiryId, defaults, saved, comps, compsWhere: where,
     estimate: rents ? { low: rents.low, high: rents.high, rent: true, basis: `${home.beds != null ? `${home.beds}-bed homes, ` : ''}from ${rents.basis}` } : null,
@@ -253,5 +272,28 @@ export async function bookletInput(id: string, me: { name: string }): Promise<Bo
     reviews: pickReviews(revs), google: { rating: google.rating, count: google.count },
     prepared: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/London' }),
     base,
+    today: new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/London' }),
+    guide: rg ? guideFor(rg, k, mismatch) : null,
   }
+}
+
+/** The guide for the report as it is now: a price set for a sale isn't a rent (or the other way round), so after
+ * switching between selling and letting the price is cleared and the report needs finalising again. */
+function guideFor(rg: NonNullable<Awaited<ReturnType<typeof reportGuide>>>, k: BookletKind, mismatch: string | null): BookletInput['guide'] {
+  const same = !rg.priceFor || rg.priceFor === k
+  const asking = same ? rg.asking : null, low = same ? rg.low : null, high = same ? rg.high : null
+  return { fileName: rg.fileName, uploadedAt: rg.uploadedAt, finalisedAt: rg.finalisedAt && asking ? rg.finalisedAt : null, data: rg.guide, asking, low, high, gaps: guideGaps(rg.guide), mismatch }
+}
+
+/** The key facts on "What buyers will love", from the guide where it has them (it's the official record). */
+function guideFacts(facts: { label: string; value: string }[], g: NonNullable<BookletInput['guide']>['data'], rent: boolean): { label: string; value: string }[] {
+  const out = new Map(facts.map((f) => [f.label, f.value]))
+  if (g.type) out.set('Type', g.type.replace(/^Flat-Maisonette House$/i, 'Flat or maisonette'))
+  if (g.beds != null) out.set('Bedrooms', String(g.beds))
+  if (g.tenure) out.set('Tenure', g.tenure)
+  if (g.sqft) out.set('Floor area', `${g.sqft.toLocaleString('en-GB')} sq ft`)
+  if (g.epc?.current) out.set('Energy rating', `${g.epc.current.band}${g.epc.potential && g.epc.potential.band !== g.epc.current.band ? `, could be ${g.epc.potential.band}` : ''}`)
+  if (g.councilBand && !rent) out.set('Council tax', `Band ${g.councilBand}`)
+  if (g.authority && !out.get('Council')) out.set('Council', g.authority)
+  return [...out].map(([label, value]) => ({ label, value })).filter((f) => f.value).slice(0, 6)
 }

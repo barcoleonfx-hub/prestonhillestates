@@ -5,7 +5,7 @@ import { BookletEditor } from './BookletEditor'
 import './booklet.css'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Valuation booklet' }
+export const metadata = { title: 'Property report' }
 
 /**
  * The valuation booklet for an enquiry (or, with "a-" and an appointment's id, a valuation booked straight into the
@@ -19,5 +19,5 @@ export default async function BookletPage({ params }: { params: Promise<{ id: st
   const back = data.enquiryId
     ? { href: `/admin/enquiries/${data.enquiryId}`, label: 'Back to the enquiry' }
     : { href: `/admin/diary/${id.replace(/^a-/, '')}`, label: 'Back to the appointment' }
-  return <BookletEditor key={`${data.id}|${data.defaults.kind}|${data.saved.kind ?? ''}`} data={data} back={back} />
+  return <BookletEditor key={`${data.id}|${data.defaults.kind}|${data.saved.kind ?? ''}|${data.guide?.uploadedAt ?? ''}`} data={data} back={back} />
 }

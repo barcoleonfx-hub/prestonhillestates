@@ -22,12 +22,12 @@
 .bk-comp small { display: block; color: #98937f; font-size: 11.5px; }
 .bk-stage { padding: 24px 0 60px; overflow-x: auto; }
 
-@media (max-width: 1100px) {
+@media screen and (max-width: 1100px) {
   .bk-shell { grid-template-columns: 1fr; }
   .bk-tools { position: static; height: auto; border-right: 0; }
   .bk-stage .bk-page { zoom: 0.55; }
 }
-@media (min-width: 1101px) and (max-width: 1500px) { .bk-stage .bk-page { zoom: 0.8; } }
+@media screen and (min-width: 1101px) and (max-width: 1500px) { .bk-stage .bk-page { zoom: 0.8; } }
 
 @media print {
   html, body { background: #fff !important; }
@@ -292,9 +292,10 @@
 .bk-report-bar .call { color: #e9d7a6; text-decoration: none; font-size: 14px; }
 .bk-report-bar button { background: #c4972f; color: #fff; border: 0; border-radius: 999px; padding: 10px 18px; font-weight: 700; font-size: 14px; cursor: pointer; }
 .bk-report-tip { text-align: center; color: #dcd7c8; font: 12px 'Helvetica Neue', Arial, sans-serif; margin: 10px 16px 0; }
-@media (max-width: 760px) { .bk-report .bk-stage .bk-page { zoom: 0.46; } .bk-report-bar { flex-wrap: wrap; } }
-@media (min-width: 761px) and (max-width: 1100px) { .bk-report .bk-stage .bk-page { zoom: 0.8; } }
-@media print { .bk-report { background: none; } .bk-report-bar, .bk-report-tip { display: none !important; } }
+@media screen and (max-width: 760px) { .bk-report .bk-stage .bk-page { zoom: 0.46; } .bk-report-bar { flex-wrap: wrap; } }
+@media screen and (min-width: 761px) and (max-width: 1100px) { .bk-report .bk-stage .bk-page { zoom: 0.8; } }
+/* Printed (or saved as a PDF) always at full A4 size, whatever the screen size. */
+@media print { .bk-report { background: none; } .bk-report-bar, .bk-report-tip { display: none !important; } .bk-report .bk-stage .bk-page, .bk-stage .bk-page { zoom: 1 !important; } }
 
 .bk-share { margin-top: 12px; padding: 10px 12px; border: 1px solid #e7e3d6; border-radius: 10px; display: grid; gap: 3px; font-size: 12.5px; }
 .bk-share b { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: #a47b1d; }
@@ -308,3 +309,110 @@
 .bk-back-logo { width: 13mm; height: 13mm; flex: none; }
 .bk-report-bar .brand { display: flex; align-items: center; gap: 10px; }
 .bk-report-logo { width: 34px; height: 34px; flex: none; }
+
+/* ---------- "Your home, in detail" and "Our valuation" (from the OnTheMarket guide) ---------- */
+.bk .g h2 { font-size: 28pt; margin-top: 4mm; }
+.bk .g-lede { font-size: 10pt; line-height: 1.5; margin-top: 3.5mm; max-width: 150mm; }
+.g-stats { display: grid; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin-top: 6mm; }
+.g-stats div { padding: 4mm 2mm; text-align: center; border-right: 1px solid var(--line); }
+.g-stats div:last-child { border-right: 0; }
+.g-stats b { display: block; font-family: var(--serif); font-weight: 400; font-size: 21pt; line-height: 1.1; }
+.g-stats span { display: block; font-size: 7.5pt; color: var(--faint); margin-top: 1mm; letter-spacing: .04em; }
+.g-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 7mm; margin-top: 6mm; }
+.bk .g-h { font-size: 8pt; letter-spacing: .18em; text-transform: uppercase; color: var(--gold); font-weight: 700; margin-bottom: 2.5mm; }
+.g-kv { width: 100%; border-collapse: collapse; font-size: 9pt; }
+.g-kv td { padding: 1.9mm 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+.g-kv td:first-child { color: var(--faint); width: 44%; }
+.g-kv td:last-child { font-weight: 600; }
+.g-kv small { display: block; font-weight: 400; color: var(--faint); font-size: 7.5pt; }
+.g-kv .ok { color: #2f6b4e; } .g-kv .no { color: #a8442e; }
+.g-epc { margin-top: 1mm; }
+.g-row { display: flex; align-items: center; gap: 2mm; margin: 1.1mm 0; font-size: 7.5pt; }
+.g-bar { height: 5mm; display: flex; align-items: center; padding-left: 2mm; font-weight: 800; font-size: 8pt; border-radius: 0 2.5mm 2.5mm 0; }
+.g-tag { font-weight: 700; font-size: 8pt; padding: .6mm 2mm; border-radius: 1mm; background: var(--cream); border: 1px solid var(--line); }
+.g-tag.now { background: var(--ink); color: #fff; border-color: var(--ink); }
+.bk .g-alert { margin-top: 3mm; background: #fbe3d8; border-radius: 2.5mm; padding: 2.8mm 3.5mm; font-size: 8.5pt; line-height: 1.45; color: #2b1a12; }
+.g-alert b { color: #a8442e; }
+.bk .g-note { margin-top: 3mm; font-size: 8.5pt; line-height: 1.45; }
+.g-means { margin-top: 6mm; background: var(--cream); border-radius: 3mm; padding: 5mm 6mm; }
+.bk .g-means h3 { font-family: var(--serif); font-weight: 400; font-size: 15pt; margin-bottom: 3mm; }
+.g-means h3 em { color: var(--gold); }
+.g-means ol { list-style: none; display: grid; grid-template-columns: 1fr 1fr; gap: 3.5mm 7mm; }
+.g-means li { font-size: 8.8pt; line-height: 1.45; color: var(--body); padding-left: 7mm; position: relative; }
+.g-means li b { color: var(--ink); }
+.g-means li::before { content: attr(data-n); position: absolute; left: 0; top: 0; width: 5mm; height: 5mm; border-radius: 50%; background: var(--ink); color: var(--gold2); font-size: 7pt; font-weight: 700; display: grid; place-items: center; }
+.bk .g-src { margin-top: 4mm; font-size: 7pt; color: var(--faint); line-height: 1.5; }
+.g-hero { margin-top: 6mm; background: var(--ink); color: #fff; border-radius: 4mm; padding: 7mm 8mm; display: grid; grid-template-columns: 1.1fr 1fr; gap: 6mm; align-items: center; }
+.g-k { font-size: 7.5pt; letter-spacing: .2em; text-transform: uppercase; color: var(--gold2); font-weight: 700; }
+.g-price { font-family: var(--serif); font-weight: 300; font-size: 40pt; line-height: 1; margin-top: 2mm; }
+.g-range { margin-top: 2.5mm; font-size: 9.5pt; color: #d9d4c3; }
+.g-range b { color: #fff; }
+.g-final { display: inline-block; margin-top: 3mm; font-size: 7.5pt; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--ink); background: var(--gold2); border-radius: 10mm; padding: 1.2mm 3mm; }
+.bk .g-hero p { font-size: 8.6pt; line-height: 1.5; color: #b9b4a0; }
+.g-hero p b { color: #fff; font-weight: 600; }
+.g-plot { margin-top: 7mm; }
+.g-axis { position: relative; height: 16mm; margin: 0 3mm; }
+.g-line { position: absolute; left: 0; right: 0; top: 8mm; height: 1px; background: var(--line); }
+.g-band { position: absolute; top: 6mm; height: 4mm; background: rgba(196,151,47,.22); border-radius: 2mm; }
+.g-dot { position: absolute; top: 6.4mm; width: 3.2mm; height: 3.2mm; margin-left: -1.6mm; border-radius: 50%; background: var(--ink); border: .5mm solid #fff; }
+.g-you { position: absolute; top: 0; margin-left: -.5px; width: 1px; height: 10mm; background: var(--gold); }
+.g-you span { position: absolute; bottom: 10.5mm; left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 7.5pt; font-weight: 700; color: var(--gold); }
+.g-ticks { position: relative; height: 4mm; margin: 0 3mm; font-size: 7pt; color: var(--faint); }
+.g-ticks span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+.g-comps { width: 100%; border-collapse: collapse; margin-top: 4mm; font-size: 8.8pt; }
+.g-comps th { font-size: 7pt; letter-spacing: .14em; text-transform: uppercase; color: var(--faint); font-weight: 700; text-align: left; padding: 1.5mm 0; border-bottom: 1px solid var(--line); }
+.g-comps td { padding: 2.1mm 0; border-bottom: 1px solid var(--line); }
+.g-comps .p { text-align: right; }
+.g-comps td.p { font-family: var(--serif); font-size: 11pt; }
+.g-comps small { color: var(--faint); }
+.g-n { display: inline-grid; place-items: center; width: 4.6mm; height: 4.6mm; border-radius: 50%; background: var(--ink); color: var(--gold2); font-size: 6.5pt; font-weight: 700; margin-right: 2mm; }
+.bk .g-empty { margin-top: 4mm; font-size: 9pt; }
+.g-trio { display: grid; grid-template-columns: repeat(auto-fit, minmax(60mm, 1fr)); gap: 6mm; margin-top: 6mm; }
+.g-card { border: 1px solid var(--line); border-radius: 3mm; padding: 4.5mm 5mm; }
+.bk .g-card p { font-size: 8.8pt; line-height: 1.5; }
+.g-card p b { color: var(--ink); }
+.g-grow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2mm; margin-top: 2.5mm; }
+.g-grow div { background: var(--cream); border-radius: 2mm; padding: 2.2mm 2mm; text-align: center; }
+.g-grow div.on { background: var(--ink); color: #fff; }
+.g-grow b { display: block; font-family: var(--serif); font-size: 13pt; font-weight: 400; }
+.g-grow span { font-size: 6.8pt; letter-spacing: .06em; color: var(--faint); }
+.g-grow div.on span { color: var(--gold2); }
+.g-how { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4mm; margin-top: 6mm; }
+.g-how div { border-top: 2px solid var(--gold2); padding-top: 2.5mm; }
+.g-how b { display: block; font-size: 9pt; margin-bottom: 1mm; }
+.bk .g-how p { font-size: 8.2pt; line-height: 1.45; }
+.bk .g-fine { margin-top: 5mm; font-size: 7pt; line-height: 1.5; color: var(--faint); }
+
+/* The OnTheMarket guide and finalising, in the editor. */
+.bk-guide { margin: 14px 0 6px; padding: 14px; border-radius: 12px; border: 2px solid #c4972f; background: #fffaf0; }
+.bk-guide.done { border-color: #2f6b4e; background: #f1f8f3; }
+.bk-guide > h2:first-of-type { margin-top: 4px; }
+.bk-guide .bk-gstate { display: block; width: auto; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #a47b1d; }
+.bk-guide.done .bk-gstate { color: #2f6b4e; }
+.bk-guide dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: 12.5px; margin: 8px 0; }
+.bk-guide dt { color: #98937f; }
+.bk-guide dd { margin: 0; font-weight: 600; }
+.bk-guide .bk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+.bk-guide .bk-grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0 8px; }
+.bk-guide .bk-warn, .bk-warn { color: #a8442e; }
+.bk-guide .bk-err { color: #a8442e; font-size: 13px; margin: 8px 0 0; }
+.bk-file { display: block; margin-top: 8px; font-size: 13px; }
+/* "Our valuation" holds a lot: keep it inside the page. */
+.bk .g-tight h2 { margin-top: 3mm; }
+.g-tight .g-hero { margin-top: 5mm; padding: 6mm 7mm; }
+.g-tight .g-plot { margin-top: 6mm; }
+.g-tight .g-comps { margin-top: 2mm; }
+.g-tight .g-comps td { padding: 1.7mm 0; }
+.g-tight .g-trio { margin-top: 5mm; gap: 5mm; }
+.g-tight .g-card { padding: 4mm 4.5mm; }
+.g-tight .g-how { margin-top: 5mm; }
+.bk .g-tight .g-fine { margin-top: 3.5mm; }
+.g-grow { gap: 1.5mm; }
+.g-grow div { padding: 2mm 1mm; min-width: 0; }
+.g-grow b { font-size: 11pt; }
+.bk .g-tight h2 { font-size: 26pt; }
+.g-tight .g-price { font-size: 36pt; }
+.g-tight .g-comps td { padding: 1.5mm 0; }
+.g-tight .g-axis { height: 14mm; }
+.g-tight .g-axis .g-line { top: 7mm; } .g-tight .g-band { top: 5mm; } .g-tight .g-dot { top: 5.4mm; } .g-tight .g-you { height: 9mm; } .g-tight .g-you span { bottom: 9.5mm; }
+.g-tight .g-plot { margin-top: 5mm; }
