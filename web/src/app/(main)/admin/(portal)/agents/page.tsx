@@ -6,7 +6,10 @@ import { agentSettings, monthSpend } from '@/lib/ai-usage'
 import { lastReport } from '@/lib/director'
 import SendReportButton from './SendReportButton'
 import HeldCard from './HeldCard'
-import { moveToPlan, saveBudget, saveDirector, startRecentPlans } from './actions'
+import { moveToPlan, saveBriefings, saveBudget, saveDirector, startRecentPlans } from './actions'
+import SendBriefingButton from './SendBriefingButton'
+import SendAllBriefings from './SendAllBriefings'
+import { briefingPeople, lastBriefings } from '@/lib/staff-briefing'
 import { agentStatus } from '@/lib/agent-status'
 import { followupBoard } from '@/lib/followups'
 
@@ -22,6 +25,7 @@ const gbp = (n: number) => `£${n.toFixed(2)}`
 export default async function AgentsPage() {
   await requireAdmin()
   const [guides, letters, actions, held, spend, cfg, last, board, status] = await Promise.all([guidesToUpload(), todaysLetters(), recentActions(40), heldItems(), monthSpend(), agentSettings(), lastReport(), followupBoard(), agentStatus()])
+  const [people, briefed] = await Promise.all([briefingPeople(), lastBriefings()])
   const allOk = status.checks.every((c) => c.ok)
   const to = cfg.directorTo || 'info@prestonhillestates.com'
   const missing = guides.filter((g) => g.report.state === 'none')
@@ -107,6 +111,37 @@ export default async function AgentsPage() {
         <div className="ag-dir">
           <form action={saveDirector}><label htmlFor="ag-to">Send to</label><input id="ag-to" name="to" type="email" defaultValue={to} /><label><input type="checkbox" name="on" defaultChecked={!cfg.directorOff} /> Send every morning</label><button className="btn btn-ghost btn-sm">Save</button></form>
         </div>
+      </section>
+
+      <section className="card fu-list ag-sec" id="briefings">
+        <div className="fu-head"><h2>Daily staff briefings at 10am</h2><p>One email each: what they sent and did yesterday, the emails for them, everything that came into the office mailbox, and what’s outstanding for them, most urgent first. An email is theirs if it’s to them, names them, or (sent from Apple Mail) is signed with their name. Claude writes the summaries; any point that doesn’t match the emails and records is removed.{cfg.briefingsOff ? ' Switched off.' : ''}</p></div>
+        {people.map((p) => {
+          const last = briefed.get(p.name)
+          return (
+            <div key={p.name} className="fu-row ag-row">
+              <span className="fu-main"><b>{p.name}{p.off ? ' (off)' : ''}</b><small>Emails naming {p.aliases.join(' or ')} · sent to {p.to}{last ? ` · last ${last.ok ? 'sent' : 'failed'} ${ago(last.at)}` : ' · not sent yet'}</small></span>
+              <span />
+              <span className="fu-acts"><Link className="btn btn-ghost btn-sm" href={`/admin/agents/briefing?who=${encodeURIComponent(p.name)}`}>Preview</Link><SendBriefingButton name={p.name} to={p.to} /></span>
+            </div>
+          )
+        })}
+        <div className="ag-dir"><span className="fu-main"><small>Each goes to its own address. Sending now doesn’t stop tomorrow’s at 10am.</small></span><SendAllBriefings count={people.filter((p) => !p.off).length} /></div>
+        <details className="ag-edit-people">
+          <summary>Change who gets one</summary>
+          <form action={saveBriefings} className="ag-people">
+            <div className="ag-people-h"><span>Name</span><span>Emails that name (commas between)</span><span>Send to</span><span>On</span></div>
+            {[...people, { name: '', aliases: [], to: '', off: false }, { name: '', aliases: [], to: '', off: false }].slice(0, 6).map((p, i) => (
+              <div key={i} className="ag-people-r">
+                <input name={`name_${i}`} defaultValue={p.name} placeholder="Name" aria-label="Name" />
+                <input name={`aliases_${i}`} defaultValue={p.aliases.join(', ')} placeholder="e.g. Fred, Ferdous" aria-label="Names that count as theirs" />
+                <input name={`to_${i}`} type="email" defaultValue={p.to} placeholder="name@prestonhillestates.com" aria-label="Send to" />
+                <input name={`on_${i}`} type="checkbox" defaultChecked={!p.off} aria-label="Send it" />
+              </div>
+            ))}
+            <label className="ag-note-in"><input type="checkbox" name="all" defaultChecked={!cfg.briefingsOff} /> Send the briefings every morning at 10am</label>
+            <button className="btn btn-ghost btn-sm">Save</button>
+          </form>
+        </details>
       </section>
 
       <section className="card fu-list ag-sec" id="budget">

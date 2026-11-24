@@ -1314,3 +1314,10 @@ kbd { font: 600 0.68rem/1 var(--sans, inherit); padding: 3px 6px; border-radius:
 .fu-brief { margin-top: 4px; font-size: 0.8rem; }
 .fu-brief summary { cursor: pointer; color: var(--ink-soft, #6B6656); font-weight: 600; }
 .fu-brief ul { margin: 6px 0 2px; padding-left: 18px; display: grid; gap: 3px; color: var(--ink, #222); }
+.ag-edit-people { padding: 10px 20px 16px; }
+.ag-edit-people summary { cursor: pointer; font-size: 0.86rem; color: var(--ink-soft, #6B6656); }
+.ag-people { display: grid; gap: 6px; margin-top: 10px; }
+.ag-people-h, .ag-people-r { display: grid; grid-template-columns: 1fr 2fr 2fr 40px; gap: 8px; align-items: center; }
+.ag-people-h { font-size: 0.75rem; color: var(--faint); }
+.ag-people-r input:not([type=checkbox]) { font: inherit; font-size: 0.86rem; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; min-width: 0; }
+@media (max-width: 760px) { .ag-people-h { display: none; } .ag-people-r { grid-template-columns: 1fr 1fr; } }
