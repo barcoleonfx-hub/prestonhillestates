@@ -804,3 +804,11 @@ export const postalLetters = sqliteTable('postal_letters', {
   createdAt: text('created_at').notNull(),
   postedAt: text('posted_at'),
 })
+
+/** Whether a conversation from an unknown sender is real, a sales pitch or spam (decided once, by Claude). */
+export const mailTriage = sqliteTable('mail_triage', {
+  threadId: text('thread_id').primaryKey(),
+  verdict: text('verdict').notNull(), // real | pitch | spam
+  reason: text('reason'),
+  at: text('at').notNull(),
+})
