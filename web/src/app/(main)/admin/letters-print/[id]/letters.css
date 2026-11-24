@@ -56,4 +56,7 @@
   .pl-page { background: #fff; padding: 0; }
   .pl-bar { display: none; }
   .pl-letter { margin: 0; box-shadow: none; page-break-after: always; break-after: page; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .pl-letter:last-of-type { page-break-after: auto; break-after: auto; }
 }
+.pl-body .pl-facts .pl-guide { background: #23211A; color: #FBF8EE; border-radius: 2mm; padding: 2mm 3mm; margin-bottom: 2.5mm; }
+.pl-facts .pl-guide b { color: #E9C46A; font-size: 1.15em; }

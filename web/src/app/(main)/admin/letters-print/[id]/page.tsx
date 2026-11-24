@@ -47,7 +47,7 @@ export default async function LettersPrintPage({ params, searchParams }: { param
             {l.before.map((p, i) => <p key={`b${i}`}>{p}</p>)}
             {(() => {
               const f = l.facts
-              const has = f.sales.length || f.typical || f.wanting
+              const has = f.sales.length || f.typical || f.wanting || f.guide
               const qr = (
                 <div className="pl-qr">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -60,8 +60,9 @@ export default async function LettersPrintPage({ params, searchParams }: { param
                 <div className="pl-band">
                   <div className="pl-facts">
                     <b className="pl-facts-h">{f.salesWhere === 'street' && f.street ? `On ${f.street}` : f.street ? `Around ${f.street}` : 'Near you'}</b>
+                    {f.guide ? <p className="pl-guide">Our guide {f.guide.rent ? 'rent' : 'price'} for your home: <b>£{f.guide.asking.toLocaleString('en-GB')}{f.guide.rent ? ' pcm' : ''}</b>{f.guide.low && f.guide.high ? <> (expected £{f.guide.low.toLocaleString('en-GB')} to £{f.guide.high.toLocaleString('en-GB')})</> : null}. We confirm the final figure when we visit.</p> : null}
                     {f.sales.length ? <ul>{f.sales.map((x, i) => <li key={i}><span>{x.where}<small>{x.when}</small></span><b>£{x.price.toLocaleString('en-GB')}</b></li>)}</ul> : null}
-                    {f.typical ? <p>Typical price in {f.typical.where} over the last 12 months: <b>£{f.typical.price.toLocaleString('en-GB')}</b> ({f.typical.count} sales)</p> : null}
+                    {f.typical ? <p>Typical price of {f.typical.kind} {f.typical.where}, over the last 12 months: <b>£{f.typical.price.toLocaleString('en-GB')}</b> ({f.typical.count} sales)</p> : null}
                     {f.wanting ? <p className="pl-want"><b>{f.wanting.count} {f.wanting.who}</b> have registered with us in the last year looking in {f.area ?? 'your area'}.</p> : null}
                   </div>
                   {qr}
