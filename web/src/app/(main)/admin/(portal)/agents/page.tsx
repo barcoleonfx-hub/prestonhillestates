@@ -114,12 +114,12 @@ export default async function AgentsPage() {
       </section>
 
       <section className="card fu-list ag-sec" id="briefings">
-        <div className="fu-head"><h2>Daily staff briefings at 10am</h2><p>One email each: what they sent and did yesterday, the emails for them, everything that came into the office mailbox, and what’s outstanding for them, most urgent first. An email is theirs if it’s to them, names them, or (sent from Apple Mail) is signed with their name. Claude writes the summaries; any point that doesn’t match the emails and records is removed.{cfg.briefingsOff ? ' Switched off.' : ''}</p></div>
+        <div className="fu-head"><h2>Daily staff briefings at 10am</h2><p>A short summary each: the most urgent things, what got done yesterday, what’s still waiting and what mattered in the inbox (routine and automated emails left out). The Director gets a snapshot of the whole team and the high-value items. An email is someone’s if it’s to them, names them, or (sent from Apple Mail) is signed with their name. Claude writes the summaries; any point that doesn’t match the emails and records is removed.{cfg.briefingsOff ? ' Switched off.' : ''}</p></div>
         {people.map((p) => {
           const last = briefed.get(p.name)
           return (
             <div key={p.name} className="fu-row ag-row">
-              <span className="fu-main"><b>{p.name}{p.off ? ' (off)' : ''}</b><small>Emails naming {p.aliases.join(' or ')} · sent to {p.to}{last ? ` · last ${last.ok ? 'sent' : 'failed'} ${ago(last.at)}` : ' · not sent yet'}</small></span>
+              <span className="fu-main"><b>{p.name}{p.director ? ' · Director’s snapshot' : ''}{p.off ? ' (off)' : ''}</b><small>{p.director ? 'What each person did, what’s outstanding, the most urgent and the high-value items, plus his own' : `Emails naming ${p.aliases.join(' or ')}`} · sent to {p.to}{last ? ` · last ${last.ok ? 'sent' : 'failed'} ${ago(last.at)}` : ' · not sent yet'}</small></span>
               <span />
               <span className="fu-acts"><Link className="btn btn-ghost btn-sm" href={`/admin/agents/briefing?who=${encodeURIComponent(p.name)}`}>Preview</Link><SendBriefingButton name={p.name} to={p.to} /></span>
             </div>
@@ -129,12 +129,13 @@ export default async function AgentsPage() {
         <details className="ag-edit-people">
           <summary>Change who gets one</summary>
           <form action={saveBriefings} className="ag-people">
-            <div className="ag-people-h"><span>Name</span><span>Emails that name (commas between)</span><span>Send to</span><span>On</span></div>
+            <div className="ag-people-h"><span>Name</span><span>Emails that name (commas between)</span><span>Send to</span><span>Director</span><span>On</span></div>
             {[...people, { name: '', aliases: [], to: '', off: false }, { name: '', aliases: [], to: '', off: false }].slice(0, 6).map((p, i) => (
               <div key={i} className="ag-people-r">
                 <input name={`name_${i}`} defaultValue={p.name} placeholder="Name" aria-label="Name" />
                 <input name={`aliases_${i}`} defaultValue={p.aliases.join(', ')} placeholder="e.g. Fred, Ferdous" aria-label="Names that count as theirs" />
                 <input name={`to_${i}`} type="email" defaultValue={p.to} placeholder="name@prestonhillestates.com" aria-label="Send to" />
+                <input name={`dir_${i}`} type="checkbox" defaultChecked={!!('director' in p && p.director)} aria-label="Director’s snapshot of the team" />
                 <input name={`on_${i}`} type="checkbox" defaultChecked={!p.off} aria-label="Send it" />
               </div>
             ))}

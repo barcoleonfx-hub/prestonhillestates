@@ -21,6 +21,7 @@ const facts = (over: Partial<DirectorFacts> = {}): DirectorFacts => ({
 describe('the Director checks its own numbers', () => {
   it('reads numbers but not postcodes', () => {
     expect(numbersIn('3 leads, £1,250 and 7.1, near HA3 0PS, 24 hours')).toEqual([3, 1250, 7.1, 24])
+    expect(numbersIn('a £1.25m home, £585k guide and 2.5 million')).toEqual([1250000, 585000, 2500000])
   })
   it('accepts a view that only uses today’s figures', () => {
     expect(viewProblem({ headline: '3 new valuation leads, 2 booked.', view: 'Grace has waited 4 hours. 6 emails went, 1 was blocked.', next: ['Call Grace Agent now'] }, facts())).toBeNull()
