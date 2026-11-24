@@ -27,21 +27,14 @@ export async function qrTarget(code: string): Promise<string | null> {
   return typeof l.target === 'string' ? l.target : l.target()
 }
 
-const REVIEW_SEARCH = 'https://www.google.com/search?q=Preston+Hill+Estates+Harrow+reviews'
-/**
- * Google's "write a review" link for the branch (Google Business Profile, "Ask for reviews", e.g.
- * https://g.page/r/…/review), as staff set it on the review poster; else the reviews link from Settings; else a
- * Google search for our reviews.
- */
+/** Our Google "write a review" link (Google Business Profile, "Ask for reviews"). */
+export const GOOGLE_REVIEW_LINK = 'https://g.page/r/CdtU9pacgT8JEAE/review'
+/** Google's "write a review" link for the branch: as staff changed it on the review poster, else ours above. */
 export async function reviewLink(): Promise<{ url: string; set: boolean; from: 'poster' | 'settings' | 'search' }> {
   await ready()
-  const [own, g] = await Promise.all([
-    db.query.settings.findFirst({ where: eq(settings.key, 'google_review_link') }),
-    db.query.settings.findFirst({ where: eq(settings.key, 'google_reviews') }),
-  ])
+  const own = await db.query.settings.findFirst({ where: eq(settings.key, 'google_review_link') })
   if (own?.value && /^https:\/\//.test(own.value)) return { url: own.value, set: true, from: 'poster' }
-  try { const v = JSON.parse(g?.value ?? '{}'); if (typeof v.url === 'string' && /^https:\/\//.test(v.url)) return { url: v.url, set: false, from: 'settings' } } catch { /* not set */ }
-  return { url: REVIEW_SEARCH, set: false, from: 'search' }
+  return { url: GOOGLE_REVIEW_LINK, set: true, from: 'poster' }
 }
 
 /** Link previews and crawlers aren't people scanning a poster. */
