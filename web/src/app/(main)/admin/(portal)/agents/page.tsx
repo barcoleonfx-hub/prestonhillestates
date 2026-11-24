@@ -6,7 +6,8 @@ import { agentSettings, monthSpend } from '@/lib/ai-usage'
 import { lastReport } from '@/lib/director'
 import SendReportButton from './SendReportButton'
 import HeldCard from './HeldCard'
-import { saveBudget, saveDirector } from './actions'
+import { moveToPlan, saveBudget, saveDirector, startRecentPlans } from './actions'
+import { agentStatus } from '@/lib/agent-status'
 import { followupBoard } from '@/lib/followups'
 
 export const dynamic = 'force-dynamic'
@@ -20,7 +21,8 @@ const gbp = (n: number) => `£${n.toFixed(2)}`
 /** The agents' desk: what's waiting on staff (OnTheMarket guides, today's letters) and everything the agents did. */
 export default async function AgentsPage() {
   await requireAdmin()
-  const [guides, letters, actions, held, spend, cfg, last, board] = await Promise.all([guidesToUpload(), todaysLetters(), recentActions(40), heldItems(), monthSpend(), agentSettings(), lastReport(), followupBoard()])
+  const [guides, letters, actions, held, spend, cfg, last, board, status] = await Promise.all([guidesToUpload(), todaysLetters(), recentActions(40), heldItems(), monthSpend(), agentSettings(), lastReport(), followupBoard(), agentStatus()])
+  const allOk = status.checks.every((c) => c.ok)
   const to = cfg.directorTo || 'info@prestonhillestates.com'
   const missing = guides.filter((g) => g.report.state === 'none')
   return (
@@ -31,6 +33,27 @@ export default async function AgentsPage() {
           <p className="sub">The agents work your valuation leads and report every morning. Nothing goes to a client without the OnTheMarket guide and a sense-check. What needs a person is here.</p>
         </div>
       </div>
+
+      <section className="card fu-list ag-sec" id="status">
+        <div className="fu-head"><h2>{allOk ? '✓ The agents are running' : 'The agents need something from you'}</h2><p>What the agents depend on. They act when something happens (a new valuation request, a report finalised, a follow-up falling due), so a quiet list below can just mean nothing was due yet.</p></div>
+        {status.checks.map((c) => (
+          <div key={c.name} className="fu-row ag-row">
+            <span className="fu-main"><b>{c.name}</b><small>{c.detail}</small></span>
+            <span className={`vl-flag ${c.ok ? 'ok' : 'bad'}`}>{c.ok ? 'OK' : 'Needs you'}</span>
+            {c.href && !c.ok ? <span className="fu-acts"><Link className="btn btn-gold btn-sm" href={c.href}>Fix it</Link></span> : <span />}
+          </div>
+        ))}
+        <div className="fu-row ag-row">
+          <span className="fu-main"><b>Valuation leads from the last 30 days still waiting: {status.leads.total}</b><small>{status.leads.onPlan} on the Valuation agent’s plan · {status.leads.onOld} on the earlier follow-ups (they finish those) · {status.leads.never} never followed up{status.leads.other ? ` · ${status.leads.other} finished or stopped` : ''}</small></span>
+          <span />
+          <span className="fu-acts">
+            {status.leads.onOld ? <form action={moveToPlan}><button className="btn btn-gold btn-sm">Move {status.leads.onOld} onto the plan</button></form> : null}
+            {status.leads.never && status.followupsOn ? <form action={startRecentPlans}><button className="btn btn-gold btn-sm">Start the plan for {status.leads.never}</button></form> : null}
+          </span>
+        </div>
+        {status.leads.onOld ? <p className="ag-note">“On the earlier follow-ups” started before the Valuation agent’s plan: they get a couple more emails and WhatsApps but no calls, report email or letter. Moving them carries each on from the day it has reached.</p> : null}
+        {status.leads.never ? <p className="ag-note">“Never followed up” are valuation requests from before follow-ups were switched on. Starting the plan puts each on the call list today, then the report email (once its OnTheMarket guide is finalised), check-ins and a letter, all sense-checked.{status.followupsOn ? '' : ' Switch follow-ups on first.'}</p> : null}
+      </section>
 
       <section className="card fu-list ag-sec" id="approve">
         <div className="fu-head"><h2>Needs approval <span>{held.filter((h) => !h.expired).length}</span></h2>

@@ -110,6 +110,24 @@ export async function startFollowups(id: string, from = new Date()) {
   await db.update(enquiries).set({ followupState: 'active', followupPlan: plan, followupStep: 0, followupStartedAt: startedAt, followupNextAt: dueAt(startedAt, stepsFor(plan)[0].day), followupNote: null }).where(eq(enquiries.id, id))
 }
 
+/**
+ * Moves a valuation lead from the earlier follow-ups onto the valuation plan at the day it has reached (counted from
+ * the enquiry), so it carries on from there rather than starting again. Returns false if it's past the plan's end.
+ */
+export async function moveToValuationPlan(id: string, at = new Date()): Promise<boolean> {
+  const e = await db.query.enquiries.findFirst({ where: eq(enquiries.id, id) })
+  if (!e || e.followupState !== 'active' || e.followupPlan === 'valuation' || !isValuation(e)) return false
+  const startedAt = e.followupStartedAt ?? e.createdAt
+  const days = Math.floor((at.getTime() - Date.parse(startedAt)) / 864e5)
+  const steps = stepsFor('valuation')
+  // The next step from today; a call or WhatsApp already in the past is skipped, except today's.
+  const idx = steps.findIndex((s) => s.day >= days)
+  if (idx < 0) return false
+  const when = nextDue(startedAt, idx, at, 'valuation')!
+  await db.update(enquiries).set({ followupPlan: 'valuation', followupStep: idx, followupStartedAt: startedAt, followupNextAt: when, followupNote: null }).where(eq(enquiries.id, id))
+  return true
+}
+
 /** After a valuation visit where they're thinking it over: thanks today, then a call, an email and a call. */
 export async function startAfterVisit(id: string, from = new Date()) {
   const startedAt = from.toISOString()

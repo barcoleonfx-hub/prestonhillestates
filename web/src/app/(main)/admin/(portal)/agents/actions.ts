@@ -52,3 +52,30 @@ export async function saveDirector(form: FormData): Promise<void> {
   await audit(me.id, 'director_settings_saved', 'setting', 'agents', `${to}${form.get('on') === 'on' ? '' : ' (off)'}`)
   revalidatePath('/admin/agents')
 }
+
+/** Puts recent valuation leads that were never followed up onto the Valuation agent's plan, from today. */
+export async function startRecentPlans(): Promise<void> {
+  const me = await requireAdmin()
+  const { notStarted } = await import('@/lib/agent-status')
+  const { startFollowups, followupSettings } = await import('@/lib/followups')
+  const { logAction } = await import('@/lib/agents')
+  if (!(await followupSettings()).on) return
+  const leads = (await notStarted()).slice(0, 100)
+  for (const e of leads) await startFollowups(e.id)
+  if (leads.length) await logAction({ agent: 'valuation', kind: 'plan', status: 'done', title: `Valuation plan started for ${leads.length} recent lead${leads.length === 1 ? '' : 's'}`, detail: `Started by ${me.name}: each gets a call and a WhatsApp today, then the plan from day 1.`, by: me.id })
+  await audit(me.id, 'valuation_plan_backfill', 'setting', 'followups', String(leads.length))
+  revalidatePath('/admin/agents')
+}
+
+/** Moves recent valuation leads from the earlier follow-ups onto the Valuation agent's plan, at the day they've reached. */
+export async function moveToPlan(): Promise<void> {
+  const me = await requireAdmin()
+  const { onOldPlan } = await import('@/lib/agent-status')
+  const { moveToValuationPlan } = await import('@/lib/followups')
+  const { logAction } = await import('@/lib/agents')
+  let moved = 0
+  for (const e of (await onOldPlan()).slice(0, 200)) if (await moveToValuationPlan(e.id)) moved++
+  if (moved) await logAction({ agent: 'valuation', kind: 'plan', status: 'done', title: `${moved} lead${moved === 1 ? '' : 's'} moved onto the Valuation agent’s plan`, detail: `By ${me.name}: each carries on from the day it has reached (report email, calls, check-ins and letter).`, by: me.id })
+  await audit(me.id, 'valuation_plan_moved', 'setting', 'followups', String(moved))
+  revalidatePath('/admin/agents')
+}
