@@ -39,14 +39,14 @@ export async function recordUsage(model: string, usage: Usage, purpose: string, 
 }
 
 const KEY = 'agents'
-export type AgentSettings = { budgetGbp: number }
+export type AgentSettings = { budgetGbp: number; /** Where the Director's daily report goes. */ directorTo?: string; directorOff?: boolean }
 export async function agentSettings(): Promise<AgentSettings> {
   await ready()
   const r = await db.query.settings.findFirst({ where: eq(settings.key, KEY) })
   try { return { budgetGbp: 40, ...(r ? JSON.parse(r.value) : {}) } } catch { return { budgetGbp: 40 } }
 }
-export async function saveAgentSettings(v: AgentSettings) {
-  const value = JSON.stringify(v)
+export async function saveAgentSettings(change: Partial<AgentSettings>) {
+  const value = JSON.stringify({ ...(await agentSettings()), ...change })
   await db.insert(settings).values({ key: KEY, value, updatedAt: now() }).onConflictDoUpdate({ target: settings.key, set: { value, updatedAt: now() } })
 }
 

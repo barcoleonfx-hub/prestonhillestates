@@ -96,6 +96,31 @@ export async function promptGuides(): Promise<number> {
   return raised
 }
 
+/**
+ * A valuation lead nobody has got back to within 2 office hours: one urgent pop-up each. Speed is what wins these.
+ * Runs with the guide prompts, from the portal's alert poll.
+ */
+let lastUrgent = 0
+export async function urgentLeads(): Promise<number> {
+  if (Date.now() - lastUrgent < 60e3 || !workingHours()) return 0
+  lastUrgent = Date.now()
+  await ready()
+  const rows = await db.select({ e: enquiries }).from(enquiries)
+    .where(and(eq(enquiries.status, 'new'), isNull(enquiries.lastOutboundAt), gte(enquiries.createdAt, new Date(Date.now() - 3 * 864e5).toISOString()))).limit(100)
+  const late = rows.map((r) => r.e).filter((e) => isValuation(e) && Date.now() - Date.parse(e.createdAt) > 2 * HOUR)
+  if (!late.length) return 0
+  const told = new Set((await db.select({ id: notifications.enquiryId }).from(notifications).where(and(eq(notifications.kind, 'urgent'), inArray(notifications.enquiryId, late.map((e) => e.id))))).map((r) => r.id))
+  let n = 0
+  for (const e of late.filter((x) => !told.has(x.id))) {
+    const hours = Math.floor((Date.now() - Date.parse(e.createdAt)) / HOUR)
+    const title = `${e.name} has waited ${hours} hours for a call`
+    await db.insert(notifications).values({ id: uid(), kind: 'urgent', appointmentId: null, enquiryId: e.id, title, body: 'A valuation request nobody has got back to yet. The quicker the call, the likelier the valuation: call them now.', createdBy: null, createdAt: now() })
+    await logAction({ agent: 'valuation', enquiryId: e.id, kind: 'urgent', status: 'prompted', title })
+    n++
+  }
+  return n
+}
+
 const todayIso = () => londonNow().date
 
 /**

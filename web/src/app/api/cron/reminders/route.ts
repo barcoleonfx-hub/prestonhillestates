@@ -13,6 +13,7 @@ import { repairListingSide, repairOtmCutOff, repairPortalSmallPrint, repairZoopl
 import { backfillCallEnquiries } from '@/lib/call-enquiry'
 import { refreshAreaPlaces } from '@/lib/area-places'
 import { runFollowups } from '@/lib/followups'
+import { runDirector } from '@/lib/director'
 import { runReconnects } from '@/lib/reconnect'
 import { runLetters } from '@/lib/letters'
 import { markDormant } from '@/lib/leads'
@@ -46,6 +47,8 @@ export async function GET(req: Request) {
     // Leads nobody has heard from in 60 days go dormant (once a day, light).
     await markDormant().catch((e) => console.error('marking dormant leads failed', e))
     await runFollowups().catch((e) => console.error('follow-ups failed', e))
+    // The Director's daily report to the office, once a day from 7:30am London.
+    await runDirector().catch((e) => console.error('director report failed', e))
     await runReconnects().catch((e) => console.error('reconnect emails failed', e))
     await removeLicensingFiles().catch((e) => console.error('removing old licensing files failed', e))
     // New homes to rent emailed to registered tenants who'd want them (light: a few emails every 10 minutes).

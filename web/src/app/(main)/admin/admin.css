@@ -1306,3 +1306,7 @@ kbd { font: 600 0.68rem/1 var(--sans, inherit); padding: 3px 6px; border-radius:
 .ag-spend input { width: 80px; font: inherit; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; }
 .ag-bar { height: 6px; border-radius: 999px; background: var(--line-soft); width: 220px; overflow: hidden; }
 .ag-bar i { display: block; height: 100%; background: var(--gold, #b08d3c); }
+.ag-report { padding: 24px; }
+.ag-dir { display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 12px 20px; }
+.ag-dir form { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 0.84rem; color: var(--faint); }
+.ag-dir input[type=email] { width: 240px; font: inherit; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; }

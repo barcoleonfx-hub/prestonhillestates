@@ -13,7 +13,7 @@ const SOUND_KEY = 'phe_alert_sound'
 
 /** A reply to one of our emails is an enquiry alert too, titled "… replied". */
 const tagFor = (a: { kind: string; title: string }) => (a.kind === 'enquiry' && / replied$/.test(a.title) ? 'Reply' : TAG[a.kind] ?? 'Alert')
-const TAG: Record<string, string> = { booked: 'New booking', changed: 'Changed', cancelled: 'Cancelled', reminder: 'Reminder', callback: 'Callback due', callback_assigned: 'New callback for you', enquiry: 'New enquiry', guide: 'OnTheMarket guide', letter: 'Letter', approval: 'Needs approval' }
+const TAG: Record<string, string> = { booked: 'New booking', changed: 'Changed', cancelled: 'Cancelled', reminder: 'Reminder', callback: 'Callback due', callback_assigned: 'New callback for you', enquiry: 'New enquiry', guide: 'OnTheMarket guide', letter: 'Letter', approval: 'Needs approval', urgent: 'Call now' }
 
 function readSound(): boolean {
   try { return localStorage.getItem(SOUND_KEY) !== 'off' } catch { return true }
