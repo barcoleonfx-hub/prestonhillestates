@@ -7,6 +7,7 @@ import { changes, gbp, merge, type BookletFields, type BookletInput } from '@/li
 import { saveBooklet } from '../../booklet-actions'
 import { BookletPages } from './BookletPages'
 import { GuideBox, guideValues, withValues, type GuideValues } from './GuideBox'
+import { OtmPrep } from './OtmPrep'
 
 /** Change anything on the booklet, see it update, save it, and print it (or save it as a PDF). */
 export function BookletEditor({ data, back }: { data: BookletInput; back: { href: string; label: string } }) {
@@ -60,6 +61,8 @@ export function BookletEditor({ data, back }: { data: BookletInput; back: { href
         <h1>Property report</h1>
         <p className="bk-help">Filled in for you. Upload the OnTheMarket guide, set the guide price and finalise it; then it can be sent, printed or saved as a PDF.</p>
         <GuideBox id={data.id} guide={data.guide} values={gv} setValues={setGv} rent={rent} prices={data.comps.filter((c) => c.group === 'evidence' && !f.hide.includes(c.key)).slice(0, 6).map((c) => c.price)} />
+        {!data.guide ? <OtmPrep home={f.home.replace(/\s*\([^)]*\)/g, '').trim()} facts={data.story.facts} lastSale={data.story.sales.length ? data.story.sales[data.story.sales.length - 1] : null} rent={rent}
+          comps={data.comps.filter((c) => c.group === 'evidence').slice(0, 4).map((c) => ({ where: c.where, what: c.what, price: c.price }))} /> : null}
         <div className="bk-actions">
           <button className="btn btn-gold" type="button" onClick={printIt} disabled={pending}>Print or save as PDF</button>
           <button className="btn btn-ghost" type="button" onClick={() => save()} disabled={pending || !dirty}>{pending ? 'Saving…' : dirty ? 'Save changes' : 'Saved'}</button>

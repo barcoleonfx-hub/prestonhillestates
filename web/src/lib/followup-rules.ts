@@ -309,3 +309,26 @@ export function bookingEmail(kind: 'confirm' | 'reminder', c: { first: string; w
     + `<p style="font-size:12px;color:#888;margin-top:24px">${linkify(stop)}</p></div>`
   return { subject, text, html }
 }
+
+/**
+ * The Valuation agent's instant thank-you, minutes after a valuation request: no figure (the report waits for the
+ * OnTheMarket guide), just thanks, what happens next and how to book a visit.
+ */
+export function thankYouEmail(c: { first: string; address: string | null; letting: boolean; me: string; unsubscribeUrl: string | null }): FollowupEmail {
+  const hi = c.first ? `Hi ${c.first},` : 'Hello,'
+  const what = `${c.letting ? 'rental ' : ''}valuation`
+  const subject = `Thank you for your ${what} request${c.address ? `: ${c.address}` : ''}`
+  const body = [
+    `Thank you for asking us to value ${c.address ?? 'your home'}. We really appreciate you thinking of us.`,
+    `${c.me ? 'I’m' : 'We’re'} preparing your personal property report now, using live market data from OnTheMarket and what homes nearby have actually ${c.letting ? 'let' : 'sold'} for. ${c.me ? 'I’ll' : 'We’ll'} send it to you as soon as it’s ready, and we’ll give you a quick call to say hello and answer any questions.`,
+    `If you’d like us to come round, it takes about 30 minutes, it’s free and there’s no obligation. Just reply with a day and time that suits you, or call us on 020 8904 9005.`,
+  ]
+  const sign = [c.me || 'The team', 'Preston Hill Estates', '271 Preston Road, Harrow HA3 0PS · 020 8904 9005']
+  const stop = c.unsubscribeUrl ? `Don’t want emails from us? Reply “stop”, or use this link: ${c.unsubscribeUrl}` : 'Don’t want emails from us? Just reply “stop”.'
+  const text = [hi, '', ...body.flatMap((p) => [p, '']), 'Best wishes,', ...sign, '', stop].join('\n')
+  const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.55;color:#222;max-width:600px">`
+    + `<p>${esc(hi)}</p>${body.map((p) => `<p>${linkify(p)}</p>`).join('')}`
+    + `<p>Best wishes,<br>${sign.map(esc).join('<br>')}</p>`
+    + `<p style="font-size:12px;color:#888;margin-top:24px">${linkify(stop)}</p></div>`
+  return { subject, text, html }
+}
