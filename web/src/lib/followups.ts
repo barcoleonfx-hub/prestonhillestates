@@ -5,7 +5,7 @@ import 'server-only'
 
 import { and, asc, desc, eq, gte, inArray, isNull, lte, sql } from 'drizzle-orm'
 import { db, getClient, ready } from '@/db/client'
-import { admins, calls, contacts, enquiries, followupLog, properties, settings, type Contact, type Enquiry } from '@/db/schema'
+import { admins, contacts, enquiries, followupLog, properties, settings, type Contact, type Enquiry } from '@/db/schema'
 import { enquirySide, isValuation } from './enquiry-labels'
 import { isBoilerplate } from './email-import'
 import { detailLines } from './enquiry-workspace'
@@ -21,6 +21,8 @@ import { reportFinal, reportGuide, reportStates } from './report-guide'
 import { holdForApproval } from './agent-queue'
 import { senseCheck } from './sense-check'
 import { mailPaused, noteMailError } from './mail-health'
+import { leadHistory } from './lead-history'
+import { alreadyDone, type Decision } from './lead-history-rules'
 import { now, uid } from './util'
 import { quietReason, waBlocked } from './whatsapp'
 
@@ -152,6 +154,14 @@ async function reportFor(enquiryId: string, base: string): Promise<{ url: string
   return { url: `${base}/report/${await shareFor(enquiryId)}`, guide: { asking: g.asking, low: g.low, high: g.high } }
 }
 
+/** Whether a step was already done by someone, or should wait for a colleague who was just in touch. */
+async function checkDone(r: Row, step: StepDef, at: Date): Promise<Decision> {
+  const h = await leadHistory(r.e.id).catch((e) => { console.error('lead history failed', e); return null })
+  // If we can't see the history, don't risk a repeat: try again in an hour.
+  if (!h) return { do: 'wait', until: new Date(at.getTime() + 3600e3).toISOString(), why: 'Couldn’t check what’s already been done' }
+  return alreadyDone(step, h.touches, { at, dueAt: r.e.followupNextAt!, startedAt: r.e.followupStartedAt ?? r.e.createdAt })
+}
+
 export type RunResult = { ran: boolean; enrolled?: number; sent?: number; held?: number; letters?: number; skipped?: number; stopped?: number; failed?: number; quiet?: string | null; error?: string }
 
 /** Called every couple of minutes by the background job; does real work at most every 4 minutes. */
@@ -194,11 +204,9 @@ export async function runFollowups(opts: { force?: boolean; at?: Date } = {}): P
     const step = stepOf(r.e)!
     const skip = stepSkip(step, stateOf(r), at)
     if (skip) { await log(r.e, 'skipped', skip); await advance(r.e, at); res.skipped!++; continue }
-    if (step.channel === 'call' && r.e.contactId) {
-      const since = new Date(Date.parse(r.e.followupNextAt!) - 12 * 3600e3).toISOString()
-      const called = await db.select({ id: calls.id, by: calls.createdBy }).from(calls).where(and(eq(calls.contactId, r.e.contactId), gte(calls.createdAt, since))).limit(1)
-      if (called.length) { await log(r.e, 'done', 'Call logged', called[0].by); await advance(r.e, at); continue }
-    }
+    // Already done by someone (a call logged, a WhatsApp sent from the portal): tick it off, don't ask again.
+    const d = await checkDone(r, step, at)
+    if (d.do === 'done' || d.do === 'skip') { await log(r.e, d.do, d.why); await advance(r.e, at); continue }
     if (Date.parse(r.e.followupNextAt!) < at.getTime() - WHATSAPP_GRACE_DAYS * 864e5) {
       await log(r.e, 'missed', `Not done within ${WHATSAPP_GRACE_DAYS} days`); await advance(r.e, at); res.skipped!++
     }
@@ -209,6 +217,8 @@ export async function runFollowups(opts: { force?: boolean; at?: Date } = {}): P
   const base = await knownBase()
 
   for (const r of due.filter((x) => stepOf(x.e)?.channel === 'letter')) {
+    const d = await checkDone(r, stepOf(r.e)!, at)
+    if (d.do === 'skip' || d.do === 'done') { await log(r.e, 'skipped', d.why); await advance(r.e, at); res.skipped!++; continue }
     const ready = await reportFor(r.e.id, base)
     if (!ready && Date.parse(r.e.followupNextAt!) > at.getTime() - REPORT_WAIT_DAYS * 864e5) { await later(r.e, at, 3); continue }
     const q = ready ? await queueFollowupLetter(r.e.id) : { ok: false, why: 'no finalised OnTheMarket guide in time' }
@@ -232,6 +242,14 @@ export async function runFollowups(opts: { force?: boolean; at?: Date } = {}): P
     const l = stateOf(r)
     const skip = stepSkip(step, l, at)
     if (skip) { await log(r.e, 'skipped', skip); await advance(r.e, at); res.skipped!++; continue }
+    // What's already been done by anyone (emails from the portal or Apple Mail, WhatsApps, calls): never repeat it,
+    // and never land on top of a colleague who was just in touch.
+    const d = await checkDone(r, step, at)
+    if (d.do === 'skip' || d.do === 'done') { await log(r.e, 'skipped', d.why); await advance(r.e, at); res.skipped!++; continue }
+    if (d.do === 'wait') {
+      await db.update(enquiries).set({ followupNextAt: d.until }).where(eq(enquiries.id, r.e.id))
+      await log(r.e, 'waiting', d.why); emailed--; continue
+    }
     const track = trackOf(r)
     const valuation = track === 'sales-valuation' || track === 'lettings-valuation'
     const report = valuation ? await reportFor(r.e.id, base) : null

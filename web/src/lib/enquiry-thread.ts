@@ -102,6 +102,37 @@ export async function linkSentReplies(): Promise<number> {
     }).onConflictDoNothing()
     if (r.rowsAffected) { n++; await leadEvent(enquiryId, 'outbound', { at: m.sentAt, detail: 'email sent from the mailbox' }).catch(() => {}) }
   }
+  n += await linkSentByAddress(since).catch((e) => { console.error('linking sent emails by address failed', e); return 0 })
+  return n
+}
+
+/**
+ * New emails written in Apple Mail (not replies) to someone who has enquired: filed on their newest enquiry from
+ * before the email, so the agents can see what's already been sent and don't repeat it.
+ */
+async function linkSentByAddress(since: string): Promise<number> {
+  const sent = await db.select().from(mailMessages).where(and(eq(mailMessages.direction, 'out'), gte(mailMessages.sentAt, since), or(isNull(mailMessages.via), eq(mailMessages.via, 'mailbox'))))
+  if (!sent.length) return 0
+  const linked = new Set((await db.select({ id: enquiryMessages.messageId }).from(enquiryMessages).where(gte(enquiryMessages.sentAt, since))).map((r) => r.id))
+  const todo = sent.filter((m) => !linked.has(m.messageId))
+  if (!todo.length) return 0
+  const leads = await db.select({ id: enquiries.id, email: enquiries.email, createdAt: enquiries.createdAt }).from(enquiries)
+    .where(and(gte(enquiries.createdAt, new Date(Date.parse(since) - 90 * DAY).toISOString()), sql`${enquiries.email} IS NOT NULL`))
+  const byEmail = new Map<string, { id: string; createdAt: string }[]>()
+  for (const l of leads) { const k = l.email!.trim().toLowerCase(); byEmail.set(k, [...(byEmail.get(k) ?? []), l]) }
+  let n = 0
+  for (const m of todo) {
+    const to = (m.toAddrs ?? '').toLowerCase().match(/[^\s<>,;"']+@[^\s<>,;"']+/g) ?? []
+    // Only one person: a group email isn't a personal follow-up.
+    if (to.length !== 1) continue
+    const enquiryId = (byEmail.get(to[0]) ?? []).filter((l) => l.createdAt <= m.sentAt).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0]?.id
+    if (!enquiryId) continue
+    const r = await db.insert(enquiryMessages).values({
+      id: uid(), enquiryId, messageId: m.messageId, direction: 'out', subject: m.subject, body: (m.body ?? '').slice(0, 8000), fromAddr: m.fromAddr,
+      via: 'mailbox', sentBy: null, sentAt: m.sentAt, createdAt: now(),
+    }).onConflictDoNothing()
+    if (r.rowsAffected) { n++; await leadEvent(enquiryId, 'outbound', { at: m.sentAt, detail: 'email sent from the mailbox' }).catch(() => {}) }
+  }
   return n
 }
 

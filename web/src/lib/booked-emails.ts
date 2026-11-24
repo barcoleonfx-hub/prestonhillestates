@@ -4,6 +4,7 @@ import { db, ready } from '@/db/client'
 import { admins, appointments, contacts, enquiries } from '@/db/schema'
 import { holdForApproval } from './agent-queue'
 import { logAction } from './agents'
+import { leadHistory } from './lead-history'
 import { recordOutgoing } from './enquiry-thread'
 import { enquirySide } from './enquiry-labels'
 import { bookingEmail } from './followup-rules'
@@ -54,6 +55,15 @@ async function sendOne(kind: 'confirm' | 'reminder', a: typeof appointments.$inf
   const c = e.contactId ? await db.query.contacts.findFirst({ where: eq(contacts.id, e.contactId) }) : null
   const to = (a.contactEmail || e.email || c?.email || '').trim()
   if (!to) return false
+  // Already done by hand? A confirmation isn't needed if someone emailed or WhatsApped them after booking; a
+  // reminder isn't needed if someone was in touch in the last day.
+  const { touches } = await leadHistory(e.id)
+  const since = kind === 'confirm' ? a.createdAt : new Date(Date.now() - 24 * HOUR).toISOString()
+  const done = touches.filter((t) => t.by === 'staff' && (t.channel === 'email' || t.channel === 'whatsapp') && t.at >= since).pop()
+  if (done) {
+    await logAction({ agent: 'valuation', enquiryId: e.id, kind: 'email', status: 'skipped', title: `No ${kind === 'confirm' ? 'booking confirmation' : 'day-before reminder'} to ${e.name}: already done`, detail: `${done.who ?? 'The office'} was in touch by ${done.channel} on ${new Date(done.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'Europe/London' })}, so the agent didn’t send another.` })
+    return false
+  }
   const staff = await db.query.admins.findFirst({ where: eq(admins.id, a.staffId) })
   const base = await knownBase()
   const when = fmtWhen(a.startsAt)

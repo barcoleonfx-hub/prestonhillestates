@@ -15,7 +15,7 @@ export const metadata = { title: 'Agents' }
 
 const ago = (iso: string) => { const m = Math.floor((Date.now() - Date.parse(iso)) / 60e3); const d = Math.floor(m / 1440); return m < 60 ? `${m} min ago` : m < 1440 ? `${Math.floor(m / 60)} h ago` : d === 1 ? 'yesterday' : `${d} days ago` }
 const AGENT: Record<string, string> = { valuation: 'Valuation agent', followup: 'Follow-ups', outreach: 'Seller outreach', marketing: 'Marketing', director: 'Director' }
-const STATUS: Record<string, string> = { done: 'Done', held: 'Waiting for approval', blocked: 'Blocked', prompted: 'Prompted', rejected: 'Rejected', sending: 'Sending' }
+const STATUS: Record<string, string> = { done: 'Done', held: 'Waiting for approval', blocked: 'Blocked', prompted: 'Prompted', rejected: 'Rejected', sending: 'Sending', skipped: 'Already done' }
 const gbp = (n: number) => `£${n.toFixed(2)}`
 
 /** The agents' desk: what's waiting on staff (OnTheMarket guides, today's letters) and everything the agents did. */
