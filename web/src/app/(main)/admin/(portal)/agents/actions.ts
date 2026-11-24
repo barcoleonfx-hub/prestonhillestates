@@ -79,3 +79,29 @@ export async function moveToPlan(): Promise<void> {
   await audit(me.id, 'valuation_plan_moved', 'setting', 'followups', String(moved))
   revalidatePath('/admin/agents')
 }
+
+/** Sends one person's 10am briefing now. */
+export async function sendBriefingNow(name: string): Promise<QueueResult> {
+  const me = await requireAdmin()
+  const { briefingPeople, sendBriefing } = await import('@/lib/staff-briefing')
+  const p = (await briefingPeople()).find((x) => x.name === name)
+  if (!p) return { ok: false, error: 'No briefing with that name.' }
+  const r = await sendBriefing(p, me.id)
+  if (r.ok) { await audit(me.id, 'briefing_sent', 'setting', 'agents', p.name); revalidatePath('/admin/agents') }
+  return r
+}
+
+/** Who gets a 10am briefing, which names count as theirs, and where it goes. */
+export async function saveBriefings(form: FormData): Promise<void> {
+  const me = await requireAdmin()
+  const people = [0, 1, 2, 3, 4, 5].map((i) => {
+    const name = String(form.get(`name_${i}`) ?? '').trim().slice(0, 40)
+    const aliases = String(form.get(`aliases_${i}`) ?? '').split(',').map((a) => a.trim()).filter((a) => a.length >= 2).slice(0, 6)
+    const to = String(form.get(`to_${i}`) ?? '').trim().toLowerCase()
+    return { name, aliases: aliases.length ? aliases : name ? [name] : [], to, off: form.get(`on_${i}`) !== 'on' }
+  }).filter((p) => p.name && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(p.to))
+  if (!people.length) return
+  await saveAgentSettings({ briefings: people, briefingsOff: form.get('all') !== 'on' })
+  await audit(me.id, 'briefings_saved', 'setting', 'agents', people.map((p) => `${p.name}→${p.to}`).join(', '))
+  revalidatePath('/admin/agents')
+}

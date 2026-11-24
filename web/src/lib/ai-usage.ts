@@ -39,7 +39,7 @@ export async function recordUsage(model: string, usage: Usage, purpose: string, 
 }
 
 const KEY = 'agents'
-export type AgentSettings = { budgetGbp: number; /** Where the Director's daily report goes. */ directorTo?: string; directorOff?: boolean }
+export type AgentSettings = { budgetGbp: number; /** Where the Director's daily report goes. */ directorTo?: string; directorOff?: boolean; /** The 10am staff briefings: who, which names count as theirs, and where each goes. */ briefings?: import('./staff-briefing-rules').Person[]; briefingsOff?: boolean }
 export async function agentSettings(): Promise<AgentSettings> {
   await ready()
   const r = await db.query.settings.findFirst({ where: eq(settings.key, KEY) })
