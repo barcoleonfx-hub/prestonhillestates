@@ -62,7 +62,8 @@ export type Briefing = {
   outstanding: Item[]
 }
 export type Point = { text: string; why?: string; refs: string[] }
-export type BriefingView = { summary: string; urgent: Point[]; done: Point[]; pending: Point[]; inbox: string }
+/** A person's briefing in words: the picture, what to do now (the only list), and paragraphs on yesterday, what's still waiting and the inbox. */
+export type BriefingView = { summary: string; urgent: Point[]; yesterday: string; waiting: string; inbox: string }
 
 const itemsOf = (b: Briefing) => [...b.sent, ...b.activity, ...b.received, ...b.inbox, ...b.outstanding]
 
@@ -119,21 +120,25 @@ const statNumbers = (st: Stats) => Object.values(st).filter((x): x is number => 
 
 export function checkView(v: BriefingView, b: Briefing): { view: BriefingView; dropped: number } {
   const c = checker(itemsOf(b), [b.day, b.today, ...statNumbers(statsOf(b)), b.outstanding.length, b.inbox.length])
-  const view = { summary: c.text(v.summary), urgent: c.points(v.urgent, 5), done: c.points(v.done, 5), pending: c.points(v.pending, 4), inbox: c.text(v.inbox) }
+  const view = { summary: c.text(v.summary), urgent: c.points(v.urgent, 5), yesterday: c.text(v.yesterday), waiting: c.text(v.waiting), inbox: c.text(v.inbox) }
   return { view, dropped: c.dropped() }
 }
 
-/** Without Claude: counts in words and the most urgent few. */
+/** Without Claude: the same shape, in words worked out from the counts. */
 export function plainView(b: Briefing): BriefingView {
   const st = statsOf(b)
-  const urgentFirst = [...b.outstanding].sort((x, y) => Number(!!y.urgent) - Number(!!x.urgent))
+  const urgentFirst = [...b.outstanding].filter((o) => o.kind !== 'appointment').sort((x, y) => Number(!!y.urgent) - Number(!!x.urgent))
   return {
-    summary: `Yesterday you sent ${plural(st.sent, 'email')} and logged ${plural(st.activity, 'call, note or visit', 'calls, notes or visits')}. Waiting on you: ${waitingLine(st)}.`,
+    summary: `Waiting on you today: ${waitingLine(st)}.`,
     urgent: urgentFirst.slice(0, 5).map((i) => ({ text: i.title, why: i.detail, refs: [i.ref] })),
-    done: [], pending: [],
+    yesterday: st.sent || st.activity ? `You sent ${plural(st.sent, 'email')} and logged ${plural(st.activity, 'call, note or visit', 'calls, notes or visits')}.` : 'Nothing was recorded for you yesterday: no emails sent from the office mailbox, and no calls or notes logged.',
+    waiting: '',
     inbox: st.important ? `${plural(st.important, 'email')} came in that may need someone${st.routine ? `, plus ${st.routine} routine` : ''}.` : '',
   }
 }
+
+/** A person's appointments and callbacks due today, soonest first. */
+const todaysFor = (b: Briefing) => b.outstanding.filter((o) => o.kind === 'appointment' || (o.kind === 'callback' && !o.urgent)).sort((x, y) => (x.at < y.at ? -1 : 1))
 
 // ---------- the emails ----------
 
@@ -158,26 +163,31 @@ const pointsText = (xs: Point[], links: Map<string, Item>, ordered = false) => x
 export function briefingEmail(b: Briefing, v: BriefingView, note: string | null): { subject: string; text: string; html: string } {
   const links = new Map(itemsOf(b).map((i) => [i.ref, i]))
   const st = statsOf(b)
-  const subject = `${b.person.name}’s briefing, ${b.today}: ${v.urgent.length ? `${v.urgent.length} urgent` : 'nothing urgent'}`
-  const tallyLine = `Covers ${b.day}. ${st.routine ? `${plural(st.routine, 'routine or automated email')} and any sales pitches left out.` : 'Sales pitches and automated emails left out.'}`
+  const status = statusOf(st)
+  const due = todaysFor(b)
+  const subject = `${b.person.name}’s briefing, ${b.today}: ${v.urgent.length ? `${v.urgent.length} to do first` : 'nothing urgent'}`
+  const left = `Covers ${b.day}. ${st.routine ? `${plural(st.routine, 'routine or automated email')}, sales pitches and spam left out.` : 'Sales pitches, spam and automated emails left out.'}`
+  const para = (title: string, body: string) => (body ? `<h2 style="${H2}">${esc(title)}</h2><p style="margin:0">${esc(body)}</p>` : '')
   const text = [
-    subject, '', ...(v.summary ? [v.summary, ''] : []),
-    'MOST URGENT', ...(v.urgent.length ? pointsText(v.urgent, links, true) : ['Nothing urgent.']), '',
-    ...(v.done.length ? ['DONE YESTERDAY', ...pointsText(v.done, links), ''] : []),
-    ...(v.pending.length ? ['STILL WAITING', ...pointsText(v.pending, links), ''] : []),
-    `Waiting on you: ${waitingLine(st)}.`, '',
+    subject, `[${status.label}]`, '', ...(v.summary ? [v.summary, ''] : []),
+    'NEEDS ATTENTION NOW', ...(v.urgent.length ? pointsText(v.urgent, links, true) : ['Nothing urgent.']), '',
+    ...(due.length ? ['DUE TODAY', ...due.map((d) => `- ${d.title}${d.detail ? ` (${d.detail})` : ''}`), ''] : []),
+    ...(v.yesterday ? ['YESTERDAY', v.yesterday, ''] : []),
+    'STILL WAITING', v.waiting || `${waitingLine(st)[0].toUpperCase()}${waitingLine(st).slice(1)}.`, '',
     ...(v.inbox ? ['IN THE INBOX', v.inbox, ''] : []),
-    ...(note ? [note, ''] : []), tallyLine,
+    ...(note ? [note, ''] : []), left,
   ].join('\n')
-  const html = shell(head('Preston Hill Estates · Daily briefing', `${b.person.name} · ${b.today}`)
+  const html = shell(
+    `<div style="border-bottom:3px solid #b08d3c;padding:0 0 12px"><div style="font-size:12px;color:#888;letter-spacing:.08em;text-transform:uppercase">Preston Hill Estates · Daily briefing</div>`
+    + `<table role="presentation" width="100%" style="border-collapse:collapse;margin-top:4px"><tr><td style="font-size:20px;font-weight:bold">${esc(b.person.name)} · ${esc(b.today)}</td><td align="right"><span style="font-size:12px;font-weight:bold;padding:3px 10px;border-radius:999px;${TONE[status.tone]}">${esc(status.label)}</span></td></tr></table></div>`
     + (v.summary ? lead(v.summary) : '')
-    + `<h2 style="${H2}">Most urgent</h2>` + (v.urgent.length ? pointsHtml(v.urgent, links, true, true) : '<p style="margin:0">✓ Nothing urgent.</p>')
-    + (v.done.length ? `<h2 style="${H2}">Done yesterday</h2>${pointsHtml(v.done, links)}` : '')
-    + (v.pending.length ? `<h2 style="${H2}">Still waiting</h2>${pointsHtml(v.pending, links)}` : '')
-    + `<p style="margin:14px 0 0;color:#555"><b>Waiting on you:</b> ${esc(waitingLine(st))}.</p>`
-    + (v.inbox ? `<h2 style="${H2}">In the inbox</h2><p style="margin:0">${esc(v.inbox)}</p>` : '')
+    + `<h2 style="${H2}">Needs attention now</h2>` + (v.urgent.length ? pointsHtml(v.urgent, links, true, true) : '<p style="margin:0">✓ Nothing urgent.</p>')
+    + (due.length ? `<h2 style="${H2}">Due today</h2><ul style="margin:0;padding-left:20px">${due.map((d) => `<li style="margin:3px 0"><a href="${esc(d.href)}" style="color:#222;text-decoration:none;border-bottom:1px solid #d8c58f">${esc(d.title)}</a>${d.detail ? ` <span style="color:#777">· ${esc(d.detail)}</span>` : ''}</li>`).join('')}</ul>` : '')
+    + para('Yesterday', v.yesterday)
+    + `<h2 style="${H2}">Still waiting</h2><p style="margin:0">${esc(v.waiting || `${waitingLine(st)[0].toUpperCase()}${waitingLine(st).slice(1)}.`)}</p>`
+    + para('In the inbox', v.inbox)
     + (note ? `<p style="font-size:12px;color:#888;margin:14px 0 0">${esc(note)}</p>` : '')
-    + foot(tallyLine))
+    + foot(left))
   return { subject, text, html }
 }
 

@@ -114,11 +114,11 @@ export async function briefingJunk(today = todayLondon()): Promise<Set<string>> 
 const pointSchema = z.object({ text: z.string().describe('One short sentence'), why: z.string().describe('Why, in a few words (or empty)'), refs: z.array(z.string()).describe('The [ref] codes it comes from') })
 
 const View = z.object({
-  summary: z.string().describe('2 or 3 sentences: the picture for this person today. What matters most.'),
-  urgent: z.array(pointSchema).describe('Up to 5 things to do first today, most urgent first. Specific: who, and what to do.'),
-  done: z.array(pointSchema).describe('Up to 5 things they got done yesterday that matter (not routine admin). Group small things together.'),
-  pending: z.array(pointSchema).describe('Up to 5 other things still waiting on them that aren’t the most urgent.'),
-  inbox: z.string().describe('At most 70 words: what mattered in the office inbox yesterday (new leads, offers, complaints, problems, decisions). Leave out routine and automated emails entirely. Empty if nothing mattered.'),
+  summary: z.string().describe('3 or 4 sentences, written to them: how things stand today, the most important thing to get done, and anything at risk (a deadline, a client waiting, money on the line).'),
+  urgent: z.array(pointSchema).describe('Up to 5 actions for today, most urgent first. Each an instruction in plain words ("Call Mrs Begum back about her rental valuation"), not an email subject. "why": the reason it matters now.'),
+  yesterday: z.string().describe('A short paragraph (2 to 4 sentences), written to them: what they actually got done yesterday and what came of it (offers put forward, valuations done, replies sent, problems sorted). If nothing was recorded, say so plainly in one sentence.'),
+  waiting: z.string().describe('A short paragraph (2 or 3 sentences): what is still waiting on them beyond the urgent list, who has waited longest, and anything due soon. Describe it; don’t list email subjects.'),
+  inbox: z.string().describe('2 or 3 sentences: what mattered in the office inbox yesterday for the business (new leads, offers, complaints, repairs, deadlines) and who needs to act. Leave out routine, automated, pitches and spam. Empty if nothing mattered.'),
 })
 
 const RULES = `Rules:
@@ -127,7 +127,7 @@ const RULES = `Rules:
 - Urgent first: overdue callbacks, people waiting longest for a reply, new leads nobody has answered, money and deadlines (offers, instructions, renewals, complaints), today's appointments.
 - Plain, direct British English. No filler, no praise, no exclamation marks.`
 
-const SYSTEM = `You write the short 10am daily briefing for one member of staff at Preston Hill Estates, an independent estate agent in Harrow. They should read it in a minute and know what happened yesterday and exactly what to do first today.
+const SYSTEM = `You write the 10am daily briefing for one member of staff at Preston Hill Estates, an independent estate agent in Harrow, like a sharp office manager talking to them: descriptive, specific and short. They should read it in a minute and know what happened yesterday, what came of it, what's still waiting and exactly what to do first. Write in sentences, not lists of emails; only the actions are a list.
 
 ${RULES}`
 
@@ -150,8 +150,10 @@ async function writeView(b: Briefing): Promise<{ view: BriefingView; note: strin
   const r = await askClaude('claude-sonnet-5-5', SYSTEM, View, briefingInput(b), `staff briefing: ${b.person.name}`)
   if ('why' in r) return { view: plainView(b), note: `Just the to-do list today: the summary couldn’t be written (${r.why}).` }
   const { view, dropped } = checkView(r.out, b)
-  if (!view.urgent.length && b.outstanding.some((o) => o.urgent)) view.urgent = plainView(b).urgent
-  if (!view.summary) view.summary = plainView(b).summary
+  const plain = plainView(b)
+  if (!view.urgent.length && b.outstanding.some((o) => o.urgent)) view.urgent = plain.urgent
+  if (!view.summary) view.summary = plain.summary
+  if (!view.yesterday) view.yesterday = plain.yesterday
   return { view, note: dropped ? `The sense-check removed ${dropped} point${dropped === 1 ? '' : 's'} that didn’t match the emails and records.` : null }
 }
 
@@ -268,7 +270,7 @@ async function composeBriefing(p: Person, junk?: Set<string>): Promise<{ subject
   }
   const b = await buildBriefing(p, todayLondon(), '', j)
   const { view, note } = await writeView(b)
-  return { ...briefingEmail(b, view, note), detail: `${view.urgent.length} urgent, ${b.outstanding.length} outstanding, ${b.inbox.length} emails in.${note ? ` ${note}` : ''}` }
+  return { ...briefingEmail(b, view, note), detail: `${view.urgent.length} to do first, ${b.outstanding.length} outstanding, ${b.inbox.length} emails in.${note ? ` ${note}` : ''}` }
 }
 
 export async function sendBriefing(p: Person, by: string | null = null, junk?: Set<string>): Promise<{ ok: boolean; error?: string }> {
