@@ -8,6 +8,7 @@ import { contacts, enquiries, enquiryMessages, mailMessages, mailThreads } from 
 import { enquiryLabel, isValuation, sortEnquiry } from './enquiry-labels'
 import { reportFinal } from './report-guide'
 import { shareFor } from './booklet-share'
+import { recordUsage } from './ai-usage'
 import { anthropicKey } from './anthropic-key'
 import { enquiryWorkspace } from './enquiry-workspace'
 import { COUNCIL_TAX_BANDS, FURNISHING, PROPERTY_TYPES, TENURES, labelFor } from './options'
@@ -196,6 +197,7 @@ export async function writeEmail(r: AiRequest): Promise<WriterResult | { error: 
       output_config: { effort: 'medium', format: betaZodOutputFormat(Draft) },
       messages: [{ role: 'user', content: ask }],
     })
+    await recordUsage('claude-opus-5-5', res.usage, 'email writer')
     if (res.stop_reason === 'refusal') return { error: 'The AI couldn’t write this one. Try again, or change what you asked for.' }
     if (res.stop_reason === 'max_tokens') return { error: 'The AI ran out of room. Ask for something shorter.' }
     const out = res.parsed_output

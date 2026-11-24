@@ -2,6 +2,7 @@ import 'server-only'
 import Anthropic from '@anthropic-ai/sdk'
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod'
 import { z } from 'zod'
+import { recordUsage } from './ai-usage'
 import { anthropicKey } from './anthropic-key'
 import { emailFacts } from './email-writer'
 
@@ -56,6 +57,7 @@ export async function checkEmail(r: { what: string; subject: string; preheader: 
       output_config: { effort: 'medium', format: betaZodOutputFormat(Check) },
       messages: [{ role: 'user', content: ask }],
     })
+    await recordUsage('claude-opus-5-5', res.usage, 'email check')
     if (res.stop_reason === 'refusal' || !res.parsed_output) return { error: 'The check couldn’t run on this email. Try again.' }
     const out = res.parsed_output
     return { ready: out.ready && !out.issues.some((i) => i.severity === 'fix'), summary: out.summary.trim(), issues: out.issues.slice(0, 8) }
@@ -120,6 +122,7 @@ export async function fixEmail(r: { what: string; issues: FixIssue[]; fields: Ed
       output_config: { effort: 'medium', format: betaZodOutputFormat(Fixed) },
       messages: [{ role: 'user', content: ask }],
     })
+    await recordUsage('claude-opus-5-5', res.usage, 'email fixes')
     if (res.stop_reason === 'refusal' || !res.parsed_output) return { error: 'The fixes couldn’t be made this time. Try again.' }
     const out = res.parsed_output
     const known = new Map(r.fields.map((f) => [f.key, f.value]))

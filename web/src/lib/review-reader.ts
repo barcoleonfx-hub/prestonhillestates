@@ -2,6 +2,7 @@ import 'server-only'
 import Anthropic from '@anthropic-ai/sdk'
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod'
 import { z } from 'zod'
+import { recordUsage } from './ai-usage'
 import { anthropicKey } from './anthropic-key'
 
 // Reads screenshots of Google reviews (phone or computer) with Claude's vision, and returns each review word for
@@ -71,6 +72,7 @@ export async function readReviewScreenshots(images: { type: string; data: Buffer
         ],
       }],
     })
+    await recordUsage('claude-opus-5-5', res.usage, 'review reader')
     if (res.stop_reason === 'refusal') return { reviews: [], error: 'The screenshots couldn’t be read. Try a clearer screenshot of just the reviews.' }
     if (res.stop_reason === 'max_tokens') return { reviews: [], error: 'Too many reviews in one go: try fewer screenshots at a time.' }
     const out = res.parsed_output
