@@ -1208,4 +1208,43 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       )`,
     ],
   },
+  {
+    id: '057_night_shift',
+    sql: [
+      // Replies the night shift drafted for emails waiting on us: staff read, edit and send them (lib/night-drafts).
+      `CREATE TABLE reply_drafts (
+        id TEXT PRIMARY KEY,
+        thread_id TEXT NOT NULL,
+        for_message_id TEXT NOT NULL,
+        person TEXT,
+        subject TEXT NOT NULL,
+        body TEXT NOT NULL,
+        check_note TEXT,
+        checks TEXT,
+        status TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        done_at TEXT,
+        done_by TEXT
+      )`,
+      `CREATE UNIQUE INDEX reply_drafts_for_idx ON reply_drafts (thread_id, for_message_id)`,
+      `CREATE INDEX reply_drafts_status_idx ON reply_drafts (status, created_at)`,
+      // Commitments staff made in their emails ("I'll call you tomorrow"), and whether they were kept (lib/promises).
+      `CREATE TABLE promises (
+        id TEXT PRIMARY KEY,
+        message_id TEXT NOT NULL,
+        thread_id TEXT NOT NULL,
+        person TEXT,
+        to_name TEXT,
+        to_addr TEXT,
+        promise TEXT NOT NULL,
+        due_date TEXT,
+        status TEXT NOT NULL,
+        sent_at TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        kept_at TEXT
+      )`,
+      `CREATE INDEX promises_status_idx ON promises (status, due_date)`,
+      `CREATE UNIQUE INDEX promises_msg_idx ON promises (message_id, promise)`,
+    ],
+  },
 ]

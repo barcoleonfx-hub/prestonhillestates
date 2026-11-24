@@ -1321,3 +1321,13 @@ kbd { font: 600 0.68rem/1 var(--sans, inherit); padding: 3px 6px; border-radius:
 .ag-people-h { font-size: 0.75rem; color: var(--faint); }
 .ag-people-r input:not([type=checkbox]) { font: inherit; font-size: 0.86rem; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; min-width: 0; }
 @media (max-width: 760px) { .ag-people-h { display: none; } .ag-people-r { grid-template-columns: 1fr 1fr; } }
+.dr-card { padding: 16px 20px; border-bottom: 1px solid var(--line-soft); display: grid; gap: 10px; }
+.dr-card.done { display: flex; gap: 12px; color: var(--faint); font-size: 0.86rem; }
+.dr-top { display: flex; gap: 12px; justify-content: space-between; align-items: center; flex-wrap: wrap; }
+.dr-theirs summary { cursor: pointer; font-size: 0.86rem; color: var(--ink-soft); }
+.dr-theirs p { white-space: pre-wrap; font-size: 0.86rem; background: var(--line-soft); border-radius: 8px; padding: 10px 12px; margin: 8px 0 0; }
+.dr-check { margin: 0; font-size: 0.86rem; background: #fdf3e1; color: #5c4210; border-radius: 8px; padding: 8px 12px; }
+.dr-body { font: inherit; font-size: 0.92rem; line-height: 1.5; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; width: 100%; box-sizing: border-box; }
+.dr-filter { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; }
+.pk-appt { padding: 14px 20px; border-bottom: 1px solid var(--line-soft); display: grid; gap: 8px; justify-items: start; }
+.pk-appt ul { margin: 0; padding-left: 18px; font-size: 0.86rem; display: grid; gap: 3px; }

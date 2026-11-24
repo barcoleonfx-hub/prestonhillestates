@@ -812,3 +812,38 @@ export const mailTriage = sqliteTable('mail_triage', {
   reason: text('reason'),
   at: text('at').notNull(),
 })
+
+/** A reply the night shift drafted for an email waiting on us (staff edit and send it, or bin it). */
+export const replyDrafts = sqliteTable('reply_drafts', {
+  id: text('id').primaryKey(),
+  threadId: text('thread_id').notNull(),
+  /** The email it answers (their latest): a newer one from them makes this draft out of date. */
+  forMessageId: text('for_message_id').notNull(),
+  /** Whose it is (from the briefing names), or null for anyone. */
+  person: text('person'),
+  subject: text('subject').notNull(),
+  body: text('body').notNull(),
+  /** What a person must check or fill in before it goes. */
+  checkNote: text('check_note'),
+  checks: text('checks'),
+  status: text('status').notNull(), // ready | sent | dismissed | stale
+  createdAt: text('created_at').notNull(),
+  doneAt: text('done_at'),
+  doneBy: text('done_by'),
+})
+
+/** Something staff promised in an email, and whether it was kept. */
+export const promises = sqliteTable('promises', {
+  id: text('id').primaryKey(),
+  messageId: text('message_id').notNull(),
+  threadId: text('thread_id').notNull(),
+  person: text('person'),
+  toName: text('to_name'),
+  toAddr: text('to_addr'),
+  promise: text('promise').notNull(),
+  dueDate: text('due_date'),
+  status: text('status').notNull(), // open | kept | dropped
+  sentAt: text('sent_at').notNull(),
+  createdAt: text('created_at').notNull(),
+  keptAt: text('kept_at'),
+})

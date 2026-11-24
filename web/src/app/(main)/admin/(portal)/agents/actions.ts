@@ -120,3 +120,48 @@ export async function sendAllBriefingsNow(): Promise<QueueResult & { sent?: stri
   revalidatePath('/admin/agents')
   return { ok: true, sent }
 }
+
+/** Sends a reply drafted overnight (as edited), in the same conversation, signed by whoever sends it. */
+export async function sendDraft(id: string, body: string): Promise<QueueResult> {
+  const me = await requireAdmin()
+  const { db, ready } = await import('@/db/client')
+  const { replyDrafts, mailThreads, mailMessages } = await import('@/db/schema')
+  const { and, desc, eq } = await import('drizzle-orm')
+  const { sendFromMailbox } = await import('@/lib/mailbox')
+  const { BLANK } = await import('@/lib/night-drafts')
+  const { now } = await import('@/lib/util')
+  await ready()
+  const d = await db.query.replyDrafts.findFirst({ where: eq(replyDrafts.id, id) })
+  if (!d || d.status !== 'ready') return { ok: false, error: 'That draft has already been dealt with.' }
+  const text = body.replace(/\r/g, '').trim()
+  if (text.length < 5) return { ok: false, error: 'Write the reply first.' }
+  const blank = text.match(BLANK)
+  if (blank) return { ok: false, error: `Fill in ${blank[0]} first (or take it out).` }
+  const t = await db.query.mailThreads.findFirst({ where: eq(mailThreads.id, d.threadId) })
+  const last = (await db.select().from(mailMessages).where(and(eq(mailMessages.threadId, d.threadId), eq(mailMessages.direction, 'in'))).orderBy(desc(mailMessages.sentAt)).limit(1))[0]
+  if (!t || !last) return { ok: false, error: 'That conversation no longer exists.' }
+  if (last.messageId !== d.forMessageId) return { ok: false, error: 'They’ve written again since this was drafted: open the conversation and reply to their latest email.' }
+  // Claim it so a double click can't send it twice.
+  const claim = await db.update(replyDrafts).set({ status: 'sending' }).where(and(eq(replyDrafts.id, id), eq(replyDrafts.status, 'ready')))
+  if (!claim.rowsAffected) return { ok: false, error: 'That draft has already been dealt with.' }
+  const to = (last.replyTo || last.fromAddr || '').trim()
+  const references = [...(last.refs ? last.refs.split(/\s+/) : []), last.messageId].slice(-20)
+  const quoted = last.body ? `\n\nOn ${new Date(last.sentAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/London' })}, ${last.fromName || last.fromAddr} wrote:\n${last.body.split('\n').slice(0, 60).map((l) => `> ${l}`).join('\n')}` : ''
+  const r = await sendFromMailbox({ to: [to], subject: d.subject, text: `${text}\n\n${me.name}\nPreston Hill Estates · 271 Preston Road, Harrow HA3 0PS · 020 8904 9005${quoted}`, inReplyTo: last.messageId, references, by: me.id })
+  if (!r.ok) { await db.update(replyDrafts).set({ status: 'ready' }).where(eq(replyDrafts.id, id)); return { ok: false, error: r.error } }
+  await db.update(replyDrafts).set({ status: 'sent', body: text, doneAt: now(), doneBy: me.id }).where(eq(replyDrafts.id, id))
+  await audit(me.id, 'draft_sent', 'mail_thread', d.threadId, d.subject.slice(0, 80))
+  return { ok: true }
+}
+
+/** Bins a reply drafted overnight. */
+export async function dismissDraft(id: string): Promise<QueueResult> {
+  const me = await requireAdmin()
+  const { db, ready } = await import('@/db/client')
+  const { replyDrafts } = await import('@/db/schema')
+  const { and, eq } = await import('drizzle-orm')
+  const { now } = await import('@/lib/util')
+  await ready()
+  const r = await db.update(replyDrafts).set({ status: 'dismissed', doneAt: now(), doneBy: me.id }).where(and(eq(replyDrafts.id, id), eq(replyDrafts.status, 'ready')))
+  return r.rowsAffected ? { ok: true } : { ok: false, error: 'That draft has already been dealt with.' }
+}

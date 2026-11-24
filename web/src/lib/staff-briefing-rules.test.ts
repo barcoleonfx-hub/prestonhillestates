@@ -73,3 +73,20 @@ describe('the Director’s snapshot', () => {
     for (const h of ['NEEDS ATTENTION NOW', 'THE TEAM', 'Fred [1 overdue callback]', 'Moniba [On top of it]', 'WHERE THE MONEY IS', 'Valuation: Hughes, guide £1,250,000']) expect(m.text).toContain(h)
   })
 })
+
+describe('promises and overnight drafts in the briefing', () => {
+  it('counts them, flags overdue promises and says so in words', async () => {
+    const { statsOf, statusOf, waitingLine } = await import('./staff-briefing-rules')
+    const withThem: Briefing = { ...b, outstanding: [
+      { ref: 'P1', at: '', title: 'You promised Sam: send the contract', detail: 'was due Mon 23 Nov', href: 'x', urgent: true, kind: 'promise' },
+      { ref: 'P2', at: '', title: 'You promised Jo: call back', detail: 'due today', href: 'x', kind: 'promise' },
+      { ref: 'D1', at: '', title: 'Check and send the 3 replies drafted overnight', detail: '', href: 'x', kind: 'drafts', count: 3 },
+    ] }
+    const st = statsOf(withThem)
+    expect(st.promises).toBe(2)
+    expect(st.overduePromises).toBe(1)
+    expect(st.drafts).toBe(3)
+    expect(statusOf(st)).toEqual({ label: '1 promise overdue', tone: 'bad' })
+    expect(waitingLine(st)).toBe('2 promises due (1 overdue), 3 replies drafted overnight to check')
+  })
+})

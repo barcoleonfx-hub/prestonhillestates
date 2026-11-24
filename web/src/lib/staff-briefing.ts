@@ -7,6 +7,8 @@ import { agentSettings } from './ai-usage'
 import { logAction } from './agents'
 import { askClaude } from './staff-briefing-ai'
 import { junkThreads } from './mail-triage'
+import { readyDrafts } from './night-drafts'
+import { promisesDue } from './promises'
 import { mailPaused, noteMailError } from './mail-health'
 import { mailboxStatus, sendFromMailbox } from './mailbox'
 import { knownBase } from './property-email-data'
@@ -21,6 +23,7 @@ const dayName = (date: string) => new Date(`${date}T12:00:00Z`).toLocaleDateStri
 const short = (iso: string) => new Date(iso).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' })
 const time = (iso: string) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' })
 const who = (m: { fromName?: string | null; fromAddr?: string | null }) => m.fromName?.trim() || m.fromAddr || 'someone'
+const dueDay = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })
 
 export async function briefingPeople(): Promise<Person[]> {
   const cfg = await agentSettings()
@@ -90,12 +93,17 @@ export async function buildBriefing(person: Person, today = todayLondon(), prefi
   const lastIns = pending.length ? await db.select().from(mailMessages).where(and(inArray(mailMessages.threadId, pending.map((t) => t.id)), eq(mailMessages.direction, 'in'))) : []
   const waitingFor = pending.filter((t) => !junk.has(t.id) && lastIns.some((m) => m.threadId === t.id && isFor(m, person.aliases)))
   const days = (iso: string | null) => (iso ? Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 864e5)) : 0)
+  // Promises they made in emails, due today or before; and replies drafted overnight for them.
+  const [owed, drafts] = await Promise.all([promisesDue(today, person.name).catch(() => []), readyDrafts(person.name).catch(() => [])])
+  const myDrafts = drafts.filter((d) => d.person === person.name)
   const outstanding: Item[] = [
+    ...owed.map((p) => ({ ref: ref('T'), at: p.sentAt, title: `You promised ${p.toName ?? 'them'}: ${p.promise}`, detail: p.dueDate! < today ? `was due ${dueDay(p.dueDate!)}` : 'due today', href: thread(p.threadId), urgent: p.dueDate! < today, kind: 'promise' as const })),
     ...taskRows.filter(({ t }) => t.dueAt < now).map(({ t, name }) => ({ ref: ref('T'), at: t.dueAt, title: `Overdue: ${t.title}${name ? ` (${name})` : ''}`, detail: `was due ${short(t.dueAt)}`, href: `${base}/admin/my-day`, urgent: true, kind: 'callback' as const })),
     ...todays.map((a) => ({ ref: ref('T'), at: a.startsAt, title: `${a.kind === 'valuation' ? 'Valuation' : a.kind === 'viewing' ? 'Viewing' : 'Appointment'} at ${time(a.startsAt)} with ${a.contactName ?? 'a client'}`, detail: clip(a.address, 60), href: `${base}/admin/diary/${a.id}`, kind: 'appointment' as const })),
     ...leads.map((e) => ({ ref: ref('T'), at: e.createdAt, title: `Get back to ${e.name}: new lead, nobody has replied`, detail: `came in ${short(e.createdAt)}`, href: `${base}/admin/enquiries/${e.id}`, urgent: days(e.createdAt) >= 1, kind: 'lead' as const })),
     ...waitingFor.map((t) => ({ ref: ref('T'), at: t.lastInAt ?? t.lastAt, title: `Reply to ${t.counterpartName || t.counterpart || 'them'}: “${clip(t.subject, 70)}”`, detail: t.lastInAt ? `waiting since ${short(t.lastInAt)}` : 'waiting for a reply', href: thread(t.id), urgent: days(t.lastInAt) >= 2, kind: 'reply' as const })),
     ...taskRows.filter(({ t }) => t.dueAt >= now).map(({ t, name }) => ({ ref: ref('T'), at: t.dueAt, title: `${t.title}${name ? ` (${name})` : ''}`, detail: `due ${time(t.dueAt)} today`, href: `${base}/admin/my-day`, kind: 'callback' as const })),
+    ...(myDrafts.length ? [{ ref: ref('T'), at: now, title: `Check and send the ${myDrafts.length === 1 ? 'reply' : `${myDrafts.length} replies`} drafted overnight`, detail: myDrafts.slice(0, 3).map((d) => d.from).join(', '), href: `${base}/admin/agents/drafts?who=${encodeURIComponent(person.name)}`, kind: 'drafts' as const, count: myDrafts.length }] : []),
   ]
   return { person, day: dayName(day), today: dayName(today), base, sent, activity, received, inbox, outstanding }
 }
@@ -124,7 +132,7 @@ const View = z.object({
 const RULES = `Rules:
 - Use only the items given. Every point cites its [ref] codes. Never invent a fact, name, figure, date or promise.
 - Be brief. Leave out routine and generic things: automated notifications, receipts, newsletters, routine admin and everyday small jobs. Only what someone needs to know or act on.
-- Urgent first: overdue callbacks, people waiting longest for a reply, new leads nobody has answered, money and deadlines (offers, instructions, renewals, complaints), today's appointments.
+- Urgent first: promises we made that are due or overdue, overdue callbacks, people waiting longest for a reply, new leads nobody has answered, money and deadlines (offers, instructions, renewals, complaints), today's appointments.
 - Plain, direct British English. No filler, no praise, no exclamation marks.`
 
 const SYSTEM = `You write the 10am daily briefing for one member of staff at Preston Hill Estates, an independent estate agent in Harrow, like a sharp office manager talking to them: descriptive, specific and short. They should read it in a minute and know what happened yesterday, what came of it, what's still waiting and exactly what to do first. Write in sentences, not lists of emails; only the actions are a list.
