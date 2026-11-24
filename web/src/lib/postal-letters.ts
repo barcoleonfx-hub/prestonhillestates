@@ -17,12 +17,14 @@ import { addressLines, chooseByDefault, fillLetter, firstName, LETTER_AFTER, LET
 import { AREAS } from './areas'
 import { lrTypeFor, salesOnStreet, typePlural, type AreaStats, type LrType } from './sold-prices'
 import { lrTypeOf, withoutOutliers } from './otm-guide'
-import { reportGuide } from './report-guide'
+import { reportGuide, reportStates, type ReportState } from './report-guide'
 import { now, uid } from './util'
 
 export type LetterCandidate = {
   id: string; name: string; address: string; lines: string[]; postable: boolean; home: string | null
   source: string; createdAt: string; status: string; booked: boolean; lastLetterAt: string | null; tick: boolean; why: string | null
+  /** Their property report: the letter's QR code opens it and its guide price is printed, so it must be finalised. */
+  report: ReportState
 }
 
 /** Valuation enquiries from the last `days` days that we may write to, newest first, with who to tick. */
@@ -34,9 +36,10 @@ export async function letterCandidates(days = 90): Promise<LetterCandidate[]> {
     .filter(({ e, c }) => isValuation(e) && !c?.doNotContact && e.outcome !== 'not_interested' && e.outcome !== 'do_not_call')
   const ids = rows.map((r) => r.e.id)
   if (!ids.length) return []
-  const [booked, letters] = await Promise.all([
+  const [booked, letters, reports] = await Promise.all([
     db.select({ id: appointments.enquiryId }).from(appointments).where(and(inArray(appointments.enquiryId, ids), eq(appointments.kind, 'valuation'), ne(appointments.status, 'cancelled'))),
     db.select({ id: postalLetters.enquiryId, at: postalLetters.postedAt }).from(postalLetters).where(and(inArray(postalLetters.enquiryId, ids), isNotNull(postalLetters.postedAt))),
+    reportStates(ids),
   ])
   const bookedIds = new Set(booked.map((b) => b.id))
   // A letter about any of a person's enquiries counts for all of them.
@@ -56,9 +59,15 @@ export async function letterCandidates(days = 90): Promise<LetterCandidate[]> {
     const lines = postable(fromEnquiry) ? fromEnquiry : postable(fromRecord) ? fromRecord : fromEnquiry.length ? fromEnquiry : fromRecord
     const ok = postable(lines)
     const r = { postable: ok, booked: bookedIds.has(e.id), lastLetterAt: last.get(person) ?? null, status: e.status }
+    const report = reports.get(e.id)!
+    const chosen = chooseByDefault(r)
+    // Only ticked to start with once their report is finalised from an up-to-date OnTheMarket guide: the QR code and
+    // the guide price go out with the letter.
+    const ready = report.state === 'final' && !report.stale
     return [{
       id: e.id, name: e.name, address: lines.join(', '), lines, home: shortHome(lines),
-      source: ENQUIRY_SOURCES[e.source] ?? e.source, createdAt: e.createdAt, ...r, ...chooseByDefault(r),
+      source: ENQUIRY_SOURCES[e.source] ?? e.source, createdAt: e.createdAt, ...r, report,
+      tick: chosen.tick && ready, why: chosen.why ?? (chosen.tick && !ready ? 'report not ready' : null),
     }]
   })
 }
@@ -112,7 +121,7 @@ export type LetterFacts = {
   /** The guide price from their finalised property report (the same figure the QR code's report shows). */
   guide: { asking: number; low: number | null; high: number | null; rent: boolean } | null
 }
-export type PrintedLetter = { id: string; name: string; first: string; lines: string[]; home: string | null; before: string[]; after: string[]; report: string; reportShort: string; qr: string; facts: LetterFacts }
+export type PrintedLetter = { id: string; enquiryId: string; name: string; first: string; lines: string[]; home: string | null; before: string[]; after: string[]; report: string; reportShort: string; qr: string; facts: LetterFacts; reportState: ReportState }
 
 const outwardOf = (pc: string | null) => (pc ?? '').toUpperCase().match(/^([A-Z]{1,2}\d[A-Z\d]?)\s*\d[A-Z]{2}$/)?.[1] ?? null
 /** "THE DRIVE" or "the Drive" → "The Drive". */
@@ -185,6 +194,7 @@ export async function batchView(id: string): Promise<{ id: string; sender: strin
   // Their kind of home, where the enquiry says ("Type: Semi-detached house"), so houses are compared with houses.
   const typeOf = new Map(es.map((e) => [e.id, /^(?:type|type of property|property type)\s*:\s*(.+)$/im.exec(e.message ?? '')?.[1]?.trim() ?? null]))
   const letting = new Map(es.map((e) => [e.id, e.intent === 'letting' || /\b(letting|rental valuation|rent(al)? estimate|landlord|to let)\b/i.test(e.message ?? '')]))
+  const states = await reportStates(rows.map((r) => r.enquiryId))
   const letters = await Promise.all(rows.map(async (r) => {
     const report = `${base}/report/${await shareFor(r.enquiryId)}?utm_source=letter`
     const first = firstName(r.name)
@@ -192,7 +202,7 @@ export async function batchView(id: string): Promise<{ id: string; sender: strin
     const facts = await letterFacts(lines, letting.get(r.enquiryId) ?? false, typeOf.get(r.enquiryId) ?? null, r.enquiryId)
     const v = { first, home: r.home, street: facts.street, area: facts.area }
     return {
-      id: r.id, name: r.name, first, lines: r.address.split('\n'), home: r.home, facts,
+      id: r.id, enquiryId: r.enquiryId, name: r.name, first, lines: r.address.split('\n'), home: r.home, facts, reportState: states.get(r.enquiryId)!,
       before: fillLetter(b.beforeText, v), after: fillLetter(b.afterText, v),
       report, reportShort: report.replace(/^https?:\/\//, '').replace(/\?.*$/, ''),
       qr: await QRCode.toDataURL(report, { margin: 0, width: 360, errorCorrectionLevel: 'M', color: { dark: '#1C1B19', light: '#FFFFFF' } }),

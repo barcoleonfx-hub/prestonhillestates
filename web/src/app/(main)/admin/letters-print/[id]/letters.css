@@ -60,3 +60,10 @@
 }
 .pl-body .pl-facts .pl-guide { background: #23211A; color: #FBF8EE; border-radius: 2mm; padding: 2mm 3mm; margin-bottom: 2.5mm; }
 .pl-facts .pl-guide b { color: #E9C46A; font-size: 1.15em; }
+/* Letters whose property report isn't ready (screen only: the bar never prints). */
+.pl-bar .pl-flags { flex-basis: 100%; background: #FBE3D8; color: #2B1A12; border-radius: 10px; padding: 10px 14px; font-size: 13.5px; line-height: 1.5; }
+.pl-flags b { color: #8A2F1C; }
+.pl-flags ul { margin: 6px 0; padding-left: 18px; }
+.pl-flags a { color: #8A2F1C; font-weight: 600; }
+.pl-flags small { color: #6B4A3C; }
+.pl-bar .pl-ok { color: #24613F; font-size: 13px; font-weight: 600; }

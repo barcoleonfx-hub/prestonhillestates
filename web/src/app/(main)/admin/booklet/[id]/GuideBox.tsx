@@ -106,6 +106,7 @@ export function GuideBox({ id, guide, values, setValues, rent, prices }: {
       <div className="bk-gstate">{final ? `✓ Finalised ${when(guide.finalisedAt!)} · ready to send` : 'Not finalised yet'}</div>
       <h2>OnTheMarket guide <small>{guide.fileName.length > 28 ? `${guide.fileName.slice(0, 26)}…` : guide.fileName}</small></h2>
       {guide.mismatch ? <p className="bk-help small bk-warn">{guide.mismatch}</p> : null}
+      {guide.stale ? <p className="bk-help small bk-warn"><b>This guide was made on {new Date(`${guide.madeOn}T12:00:00Z`).toLocaleDateString('en-GB', { dateStyle: 'medium', timeZone: 'UTC' })}, over 3 months ago.</b> Download a new one from OnTheMarket and upload it below (“Wrong guide, or need to change it?”), so the report and the letters use today’s figures.</p> : null}
       <dl>
         {g.address ? <><dt>For</dt><dd>{g.address}</dd></> : null}
         {g.made ? <><dt>Made</dt><dd>{new Date(`${g.made}T12:00:00Z`).toLocaleDateString('en-GB', { dateStyle: 'medium', timeZone: 'UTC' })}</dd></> : null}
