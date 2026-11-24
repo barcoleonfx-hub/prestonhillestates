@@ -10,6 +10,7 @@ import { moveToPlan, saveBriefings, saveBudget, saveDirector, startRecentPlans }
 import SendBriefingButton from './SendBriefingButton'
 import SendAllBriefings from './SendAllBriefings'
 import { briefingPeople, lastBriefings } from '@/lib/staff-briefing'
+import { readyDrafts } from '@/lib/night-drafts'
 import { agentStatus } from '@/lib/agent-status'
 import { followupBoard } from '@/lib/followups'
 
@@ -25,7 +26,8 @@ const gbp = (n: number) => `£${n.toFixed(2)}`
 export default async function AgentsPage() {
   await requireAdmin()
   const [guides, letters, actions, held, spend, cfg, last, board, status] = await Promise.all([guidesToUpload(), todaysLetters(), recentActions(40), heldItems(), monthSpend(), agentSettings(), lastReport(), followupBoard(), agentStatus()])
-  const [people, briefed] = await Promise.all([briefingPeople(), lastBriefings()])
+  const [people, briefed, drafts] = await Promise.all([briefingPeople(), lastBriefings(), readyDrafts().catch(() => [])])
+  const nightDrafts = drafts.length
   const allOk = status.checks.every((c) => c.ok)
   const to = cfg.directorTo || 'info@prestonhillestates.com'
   const missing = guides.filter((g) => g.report.state === 'none')
@@ -37,6 +39,14 @@ export default async function AgentsPage() {
           <p className="sub">The agents work your valuation leads and report every morning. Nothing goes to a client without the OnTheMarket guide and a sense-check. What needs a person is here.</p>
         </div>
       </div>
+
+      <section className="card fu-list ag-sec" id="night">
+        <div className="fu-head"><h2>Night shift</h2><p>Between 1am and 6am the agents sort the day’s emails (pitches and spam out), read what staff promised in their emails, draft a reply to everything waiting, build the reports for new valuation requests, and leave today’s pack ready. Nothing is sent to anyone at night.</p></div>
+        <div className="fu-row ag-row">
+          <span className="fu-main"><b>{nightDrafts} repl{nightDrafts === 1 ? 'y' : 'ies'} drafted, waiting to be checked</b><small>Read each one, fill in anything in [brackets], then send or bin it.</small></span><span />
+          <span className="fu-acts"><Link className="btn btn-gold btn-sm" href="/admin/agents/pack">Today’s pack</Link><Link className="btn btn-ghost btn-sm" href="/admin/agents/drafts">Check the drafts</Link></span>
+        </div>
+      </section>
 
       <section className="card fu-list ag-sec" id="status">
         <div className="fu-head"><h2>{allOk ? '✓ The agents are running' : 'The agents need something from you'}</h2><p>What the agents depend on. They act when something happens (a new valuation request, a report finalised, a follow-up falling due), so a quiet list below can just mean nothing was due yet.</p></div>

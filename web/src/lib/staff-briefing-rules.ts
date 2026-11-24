@@ -46,7 +46,8 @@ export type Item = {
   ref: string; at: string; title: string; detail: string; href: string; urgent?: boolean
   /** Automated, no reply needed, or a pitch or spam: left out of the summaries. */ routine?: boolean
   /** £, for high-value items. */ value?: number
-  /** What sort of to-do: a reply someone's waiting for, a callback, a new lead, an appointment. */ kind?: 'reply' | 'callback' | 'lead' | 'appointment'
+  /** What sort of to-do: a reply someone's waiting for, a callback, a new lead, an appointment, something we promised, replies drafted overnight. */ kind?: 'reply' | 'callback' | 'lead' | 'appointment' | 'promise' | 'drafts'
+  /** How many (for the drafted-replies item). */ count?: number
 }
 export type Briefing = {
   person: Person
@@ -77,6 +78,8 @@ export function statsOf(b: Briefing) {
     replies: replies.length, overdueReplies: replies.filter((i) => i.urgent).length, oldestReply: replies.map((i) => i.at).sort()[0] ?? null,
     callbacks: of('callback').length, overdueCallbacks: of('callback').filter((i) => i.urgent).length,
     leads: of('lead').length, today: of('appointment').length,
+    promises: of('promise').length, overduePromises: of('promise').filter((i) => i.urgent).length,
+    drafts: of('drafts').reduce((n, i) => n + (i.count ?? 0), 0),
     important: b.inbox.filter((i) => !i.routine).length, routine: b.inbox.filter((i) => i.routine).length,
   }
 }
@@ -85,6 +88,7 @@ export type Stats = ReturnType<typeof statsOf>
 /** On track, busy or behind: from the counts. */
 export function statusOf(st: Stats): { label: string; tone: 'ok' | 'warn' | 'bad' } {
   if (st.overdueCallbacks) return { label: `${st.overdueCallbacks} overdue callback${st.overdueCallbacks === 1 ? '' : 's'}`, tone: 'bad' }
+  if (st.overduePromises) return { label: `${st.overduePromises} promise${st.overduePromises === 1 ? '' : 's'} overdue`, tone: 'bad' }
   if (st.overdueReplies >= 3) return { label: `${st.overdueReplies} replies over 2 days late`, tone: 'bad' }
   if (st.leads) return { label: `${st.leads} new lead${st.leads === 1 ? '' : 's'} waiting`, tone: 'warn' }
   if (st.replies || st.callbacks) return { label: 'Busy', tone: 'warn' }
@@ -101,6 +105,8 @@ export function waitingLine(st: Stats): string {
     st.callbacks ? `${plural(st.callbacks, 'callback')}${st.overdueCallbacks ? ` (${st.overdueCallbacks} overdue)` : ''}` : null,
     st.leads ? `${plural(st.leads, 'new lead')} not answered` : null,
     st.today ? `${plural(st.today, 'appointment')} today` : null,
+    st.promises ? `${plural(st.promises, 'promise')} due${st.overduePromises ? ` (${st.overduePromises} overdue)` : ''}` : null,
+    st.drafts ? `${plural(st.drafts, 'reply', 'replies')} drafted overnight to check` : null,
   ].filter(Boolean)
   return parts.length ? parts.join(', ') : 'nothing waiting'
 }
@@ -211,12 +217,14 @@ export function dueToday(s: Snapshot): { who: string; item: Item }[] {
     .sort((a, b) => (a.item.at < b.item.at ? -1 : 1)).slice(0, 8)
 }
 
+const ORDER: Record<string, number> = { promise: 0, callback: 1, lead: 2, reply: 3, drafts: 4, appointment: 5 }
+
 /** Without Claude: the picture in words from the counts, each person's line, and the biggest values. */
 export function plainSnapshot(s: Snapshot): SnapshotView {
   const all = s.team.map((b) => ({ b, st: statsOf(b) }))
   const sum = (k: keyof Stats) => all.reduce((n, x) => n + (Number(x.st[k]) || 0), 0)
   const urgentItems = s.team.flatMap((b) => b.outstanding.filter((o) => o.urgent).map((o) => ({ b, o })))
-    .sort((x, y) => ({ callback: 0, lead: 1, reply: 2, appointment: 3 }[x.o.kind ?? 'reply'] - { callback: 0, lead: 1, reply: 2, appointment: 3 }[y.o.kind ?? 'reply']) || (x.o.at < y.o.at ? -1 : 1))
+    .sort((x, y) => ((ORDER[x.o.kind ?? 'reply'] ?? 9) - (ORDER[y.o.kind ?? 'reply'] ?? 9)) || (x.o.at < y.o.at ? -1 : 1))
   return {
     summary: `Across the team: ${plural(sum('replies'), 'email')} waiting for a reply (${sum('overdueReplies')} over 2 days), ${plural(sum('overdueCallbacks'), 'overdue callback')}, ${plural(sum('leads'), 'new lead')} not answered and ${plural(sum('today'), 'appointment')} today.${s.highValue.length ? ` ${plural(s.highValue.length, 'high-value item')} in play.` : ''}`,
     urgent: urgentItems.slice(0, 5).map(({ b, o }) => ({ text: `${b.person.name}: ${o.title}`, why: o.detail, refs: [o.ref] })),

@@ -13,7 +13,7 @@ const SOUND_KEY = 'phe_alert_sound'
 
 /** A reply to one of our emails is an enquiry alert too, titled "… replied". */
 const tagFor = (a: { kind: string; title: string }) => (a.kind === 'enquiry' && / replied$/.test(a.title) ? 'Reply' : TAG[a.kind] ?? 'Alert')
-const TAG: Record<string, string> = { booked: 'New booking', changed: 'Changed', cancelled: 'Cancelled', reminder: 'Reminder', callback: 'Callback due', callback_assigned: 'New callback for you', enquiry: 'New enquiry', guide: 'OnTheMarket guide', letter: 'Letter', approval: 'Needs approval', urgent: 'Call now' }
+const TAG: Record<string, string> = { booked: 'New booking', changed: 'Changed', cancelled: 'Cancelled', reminder: 'Reminder', callback: 'Callback due', callback_assigned: 'New callback for you', enquiry: 'New enquiry', guide: 'OnTheMarket guide', letter: 'Letter', approval: 'Needs approval', urgent: 'Call now', pack: 'Night shift' }
 
 function readSound(): boolean {
   try { return localStorage.getItem(SOUND_KEY) !== 'off' } catch { return true }
@@ -200,6 +200,7 @@ export function AlertCenter({ me, initialPending }: { me: { id: string; name: st
                   {a.kind === 'guide' && a.enquiry ? <Link className="btn btn-gold btn-sm" href={`/admin/booklet/${a.enquiry.id}`} onClick={() => ack([a.id])}>Upload the guide</Link> : null}
                   {a.kind === 'letter' ? <Link className="btn btn-gold btn-sm" href="/admin/agents#letters" onClick={() => ack([a.id])}>Today’s letters</Link> : null}
                   {a.kind === 'approval' ? <Link className="btn btn-gold btn-sm" href="/admin/agents#approve" onClick={() => ack([a.id])}>Review it</Link> : null}
+                  {a.kind === 'pack' ? <Link className="btn btn-gold btn-sm" href="/admin/agents/pack" onClick={() => ack([a.id])}>Open today’s pack</Link> : null}
                   {a.enquiry ? <Link className="btn btn-dark btn-sm" href={`/admin/enquiries/${a.enquiry.id}`} onClick={() => ack([a.id])}>Open the enquiry</Link>
                     : a.kind === 'enquiry' ? <Link className="btn btn-dark btn-sm" href="/admin/enquiries" onClick={() => ack([a.id])}>Open enquiries</Link> : null}
                   {tk?.contactId ? <button type="button" className="btn btn-dark btn-sm" onClick={() => { ack([a.id]); openCallLog({ contactId: tk.contactId!, direction: 'out' }) }}>Log the call</button> : null}

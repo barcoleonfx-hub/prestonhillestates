@@ -17,6 +17,7 @@ import { runDirector } from '@/lib/director'
 import { runBookedEmails } from '@/lib/booked-emails'
 import { runThankYous } from '@/lib/instant-thanks'
 import { runBriefings } from '@/lib/staff-briefing'
+import { runNightShift } from '@/lib/night-shift'
 import { runReconnects } from '@/lib/reconnect'
 import { runLetters } from '@/lib/letters'
 import { markDormant } from '@/lib/leads'
@@ -57,6 +58,8 @@ export async function GET(req: Request) {
     await runFollowups().catch((e) => console.error('follow-ups failed', e))
     // Booked valuations: a confirmation to the client, and a reminder the day before (sense-checked).
     await runBookedEmails().catch((e) => console.error('booking emails failed', e))
+    // The night shift (1am to 6am): sorts emails, finds promises, drafts replies, builds reports, leaves the morning pack.
+    await runNightShift().catch((e) => console.error('night shift failed', e))
     // The 10am staff briefings (one email per person).
     await runBriefings().catch((e) => console.error('staff briefings failed', e))
     // The Director's daily report to the office, once a day from 7:30am London.
