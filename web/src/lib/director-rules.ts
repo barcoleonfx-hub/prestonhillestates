@@ -14,6 +14,8 @@ export type DirectorFacts = {
   emails: { sent: number; held: number; blocked: number }
   approvals: number
   whatsappsDue: number
+  /** Calls due from the Valuation agent's plans. */
+  callsDue: number
   replies: number
   checks: { total: number; passed: number; held: number; blocked: number }
   week: { valuations: number; booked: number; replies: number; sent: number }
@@ -28,7 +30,8 @@ export function numbersIn(text: string): number[] {
 
 /** The view may only use numbers the facts contain (or small counting words like "two"); null if it's fine. */
 export function viewProblem(v: DirectorView, f: DirectorFacts): string | null {
-  const allowed = new Set(numbersIn(JSON.stringify(f).replace(/"[a-z]+":/gi, ' ')))
+  // Today's figures, plus the one count the report itself works out: how many things need a person.
+  const allowed = new Set([...numbersIn(JSON.stringify(f).replace(/"[a-z]+":/gi, ' ')), needsYou(f).length])
   const used = numbersIn([v.headline, v.view, ...v.next].join(' '))
   const odd = used.filter((n) => !allowed.has(n))
   return odd.length ? `it quoted ${odd.join(', ')}, which isn’t in today’s figures` : null
@@ -44,6 +47,7 @@ export function needsYou(f: DirectorFacts): Todo[] {
   if (f.guides.draft) out.push({ text: `Finalise ${s(f.guides.draft, 'report')} (guide uploaded, price not confirmed)`, href: `${f.base}/admin/agents#guides` })
   if (f.letters.toPrint) out.push({ text: `Print and post ${s(f.letters.toPrint, 'valuation letter')}`, href: `${f.base}/admin/agents#letters` })
   if (f.approvals) out.push({ text: `Approve or reject ${s(f.approvals, 'email')} the sense-check held`, href: `${f.base}/admin/agents#approve` })
+  if (f.callsDue) out.push({ text: `Make ${s(f.callsDue, 'follow-up call')} (the script is on the list)`, href: `${f.base}/admin/follow-ups#calls` })
   if (f.whatsappsDue) out.push({ text: `Send ${s(f.whatsappsDue, 'follow-up WhatsApp')}`, href: `${f.base}/admin/follow-ups` })
   for (const v of f.valuations.today) out.push({ text: `Valuation at ${v.time}: ${v.who}${v.where ? `, ${v.where}` : ''}`, href: `${f.base}/admin/diary` })
   return out

@@ -18,7 +18,7 @@ import { activeStaff } from '@/lib/appointments'
 import { LEAD_MAGNETS, LEAD_STATUSES, isUkMobile, statusLabel } from '@/lib/lead-rules'
 import { leadTimeline } from '@/lib/leads'
 import { waFor, waHomes } from '@/lib/whatsapp-data'
-import { STEPS } from '@/lib/followup-rules'
+import { planLabel, stepsFor } from '@/lib/followup-rules'
 import { fmtWhen } from '@/lib/time'
 import { followupAction } from '../../../lead-actions'
 import { WhatsAppButton } from '../../WhatsAppButton'
@@ -128,13 +128,17 @@ export default async function EnquiryPage({ params, searchParams }: { params: Pr
               {contact ? <div><dt>Consent</dt><dd>{[contact.emailOptInAt ? 'emails' : null, contact.whatsappOptInAt ? 'WhatsApp' : null].filter(Boolean).join(' and ') || (contact.marketingOptOut ? 'Unsubscribed from emails' : 'None given')}{contact.whatsappOptInAt && !isUkMobile(contact.phoneE164) ? ' (no UK mobile on file)' : ''}</dd></div> : null}
             </dl>
             <div className="lead-fu">
-              <div><b>Follow-ups: </b>{e.followupState === 'active' ? <>next is {STEPS[e.followupStep]?.label.toLowerCase()}, {e.followupNextAt ? fmtWhen(e.followupNextAt) : 'soon'} (step {e.followupStep + 1} of {STEPS.length})</>
+              <div><b>{planLabel(e.followupPlan)}: </b>{e.followupState === 'active' ? <>next is {(stepsFor(e.followupPlan)[e.followupStep]?.label ?? "").replace(/^\w/, (ch) => ch.toLowerCase())}, {e.followupNextAt ? fmtWhen(e.followupNextAt) : 'soon'} (step {e.followupStep + 1} of {stepsFor(e.followupPlan).length})</>
                 : e.followupState === 'paused' ? <>paused{e.followupNote ? ` (${e.followupNote.replace(/^Paused by /, 'by ')})` : ''}</>
                 : e.followupState === 'stopped' ? <>stopped: {e.followupNote?.toLowerCase() ?? 'by hand'}</>
                 : e.followupState === 'done' ? <>all done, no reply</>
                 : <>not being followed up</>}</div>
               <div className="fu-acts">
                 {(['active', 'paused'] as (string | null)[]).includes(e.followupState) ? null : <form action={followupAction}><input type="hidden" name="id" value={e.id} /><input type="hidden" name="what" value="start" /><button className="btn btn-ghost btn-sm" type="submit">{e.followupState ? 'Start again' : 'Start follow-ups'}</button></form>}
+                {e.followupState === 'active' && stepsFor(e.followupPlan)[e.followupStep]?.channel === 'call' && e.followupNextAt && e.followupNextAt <= new Date(Date.now() + 12 * 3600e3).toISOString() ? <>
+                  <form action={followupAction}><input type="hidden" name="id" value={e.id} /><input type="hidden" name="what" value="called" /><input type="hidden" name="answered" value="yes" /><button className="btn btn-gold btn-sm" type="submit">Called: spoke to them</button></form>
+                  <form action={followupAction}><input type="hidden" name="id" value={e.id} /><input type="hidden" name="what" value="called" /><input type="hidden" name="answered" value="no" /><button className="btn btn-ghost btn-sm" type="submit">Called: no answer</button></form>
+                </> : null}
                 {e.followupState === 'active' ? <form action={followupAction}><input type="hidden" name="id" value={e.id} /><input type="hidden" name="what" value="pause" /><button className="btn btn-ghost btn-sm" type="submit">Pause</button></form> : null}
                 {e.followupState === 'paused' ? <form action={followupAction}><input type="hidden" name="id" value={e.id} /><input type="hidden" name="what" value="resume" /><button className="btn btn-ghost btn-sm" type="submit">Carry on</button></form> : null}
                 {e.followupState === 'active' || e.followupState === 'paused' ? <form action={followupAction}><input type="hidden" name="id" value={e.id} /><input type="hidden" name="what" value="stop" /><button className="btn btn-ghost btn-sm" type="submit">Stop</button></form> : null}

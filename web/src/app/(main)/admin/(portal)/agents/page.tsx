@@ -7,6 +7,7 @@ import { lastReport } from '@/lib/director'
 import SendReportButton from './SendReportButton'
 import HeldCard from './HeldCard'
 import { saveBudget, saveDirector } from './actions'
+import { followupBoard } from '@/lib/followups'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Agents' }
@@ -19,7 +20,7 @@ const gbp = (n: number) => `£${n.toFixed(2)}`
 /** The agents' desk: what's waiting on staff (OnTheMarket guides, today's letters) and everything the agents did. */
 export default async function AgentsPage() {
   await requireAdmin()
-  const [guides, letters, actions, held, spend, cfg, last] = await Promise.all([guidesToUpload(), todaysLetters(), recentActions(40), heldItems(), monthSpend(), agentSettings(), lastReport()])
+  const [guides, letters, actions, held, spend, cfg, last, board] = await Promise.all([guidesToUpload(), todaysLetters(), recentActions(40), heldItems(), monthSpend(), agentSettings(), lastReport(), followupBoard()])
   const to = cfg.directorTo || 'info@prestonhillestates.com'
   const missing = guides.filter((g) => g.report.state === 'none')
   return (
@@ -37,6 +38,15 @@ export default async function AgentsPage() {
         {held.length ? held.map((h) => (
           <HeldCard key={h.id} id={h.id} title={h.title} to={h.payload.to} subject={h.payload.subject} text={h.payload.text} checks={h.checks} when={ago(h.createdAt)} expired={h.expired} enquiryHref={h.enquiryId ? `/admin/enquiries/${h.enquiryId}` : null} />
         )) : <p className="fu-empty">✓ Nothing waiting. Everything the agents sent passed every check.</p>}
+      </section>
+
+      <section className="card fu-list ag-sec" id="calls">
+        <div className="fu-head"><h2>Calls and WhatsApps due <span>{board.callsDue.length + board.waDue.length}</span></h2><p>The Valuation agent’s plan: a call and a WhatsApp the same day a request comes in, a second call on day 2, and calls after a visit. They’re listed with what to say on the Follow-ups page.</p></div>
+        <div className="fu-row ag-row">
+          <span className="fu-main"><b>{board.callsDue.length} call{board.callsDue.length === 1 ? '' : 's'} and {board.waDue.length} WhatsApp{board.waDue.length === 1 ? '' : 's'} to do</b><small>{board.callsDue.slice(0, 4).map((r) => r.e.name).join(', ') || 'No calls due'}</small></span>
+          <span />
+          <span className="fu-acts"><Link className="btn btn-gold btn-sm" href="/admin/follow-ups#calls">Open the list</Link></span>
+        </div>
       </section>
 
       <section className="card fu-list ag-sec" id="guides">
@@ -59,8 +69,8 @@ export default async function AgentsPage() {
         <div className="fu-head"><h2>Today’s letters</h2><p>Prepared by the agent as each report is finalised. Print double-sided, fold and post today, then press “They’re in the post”.</p></div>
         {letters.length ? letters.map((b) => (
           <div key={b.id} className="fu-row ag-row">
-            <span className="fu-main"><b>{b.count} letter{b.count === 1 ? '' : 's'} ready</b><small>Started {ago(b.createdAt)}</small></span>
-            <span className="fu-acts"><Link className="btn btn-gold btn-sm" href={`/admin/letters-print/${b.id}`}>Print today’s letters</Link></span>
+            <span className="fu-main"><b>{b.count} {b.followUp ? 'follow-up ' : ''}letter{b.count === 1 ? '' : 's'} ready</b><small>{b.followUp ? 'Two weeks on, no reply yet · ' : 'New valuation reports · '}started {ago(b.createdAt)}</small></span>
+            <span className="fu-acts"><Link className="btn btn-gold btn-sm" href={`/admin/letters-print/${b.id}`}>Print {b.followUp ? 'the follow-up letters' : 'today’s letters'}</Link></span>
           </div>
         )) : <p className="fu-empty">No letters waiting today.</p>}
       </section>

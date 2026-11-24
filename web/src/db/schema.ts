@@ -168,6 +168,8 @@ export const enquiries = sqliteTable('enquiries', {
   /** Automatic follow-ups (see lib/followup-rules): active, paused, stopped or done; the next step and when. */
   followupState: text('followup_state'),
   followupStep: integer('followup_step').notNull().default(0),
+  /** The follow-up plan: null (standard), 'valuation' or 'after-visit' (lib/followup-rules). */
+  followupPlan: text('followup_plan'),
   followupStartedAt: text('followup_started_at'),
   followupNextAt: text('followup_next_at'),
   followupNote: text('followup_note'),
@@ -308,6 +310,9 @@ export const appointments = sqliteTable(
     notes: text('notes'),
     status: text('status').notNull().default('scheduled'),
     reminderMin: integer('reminder_min').notNull().default(30),
+    /** When the Valuation agent emailed the client to confirm, and the day before. */
+    clientConfirmedAt: text('client_confirmed_at'),
+    clientRemindedAt: text('client_reminded_at'),
     remindedAt: text('reminded_at'),
     cancelReason: text('cancel_reason'),
     outcome: text('outcome'),

@@ -1185,4 +1185,14 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       `CREATE INDEX ai_usage_at_idx ON ai_usage (at)`,
     ],
   },
+  {
+    id: '055_valuation_plan',
+    sql: [
+      // Which follow-up plan a lead is on (lib/followup-rules): null for the standard one.
+      `ALTER TABLE enquiries ADD COLUMN followup_plan TEXT`,
+      // The Valuation agent's emails to the client about a booked valuation.
+      `ALTER TABLE appointments ADD COLUMN client_confirmed_at TEXT`,
+      `ALTER TABLE appointments ADD COLUMN client_reminded_at TEXT`,
+    ],
+  },
 ]

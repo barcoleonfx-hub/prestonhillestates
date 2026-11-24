@@ -10,6 +10,7 @@ import { APPT_KINDS, DURATIONS, INTEREST, NEXT_STEPS, OUTCOMES, REMINDERS } from
 import { announce, clashesFor, getAppointment } from '@/lib/appointments'
 import { upsertContact } from '@/lib/contacts'
 import { contactLeadEvent, leadEvent } from '@/lib/leads'
+import { startAfterVisit } from '@/lib/followups'
 import { contacts } from '@/db/schema'
 import { durationLabel, fmtTime, fmtWhen, londonToIso } from '@/lib/time'
 import { now, uid } from '@/lib/util'
@@ -157,6 +158,8 @@ export async function recordOutcome(_prev: SimpleState, form: FormData): Promise
     outcomeNext: next, outcomeAt: now(), outcomeBy: me.id, updatedAt: now(),
   }).where(and(eq(appointments.id, id), eq(appointments.status, 'scheduled')))
   if (res.rowsAffected !== 1) return { ok: true }
+  // The Valuation agent follows up while they think it over: thanks today, a call, an email, a call.
+  if (a.kind === 'valuation' && a.enquiryId && went && interest === 'considering') await startAfterVisit(a.enquiryId).catch((e) => console.error('after-visit follow-ups', e))
   revalidatePath('/admin', 'layout')
   return { ok: true }
 }

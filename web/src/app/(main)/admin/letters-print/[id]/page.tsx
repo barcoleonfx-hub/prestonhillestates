@@ -92,7 +92,7 @@ export default async function LettersPrintPage({ params, searchParams }: { param
               <div className="pl-date">{date}</div>
               <div className="pl-body">
                 <p className="pl-dear">Dear {l.first || 'Sir or Madam'},</p>
-                <h2>Thank you for <em>getting in touch.</em></h2>
+                {b.id.startsWith('follow-') ? <h2>Here whenever <em>you’re ready.</em></h2> : <h2>Thank you for <em>getting in touch.</em></h2>}
                 {l.before.map((p, i) => <p key={`b${i}`}>{p}</p>)}
                 <div className="pl-offer">
                   {f.guide ? (
