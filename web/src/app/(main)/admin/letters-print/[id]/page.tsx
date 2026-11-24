@@ -31,6 +31,18 @@ export default async function LettersPrintPage({ params, searchParams }: { param
           ? <span className="pl-done">{sp.posted ? `Noted on ${sp.posted} lead${sp.posted === '1' ? '' : 's'}.` : 'Marked as posted.'}</span>
           : <form action={markPostedAction}><input type="hidden" name="batch" value={b.id} /><button className="pl-btn ghost" type="submit">They’re in the post</button></form>}
         <p>Print on plain A4 with “Background graphics” on and margins set to none. Fold in three, address side out, into a DL window envelope.</p>
+        {(() => {
+          // Each letter's QR code opens their report and prints its guide price: flag any that aren't ready.
+          const why = (st: (typeof b.letters)[number]['reportState']) => st.state === 'none' ? 'no OnTheMarket guide uploaded' : st.state === 'draft' ? 'report not finalised' : st.stale ? `OnTheMarket guide from ${st.madeOn!.split('-').reverse().join('/')}, over 3 months old` : null
+          const bad = b.letters.map((l) => ({ l, why: why(l.reportState) })).filter((x) => x.why)
+          return bad.length ? (
+            <div className="pl-flags">
+              <b>Check before printing: {bad.length} of {b.letters.length} {b.letters.length === 1 ? 'letter has' : 'letters have'} a property report that isn’t ready.</b> Its QR code would open a report without our guide price, or one from an old guide.
+              <ul>{bad.map(({ l, why }) => <li key={l.id}><Link href={`/admin/booklet/${l.enquiryId}`} target="_blank">{l.name}</Link>: {why}</li>)}</ul>
+              <small>Finalise the report (upload the latest OnTheMarket guide, set the guide price) and reload this page: the letter picks up the price.</small>
+            </div>
+          ) : <p className="pl-ok">✓ Every letter’s property report is finalised from an up-to-date OnTheMarket guide.</p>
+        })()}
       </div>
       {b.letters.map((l) => (
         <article key={l.id} className="pl-letter">

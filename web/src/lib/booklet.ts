@@ -116,6 +116,9 @@ export type BookletGuide = {
   gaps: string[]
   /** The guide is for a different postcode from the report. */
   mismatch: string | null
+  /** The day the guide was made, and whether it's too old to rely on (prices and listings will have moved). */
+  madeOn: string
+  stale: boolean
 }
 
 export const FIELDS: (keyof BookletFields)[] = ['kind', 'forName', 'home', 'visit', 'greeting', 'letter', 'figure', 'asking', 'fee', 'hide', 'story', 'showPaid']

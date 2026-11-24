@@ -100,6 +100,11 @@ export default async function EnquiryPage({ params, searchParams }: { params: Pr
           <b>Their property report isn’t finalised yet,</b> so it won’t go out by email or WhatsApp. Open the report, upload the OnTheMarket Market Appraisal Guide for the home and set the guide price.
           <Link className="btn btn-gold btn-sm" href={`/admin/booklet/${e.id}`}>Finalise the report</Link>
         </p>
+      ) : valuation && w.reportStale ? (
+        <p className="ew-report-todo">
+          <b>Their OnTheMarket guide is from {w.reportStale.split('-').reverse().join('/')}, over 3 months old.</b> Upload a new one so the report, emails and letters use today’s figures.
+          <Link className="btn btn-gold btn-sm" href={`/admin/booklet/${e.id}`}>Update the report</Link>
+        </p>
       ) : null}
 
       {valuation ? (

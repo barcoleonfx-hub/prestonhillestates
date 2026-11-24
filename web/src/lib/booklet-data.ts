@@ -23,7 +23,7 @@ import { drivingTimes, geocodeHome, mapboxStatus, mapboxToken, walkingRoute, wal
 import type { BookletArea, BookletStory } from './booklet'
 import { figureText, homeFrom } from './valuation-check'
 import { rentCheck } from './valuation-check-data'
-import { reportGuide } from './report-guide'
+import { guideAge, reportGuide } from './report-guide'
 import { guideGaps, lrTypeOf, TYPE_PLURAL, withoutOutliers } from './otm-guide'
 import type { LrType } from './sold-prices'
 
@@ -282,7 +282,7 @@ export async function bookletInput(id: string, me: { name: string }): Promise<Bo
 function guideFor(rg: NonNullable<Awaited<ReturnType<typeof reportGuide>>>, k: BookletKind, mismatch: string | null): BookletInput['guide'] {
   const same = !rg.priceFor || rg.priceFor === k
   const asking = same ? rg.asking : null, low = same ? rg.low : null, high = same ? rg.high : null
-  return { fileName: rg.fileName, uploadedAt: rg.uploadedAt, finalisedAt: rg.finalisedAt && asking ? rg.finalisedAt : null, data: rg.guide, asking, low, high, gaps: guideGaps(rg.guide), mismatch }
+  return { fileName: rg.fileName, uploadedAt: rg.uploadedAt, finalisedAt: rg.finalisedAt && asking ? rg.finalisedAt : null, data: rg.guide, asking, low, high, gaps: guideGaps(rg.guide), mismatch, ...guideAge(rg.guide.made, rg.uploadedAt) }
 }
 
 /** The key facts on "What buyers will love", from the guide where it has them (it's the official record). */

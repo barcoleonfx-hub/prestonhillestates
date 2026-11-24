@@ -10,7 +10,7 @@ import { emailProperty, knownBase, listingNamedIn, listingOptions } from './prop
 import { googleSummary, reviewsFor } from './reviews-data'
 import type { Review } from './reviews'
 import { salesNear } from './sold-prices'
-import { reportFinal } from './report-guide'
+import { reportFinal, reportStates } from './report-guide'
 import { shareFor } from './booklet-share'
 import { figureText, homeFrom, parseSaved } from './valuation-check'
 import { isBoilerplate } from './email-import'
@@ -103,6 +103,7 @@ export async function enquiryWorkspace(id: string, me: { name: string }) {
   // Their personal property report (the valuation booklet at its private link), for the first email.
   // Only once it's finalised (the OnTheMarket guide is in and the guide price set): a half-finished report is never sent.
   const reportReady = valuation ? await reportFinal(e.id).catch(() => false) : false
+  const reportOld = valuation ? (await reportStates([e.id]).catch(() => null))?.get(e.id) ?? null : null
   if (valuation && reportReady) {
     const token = await shareFor(e.id).catch(() => null)
     if (token) ctx.report = { url: `${base}/report/${token}`, image: `${base}/report/${token}/photo` }
@@ -122,5 +123,5 @@ export async function enquiryWorkspace(id: string, me: { name: string }) {
   const live = valuation ? [] : await listPublished({}).catch(() => [])
   const listings = listingOptions(live, base)
   const suggested = !p && live.length ? listingNamedIn(`${e.message ?? ''}\n${e.postcode ?? ''}`, live) : null
-  return { e, p, contact: contact ?? null, sorted, valuation, kind, ctx, lines, saved, mailboxReady: !!box?.hasPassword, listings, suggested, reportReady }
+  return { e, p, contact: contact ?? null, sorted, valuation, kind, ctx, lines, saved, mailboxReady: !!box?.hasPassword, listings, suggested, reportReady, reportStale: reportOld?.stale ? reportOld.madeOn : null }
 }

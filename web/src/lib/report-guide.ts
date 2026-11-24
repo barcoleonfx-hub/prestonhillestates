@@ -1,5 +1,5 @@
 import 'server-only'
-import { eq } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import { db, ready } from '@/db/client'
 import { booklets, reportGuides } from '@/db/schema'
 import { isGuide, parseGuide, type GuideItem, type OtmGuide } from './otm-guide'
@@ -63,4 +63,36 @@ export async function reportFinal(bookletId: string): Promise<boolean> {
   // Switched between selling and letting since it was finalised: its price is for the other one.
   const kind = await db.query.booklets.findFirst({ where: eq(booklets.id, bookletId) }).then((b) => { try { return b ? (JSON.parse(b.data) as { kind?: string }).kind : undefined } catch { return undefined } })
   return !kind || !r[0].priceFor || kind === r[0].priceFor
+}
+
+/** A guide older than this is out of date: prices and listings will have moved. */
+export const GUIDE_FRESH_DAYS = 90
+
+export type ReportState = {
+  /** final: guide in, price set, finalised. draft: guide in, not finalised. none: no OnTheMarket guide uploaded. */
+  state: 'final' | 'draft' | 'none'
+  /** The day the guide was made (or uploaded, if it doesn't say), and whether that's over GUIDE_FRESH_DAYS ago. */
+  madeOn: string | null
+  stale: boolean
+  asking: number | null
+}
+
+export const guideAge = (made: string | null, uploadedAt: string): { madeOn: string; stale: boolean } => {
+  const madeOn = (made ?? uploadedAt).slice(0, 10)
+  return { madeOn, stale: Date.now() - Date.parse(`${madeOn}T12:00:00Z`) > GUIDE_FRESH_DAYS * 864e5 }
+}
+
+/** Where each enquiry's property report stands, for flagging letters and emails before they go. */
+export async function reportStates(ids: string[]): Promise<Map<string, ReportState>> {
+  await ready()
+  const out = new Map<string, ReportState>(ids.map((id) => [id, { state: 'none', madeOn: null, stale: false, asking: null }]))
+  if (!ids.length) return out
+  const rows = await db.select().from(reportGuides).where(inArray(reportGuides.bookletId, ids))
+  for (const r of rows) {
+    let made: string | null = null
+    try { made = (JSON.parse(r.data) as OtmGuide).made } catch { /* unreadable: treat as made when uploaded */ }
+    const age = guideAge(made, r.uploadedAt)
+    out.set(r.bookletId, { state: r.finalisedAt && r.asking ? 'final' : 'draft', ...age, asking: r.asking })
+  }
+  return out
 }

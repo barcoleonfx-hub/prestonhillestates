@@ -1176,7 +1176,14 @@ kbd { font: 600 0.68rem/1 var(--sans, inherit); padding: 3px 6px; border-radius:
 .vl-sender { max-width: 320px; margin-top: 10px; }
 .vl-days a { margin: 0 3px; text-decoration: underline; color: var(--ink-soft); }
 .vl-days a.on { font-weight: 700; color: var(--ink); text-decoration: none; }
-.vl-row { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) auto; gap: 12px; align-items: center; }
+.vl-row { display: grid; grid-template-columns: minmax(0, 1.1fr) 230px minmax(0, 1fr) auto; gap: 12px; align-items: center; }
+/* Whether the person's property report is ready to go out with their letter. */
+.vl-flag { justify-self: start; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; text-decoration: none; white-space: nowrap; }
+.vl-flag.ok { background: #e7f3ec; color: #24613f; }
+.vl-flag.warn { background: #fdf3e1; color: #7a5410; }
+.vl-flag.bad { background: #fbe3d8; color: #8a2f1c; }
+.vl-flag:hover { text-decoration: underline; }
+.vl-flagged { margin-bottom: 14px; }
 .vl-row.off .fu-main b { color: var(--ink-soft); }
 .vl-addr { font-size: 0.85rem; padding: 7px 10px; }
 @media (max-width: 760px) { .vl-row { grid-template-columns: 1fr; } }

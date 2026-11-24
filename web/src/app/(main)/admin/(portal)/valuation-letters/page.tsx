@@ -5,6 +5,7 @@ import { admins } from '@/db/schema'
 import { requireAdmin } from '@/lib/auth'
 import { statusLabel } from '@/lib/lead-rules'
 import { letterCandidates, letterText, recentBatches } from '@/lib/postal-letters'
+import type { ReportState } from '@/lib/report-guide'
 import { fmtWhen } from '@/lib/time'
 import { printLettersAction } from '../../postal-actions'
 import { TickAll } from '../reconnect/TickAll'
@@ -18,6 +19,17 @@ const DAYS = [30, 90, 180, 365]
 const ago = (iso: string) => { const d = Math.floor((Date.now() - Date.parse(iso)) / 864e5); return d === 0 ? 'today' : d === 1 ? 'yesterday' : d < 60 ? `${d} days ago` : `${Math.round(d / 30.4)} months ago` }
 
 /** A personal letter to everyone who asked for a valuation lately: their property report by QR code, and a free visit. */
+const shortDate = (iso: string) => new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
+
+/** Whether their property report is ready to go out with a letter, and a link to fix it if not. */
+function ReportFlag({ id, report }: { id: string; report: ReportState }) {
+  const href = `/admin/booklet/${id}`
+  if (report.state === 'none') return <Link className="vl-flag bad" href={href}>No OnTheMarket guide: upload it</Link>
+  if (report.state === 'draft') return <Link className="vl-flag bad" href={href}>Report not finalised</Link>
+  if (report.stale) return <Link className="vl-flag warn" href={href} title={`The guide was made on ${shortDate(report.madeOn!)}`}>Guide from {shortDate(report.madeOn!)}: get a new one</Link>
+  return <Link className="vl-flag ok" href={href}>✓ Report £{report.asking?.toLocaleString('en-GB')}</Link>
+}
+
 export default async function ValuationLettersPage({ searchParams }: { searchParams: Promise<{ days?: string; msg?: string }> }) {
   const me = await requireAdmin()
   const sp = await searchParams
@@ -26,6 +38,7 @@ export default async function ValuationLettersPage({ searchParams }: { searchPar
   await ready()
   const [rows, text, batches, staff] = await Promise.all([letterCandidates(days), letterText(), recentBatches(), db.select({ name: admins.name }).from(admins).where(eq(admins.active, true))])
   const ticked = rows.filter((r) => r.tick).length
+  const flagged = rows.filter((r) => r.report.state !== 'final' || r.report.stale).length
   return (
     <>
       <div className="page-head">
@@ -37,6 +50,12 @@ export default async function ValuationLettersPage({ searchParams }: { searchPar
       {sp.msg === 'none' ? <p className="notice warn" style={{ marginBottom: 14 }}>Tick at least one person first.</p> : null}
       {sp.msg === 'words' ? <p className="notice warn" style={{ marginBottom: 14 }}>The letter needs some words before and after the code.</p> : null}
       {sp.msg === 'address' ? <p className="notice warn" style={{ marginBottom: 14 }}>None of the ticked people has a full address (a house number or name, and the postcode).</p> : null}
+
+      {flagged ? (
+        <p className="notice warn vl-flagged">
+          <b>{flagged} of {rows.length} {rows.length === 1 ? 'person has' : 'people have'} a property report that isn’t ready to send.</b> Each letter prints a QR code to their report and its guide price, so the report should be finalised from an up-to-date OnTheMarket guide first. They’re flagged below and left unticked: open the report, upload the guide and finalise it, then tick them.
+        </p>
+      ) : null}
 
       <form action={printLettersAction}>
         <section className="card card-pad vl-words">
@@ -63,6 +82,7 @@ export default async function ValuationLettersPage({ searchParams }: { searchPar
                 <span className="fu-main"><b>{r.name}</b>
                   <small>{r.source} · asked {ago(r.createdAt)} · {statusLabel(r.status)}{r.lastLetterAt ? ` · last letter ${ago(r.lastLetterAt)}` : ''}{r.why ? ` · ${r.why.toLowerCase()}` : ''}</small></span>
               </label>
+              <ReportFlag id={r.id} report={r.report} />
               <input className="input vl-addr" name={`addr_${r.id}`} defaultValue={r.address} placeholder="House number, street, town, postcode" aria-label={`Address for ${r.name}`} />
               <Link className="btn btn-ghost btn-sm" href={`/admin/enquiries/${r.id}?back=/admin/valuation-letters`}>Open</Link>
             </div>
