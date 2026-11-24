@@ -248,6 +248,24 @@ export const reportGuides = sqliteTable('report_guides', {
   finalisedAt: text('finalised_at'),
 })
 
+/**
+ * Everything an agent does or decides (lib/agents): a letter prepared, a message sent or held, a prompt raised, with
+ * what the sense-check found. The Director's daily email and each agent's page are built from it.
+ */
+export const agentActions = sqliteTable('agent_actions', {
+  id: text('id').primaryKey(),
+  agent: text('agent').notNull(),
+  enquiryId: text('enquiry_id'),
+  kind: text('kind').notNull(),
+  status: text('status').notNull(),
+  title: text('title').notNull(),
+  detail: text('detail'),
+  checks: text('checks'),
+  createdAt: text('created_at').notNull(),
+  doneAt: text('done_at'),
+  doneBy: text('done_by'),
+})
+
 export const enquiryNotes = sqliteTable(
   'enquiry_notes',
   {

@@ -75,6 +75,8 @@ export type ReportState = {
   madeOn: string | null
   stale: boolean
   asking: number | null
+  /** When the guide was uploaded (null without one). */
+  uploadedAt: string | null
 }
 
 export const guideAge = (made: string | null, uploadedAt: string): { madeOn: string; stale: boolean } => {
@@ -85,14 +87,14 @@ export const guideAge = (made: string | null, uploadedAt: string): { madeOn: str
 /** Where each enquiry's property report stands, for flagging letters and emails before they go. */
 export async function reportStates(ids: string[]): Promise<Map<string, ReportState>> {
   await ready()
-  const out = new Map<string, ReportState>(ids.map((id) => [id, { state: 'none', madeOn: null, stale: false, asking: null }]))
+  const out = new Map<string, ReportState>(ids.map((id) => [id, { state: 'none', madeOn: null, stale: false, asking: null, uploadedAt: null }]))
   if (!ids.length) return out
   const rows = await db.select().from(reportGuides).where(inArray(reportGuides.bookletId, ids))
   for (const r of rows) {
     let made: string | null = null
     try { made = (JSON.parse(r.data) as OtmGuide).made } catch { /* unreadable: treat as made when uploaded */ }
     const age = guideAge(made, r.uploadedAt)
-    out.set(r.bookletId, { state: r.finalisedAt && r.asking ? 'final' : 'draft', ...age, asking: r.asking })
+    out.set(r.bookletId, { state: r.finalisedAt && r.asking ? 'final' : 'draft', ...age, asking: r.asking, uploadedAt: r.uploadedAt })
   }
   return out
 }

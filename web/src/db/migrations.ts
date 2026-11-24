@@ -1144,4 +1144,25 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       )`,
     ],
   },
+  {
+    id: '053_agent_actions',
+    sql: [
+      // What each agent did or decided, with its sense-check (lib/agents).
+      `CREATE TABLE agent_actions (
+        id TEXT PRIMARY KEY,
+        agent TEXT NOT NULL,
+        enquiry_id TEXT,
+        kind TEXT NOT NULL,
+        status TEXT NOT NULL,
+        title TEXT NOT NULL,
+        detail TEXT,
+        checks TEXT,
+        created_at TEXT NOT NULL,
+        done_at TEXT,
+        done_by TEXT
+      )`,
+      `CREATE INDEX agent_actions_at_idx ON agent_actions (created_at)`,
+      `CREATE INDEX agent_actions_enquiry_idx ON agent_actions (enquiry_id, kind)`,
+    ],
+  },
 ]

@@ -28,6 +28,14 @@ export type LetterCandidate = {
   report: ReportState
 }
 
+/** Where a letter to them goes: the address on the enquiry, or on their record (sellers who rang in, or one staff corrected). */
+export function letterLines(e: typeof enquiries.$inferSelect, c: { address: string | null } | null): string[] {
+  const h = homeOf(e, true)
+  const fromEnquiry = addressLines(h.address, h.postcode)
+  const fromRecord = addressLines(c?.address ?? null, h.postcode)
+  return postable(fromEnquiry) ? fromEnquiry : postable(fromRecord) ? fromRecord : fromEnquiry.length ? fromEnquiry : fromRecord
+}
+
 /** Valuation enquiries from the last `days` days that we may write to, newest first, with who to tick. */
 export async function letterCandidates(days = 90): Promise<LetterCandidate[]> {
   await ready()
@@ -53,11 +61,7 @@ export async function letterCandidates(days = 90): Promise<LetterCandidate[]> {
     const person = e.contactId ?? e.id
     if (seen.has(person)) return []
     seen.add(person)
-    const h = homeOf(e, true)
-    // Their address from the enquiry, or what's on their record (sellers who rang in, or an address staff corrected).
-    const fromEnquiry = addressLines(h.address, h.postcode)
-    const fromRecord = addressLines(c?.address ?? null, h.postcode)
-    const lines = postable(fromEnquiry) ? fromEnquiry : postable(fromRecord) ? fromRecord : fromEnquiry.length ? fromEnquiry : fromRecord
+    const lines = letterLines(e, c)
     const ok = postable(lines)
     const r = { postable: ok, booked: bookedIds.has(e.id), lastLetterAt: last.get(person) ?? null, status: e.status }
     const report = reports.get(e.id)!

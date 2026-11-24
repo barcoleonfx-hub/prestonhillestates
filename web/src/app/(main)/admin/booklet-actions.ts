@@ -10,6 +10,7 @@ import { FIELDS, type BookletFields } from '@/lib/booklet'
 import { now } from '@/lib/util'
 import { guideGaps, type OtmGuide } from '@/lib/otm-guide'
 import { guideFromPdf, reportGuide } from '@/lib/report-guide'
+import { queueSameDayLetter } from '@/lib/agents'
 
 const LIMIT: Partial<Record<keyof BookletFields, number>> = { story: 1500, letter: 3000, forName: 120, home: 200, visit: 160, greeting: 80, figure: 120, asking: 120, fee: 200 }
 
@@ -68,7 +69,7 @@ const price = (n: unknown) => { const v = Math.round(Number(n)); return Number.i
 const count = (n: unknown) => { if (n === null || n === '' || n === undefined) return null; const v = Math.round(Number(n)); return Number.isFinite(v) && v >= 0 && v < 100 ? v : null }
 
 /** Staff's corrections to the guide's facts, the guide price, and (with finalise) marking the report ready to send. */
-export async function saveGuide(id: string, input: { fixes: GuideFixes; asking: number | null; low: number | null; high: number | null; rent: boolean; finalise?: boolean; reopen?: boolean }): Promise<{ ok: boolean; error?: string }> {
+export async function saveGuide(id: string, input: { fixes: GuideFixes; asking: number | null; low: number | null; high: number | null; rent: boolean; finalise?: boolean; reopen?: boolean }): Promise<{ ok: boolean; error?: string; letter?: string }> {
   const me = await requireAdmin()
   await ready()
   if (!BOOKLET_ID.test(id)) return { ok: false, error: 'That report doesn’t exist.' }
@@ -96,6 +97,11 @@ export async function saveGuide(id: string, input: { fixes: GuideFixes; asking: 
   if (input.finalise) await audit(me.id, 'report_finalised', whose(id), id.replace(/^a-/, ''), `£${asking?.toLocaleString('en-GB')} (£${low?.toLocaleString('en-GB')}–£${high?.toLocaleString('en-GB')})`)
   revalidatePath(`/admin/booklet/${id}`)
   if (!id.startsWith('a-')) revalidatePath(`/admin/enquiries/${id}`)
+  // The Valuation agent: once the report is finalised, their letter goes into today's batch (sense-checked first).
+  if (input.finalise && !id.startsWith('a-')) {
+    const l = await queueSameDayLetter(id, { id: me.id, name: me.name }).catch((e) => { console.error('same-day letter failed', e); return { ok: false, why: 'the letter couldn’t be prepared' } })
+    return { ok: true, letter: l.ok ? 'Their valuation letter is in today’s letters, ready to print.' : `No letter prepared: ${l.why}.` }
+  }
   return { ok: true }
 }
 
