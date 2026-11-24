@@ -13,11 +13,12 @@ import { homeOf } from './enquiry-workspace'
 import { shareFor } from './booklet-share'
 import { knownBase } from './property-email-data'
 import { leadEvent } from './leads'
-import { addressLines, chooseByDefault, fillLetter, firstName, LETTER_AFTER, LETTER_BEFORE, OLD_LETTER, postable, shortHome, streetOf } from './postal-letter-rules'
+import { addressLines, chooseByDefault, fillLetter, firstName, LETTER_AFTER, LETTER_BEFORE, OLD_LETTERS, postable, shortHome, streetOf } from './postal-letter-rules'
 import { AREAS } from './areas'
 import { lrTypeFor, salesOnStreet, typePlural, type AreaStats, type LrType } from './sold-prices'
 import { lrTypeOf, withoutOutliers } from './otm-guide'
 import { reportGuide, reportStates, type ReportState } from './report-guide'
+import { reviewsFor } from './reviews-data'
 import { now, uid } from './util'
 
 export type LetterCandidate = {
@@ -79,7 +80,9 @@ export async function letterText(): Promise<{ before: string; after: string }> {
   try {
     const v = JSON.parse(row?.value ?? '{}')
     // Words never changed from the old starting ones get the new starting ones.
-    return { before: v.before && v.before !== OLD_LETTER.before ? v.before : LETTER_BEFORE, after: v.after && v.after !== OLD_LETTER.after ? v.after : LETTER_AFTER }
+    // (the browser saves line breaks as \r\n, so the words are compared without them)
+    const same = (a: string, b: string) => a.replace(/\r/g, '').trim() === b.replace(/\r/g, '').trim()
+    return { before: v.before && !OLD_LETTERS.some((o) => same(o.before, v.before)) ? v.before : LETTER_BEFORE, after: v.after && !OLD_LETTERS.some((o) => same(o.after, v.after)) ? v.after : LETTER_AFTER }
   } catch { return { before: LETTER_BEFORE, after: LETTER_AFTER } }
 }
 
@@ -121,7 +124,8 @@ export type LetterFacts = {
   /** The guide price from their finalised property report (the same figure the QR code's report shows). */
   guide: { asking: number; low: number | null; high: number | null; rent: boolean } | null
 }
-export type PrintedLetter = { id: string; enquiryId: string; name: string; first: string; lines: string[]; home: string | null; before: string[]; after: string[]; report: string; reportShort: string; qr: string; facts: LetterFacts; reportState: ReportState }
+export type LetterReview = { text: string; name: string; date: string | null }
+export type PrintedLetter = { id: string; enquiryId: string; letting: boolean; review: LetterReview | null; name: string; first: string; lines: string[]; home: string | null; before: string[]; after: string[]; report: string; reportShort: string; qr: string; facts: LetterFacts; reportState: ReportState }
 
 const outwardOf = (pc: string | null) => (pc ?? '').toUpperCase().match(/^([A-Z]{1,2}\d[A-Z\d]?)\s*\d[A-Z]{2}$/)?.[1] ?? null
 /** "THE DRIVE" or "the Drive" → "The Drive". */
@@ -194,21 +198,33 @@ export async function batchView(id: string): Promise<{ id: string; sender: strin
   // Their kind of home, where the enquiry says ("Type: Semi-detached house"), so houses are compared with houses.
   const typeOf = new Map(es.map((e) => [e.id, /^(?:type|type of property|property type)\s*:\s*(.+)$/im.exec(e.message ?? '')?.[1]?.trim() ?? null]))
   const letting = new Map(es.map((e) => [e.id, e.intent === 'letting' || /\b(letting|rental valuation|rent(al)? estimate|landlord|to let)\b/i.test(e.message ?? '')]))
-  const states = await reportStates(rows.map((r) => r.enquiryId))
+  const [states, salesReview, lettingsReview] = await Promise.all([reportStates(rows.map((r) => r.enquiryId)), letterReview('sales'), letterReview('lettings')])
   const letters = await Promise.all(rows.map(async (r) => {
     const report = `${base}/report/${await shareFor(r.enquiryId)}?utm_source=letter`
     const first = firstName(r.name)
     const lines = r.address.split('\n')
     const facts = await letterFacts(lines, letting.get(r.enquiryId) ?? false, typeOf.get(r.enquiryId) ?? null, r.enquiryId)
-    const v = { first, home: r.home, street: facts.street, area: facts.area }
+    const lets = letting.get(r.enquiryId) ?? false
+    const v = { first, home: r.home, street: facts.street, area: facts.area, letting: lets }
     return {
-      id: r.id, enquiryId: r.enquiryId, name: r.name, first, lines: r.address.split('\n'), home: r.home, facts, reportState: states.get(r.enquiryId)!,
+      id: r.id, enquiryId: r.enquiryId, letting: lets, review: (lets ? lettingsReview : salesReview) ?? salesReview ?? lettingsReview, name: r.name, first, lines: r.address.split('\n'), home: r.home, facts, reportState: states.get(r.enquiryId)!,
       before: fillLetter(b.beforeText, v), after: fillLetter(b.afterText, v),
       report, reportShort: report.replace(/^https?:\/\//, '').replace(/\?.*$/, ''),
       qr: await QRCode.toDataURL(report, { margin: 0, width: 360, errorCorrectionLevel: 'M', color: { dark: '#1C1B19', light: '#FFFFFF' } }),
     }
   }))
   return { id: b.id, sender: b.sender, createdAt: b.createdAt, postedAt: b.postedAt, letters }
+}
+
+/**
+ * One real five-star Google review for the back of the letter, word for word: a complete one (never cut short by
+ * Google) that fits the panel, from someone who sold (or let) with us.
+ */
+async function letterReview(category: 'sales' | 'lettings'): Promise<LetterReview | null> {
+  const list = await reviewsFor(category, 30).catch(() => [])
+  const ok = list.filter((r) => r.source === 'Google review' && (r.rating ?? 0) === 5 && !/(…|\.\.\.)\s*$/.test(r.text) && r.text.length >= 80 && r.text.length <= 260)
+  const best = ok.sort((a, b) => b.text.length - a.text.length)[0]
+  return best ? { text: best.text, name: best.name, date: best.date ?? null } : null
 }
 
 /** The letters are in the post: note it on each lead (it counts as us getting in touch). */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { LETTER_BEFORE, addressLines, chooseByDefault, fillLetter, firstName, joinLetter, postable, shortHome, splitLetter } from './postal-letter-rules'
+import { LETTER_AFTER, LETTER_BEFORE, addressLines, chooseByDefault, fillLetter, firstName, joinLetter, postable, shortHome, splitLetter } from './postal-letter-rules'
 
 describe('addresses for the envelope window', () => {
   it('puts each part on its own line with the postcode last', () => {
@@ -39,7 +39,8 @@ describe('the letter', () => {
     expect(firstName('Kanti Patel')).toBe('Kanti')
     expect(firstName('Mrs Patel')).toBe('Mrs Patel')
     const [p] = fillLetter(LETTER_BEFORE, { first: 'Kanti', home: '4 Kenton Park Avenue' })
-    expect(p).toMatch(/^Thank you for asking us about 4 Kenton Park Avenue\./)
+    expect(p).toMatch(/^Thank you for contacting Preston Hill Estates about 4 Kenton Park Avenue\./)
+    expect(fillLetter(LETTER_AFTER, { first: 'Kanti', home: null, letting: true })[0]).toContain('how we would let your home')
     expect(fillLetter('A\n\nB {home}', { first: '', home: null })).toEqual(['A', 'B your home'])
   })
 })

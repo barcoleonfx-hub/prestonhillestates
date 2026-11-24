@@ -13,44 +13,106 @@
 .pl-btn.ghost { background: #fff; color: #1F1D18; border-color: #D9D4C5; }
 .pl-done { color: #2F6B4E; font-weight: 600; }
 
-.pl-letter { width: 210mm; height: 297mm; margin: 24px auto 0; background: #fff; box-shadow: 0 10px 40px rgba(0,0,0,0.15); position: relative; overflow: hidden; font-size: 10pt; line-height: 1.45; }
-.pl-head { position: absolute; left: 20mm; right: 18mm; top: 14mm; display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 5mm; border-bottom: 0.4mm solid #D2552B; }
+.pl-letter { --ink: #23211A; --body: #4F4B40; --faint: #8E8977; --gold: #A47B1D; --gold2: #C4972F; --cream: #FBF8EE; --line: #E7E3D6; --serif: var(--font-serif), Georgia, serif;
+  width: 210mm; height: 297mm; margin: 24px auto 0; background: #fff; box-shadow: 0 10px 40px rgba(0,0,0,0.15); position: relative; overflow: hidden; font-size: 10pt; line-height: 1.5; color: var(--ink); }
+.pl-head { position: absolute; left: 20mm; right: 18mm; top: 13mm; display: flex; justify-content: space-between; align-items: center; padding-bottom: 4.5mm; border-bottom: 0.35mm solid var(--gold2); }
 .pl-brand { display: flex; align-items: center; gap: 3mm; }
 .pl-brand svg { width: 13mm; height: 13mm; }
 .pl-brand span { display: grid; line-height: 1.05; }
-.pl-brand b { font-size: 13pt; letter-spacing: 0.2em; font-weight: 800; }
-.pl-brand i { font-style: normal; font-size: 7.5pt; letter-spacing: 0.6em; color: #8A8470; margin-top: 1mm; }
-.pl-office { text-align: right; font-size: 8pt; line-height: 1.55; color: #5B574B; }
-.pl-return { position: absolute; left: 22mm; top: 44mm; font-size: 6.5pt; color: #8A8470; }
+.pl-brand b { font-size: 12.5pt; letter-spacing: 0.2em; font-weight: 700; }
+.pl-brand i { font-style: normal; font-size: 7pt; letter-spacing: 0.62em; color: var(--faint); margin-top: 1mm; }
+.pl-office { text-align: right; font-size: 7.8pt; line-height: 1.6; color: var(--body); }
+.pl-return { position: absolute; left: 22mm; top: 44mm; font-size: 6.5pt; color: var(--faint); }
 .pl-to { position: absolute; left: 22mm; top: 48.5mm; width: 88mm; height: 32mm; font-style: normal; font-size: 10.5pt; line-height: 1.4; display: grid; align-content: start; }
-.pl-date { position: absolute; right: 20mm; top: 49mm; font-size: 10pt; color: #5B574B; }
-.pl-body { position: absolute; left: 22mm; right: 22mm; top: 92mm; }
+.pl-date { position: absolute; right: 20mm; top: 49mm; font-size: 9.5pt; color: var(--body); }
+
+/* the front: the letter */
+.pl-body { position: absolute; left: 22mm; right: 22mm; top: 85mm; color: var(--body); }
 .pl-body p { margin: 0 0 3mm; }
-.pl-body h2 { font-size: 13pt; font-weight: 800; margin: 0.5mm 0 3mm; color: #1F1D18; letter-spacing: -0.01em; }
-.pl-qr { display: flex; align-items: center; gap: 6mm; margin: 2mm 0 5mm; padding: 4mm 5mm; border: 0.35mm solid #EADFD6; border-radius: 3mm; background: #FBF6F2; }
-.pl-qr img { width: 32mm; height: 32mm; display: block; background: #fff; padding: 1.5mm; border-radius: 1.5mm; }
-.pl-qr b { display: block; font-size: 11.5pt; }
-.pl-qr span { display: block; color: #5B574B; }
-.pl-qr small { display: block; margin-top: 2mm; font-size: 7.5pt; color: #8A8470; word-break: break-all; }
-.pl-band { display: grid; grid-template-columns: 1fr 62mm; gap: 4mm; margin: 1mm 0 3.5mm; align-items: start; }
-.pl-band .pl-qr { margin: 0; flex-direction: column; align-items: flex-start; gap: 2.5mm; padding: 4mm; }
-.pl-band .pl-qr img { width: 27mm; height: 27mm; }
-.pl-band .pl-qr b { font-size: 10pt; }
-.pl-band .pl-qr span { font-size: 9pt; line-height: 1.35; }
-.pl-band .pl-qr small { margin-top: 1mm; }
-.pl-facts { border: 0.35mm solid #EADFD6; border-radius: 3mm; padding: 3mm 4mm; font-size: 8.6pt; line-height: 1.35; }
-.pl-facts-h { display: block; font-size: 8pt; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: #D2552B; margin-bottom: 1.5mm; }
+.pl-body .pl-dear { color: var(--ink); }
+.pl-body h2 { font-family: var(--serif); font-weight: 400; font-size: 21pt; line-height: 1.1; color: var(--ink); margin: 1mm 0 3.5mm; letter-spacing: -0.01em; }
+.pl-body h2 em, .pl-hero h2 em { color: var(--gold); font-style: italic; }
+.pl-offer { display: grid; grid-template-columns: 1fr 54mm; gap: 4mm; margin: 4mm 0 4.5mm; align-items: stretch; }
+.pl-price { background: var(--ink); color: #fff; border-radius: 3.5mm; padding: 5mm 6mm; position: relative; overflow: hidden; }
+.pl-price::after { content: ""; position: absolute; right: -14mm; bottom: -14mm; width: 40mm; height: 40mm; border-radius: 50%; border: 0.5mm solid rgba(196,151,47,.35); }
+.pl-price .k { font-size: 7pt; letter-spacing: .2em; text-transform: uppercase; color: var(--gold2); font-weight: 700; }
+.pl-price .v { font-family: var(--serif); font-weight: 300; font-size: 30pt; line-height: 1; margin: 2mm 0 1.5mm; }
+.pl-price .r { font-size: 8.8pt; color: #D6D0BD; }
+.pl-price .r b { color: #fff; font-weight: 600; }
+.pl-price .tag { display: inline-block; margin-top: 3mm; font-size: 6.8pt; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; background: var(--gold2); color: var(--ink); border-radius: 10mm; padding: 1mm 2.6mm; }
+.pl-qr { border: 0.35mm solid var(--line); border-radius: 3.5mm; padding: 4mm; display: grid; justify-items: center; align-content: center; text-align: center; background: var(--cream); }
+.pl-qr img { width: 27mm; height: 27mm; display: block; background: #fff; padding: 1.3mm; border-radius: 1.5mm; }
+.pl-qr b { font-size: 9pt; margin-top: 2mm; color: var(--ink); }
+.pl-qr span { font-size: 7.6pt; line-height: 1.35; color: var(--body); margin-top: .6mm; }
+.pl-qr small { display: block; margin-top: 1mm; font-size: 6.5pt; color: var(--faint); word-break: break-all; line-height: 1.3; }
+.pl-facts { border: 0.35mm solid var(--line); border-radius: 3.5mm; padding: 4mm 5mm; font-size: 8.6pt; line-height: 1.35; }
+.pl-facts-h { display: block; font-size: 7.5pt; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--gold); margin-bottom: 1.5mm; }
 .pl-facts ul { list-style: none; margin: 0 0 2mm; padding: 0; }
-.pl-facts li { display: flex; justify-content: space-between; align-items: baseline; gap: 3mm; padding: 0.9mm 0; border-bottom: 0.25mm solid #F0E8E1; }
-.pl-facts li span small { margin-left: 2mm; }
-.pl-facts li small { font-size: 7.5pt; color: #8A8470; }
-.pl-facts li b { font-size: 10.5pt; font-weight: 800; white-space: nowrap; }
+.pl-facts li { display: flex; justify-content: space-between; align-items: baseline; gap: 3mm; padding: 1mm 0; border-bottom: 0.25mm solid var(--line); }
+.pl-facts li small { margin-left: 2mm; font-size: 7.5pt; color: var(--faint); }
+.pl-facts li b { font-size: 10.5pt; font-weight: 700; white-space: nowrap; color: var(--ink); }
 .pl-body .pl-facts p { margin: 0 0 1.5mm; }
-.pl-facts .pl-want { background: #FBE3D8; border-radius: 2mm; padding: 1.5mm 2.5mm; color: #2B1A12; }
-.pl-facts > small { display: block; font-size: 6.8pt; color: #8A8470; }
-.pl-sign { margin-top: 3mm !important; }
-.pl-name { margin-top: 7mm !important; }
-.pl-foot { position: absolute; left: 20mm; right: 20mm; bottom: 12mm; padding-top: 3mm; border-top: 0.25mm solid #E2DED1; font-size: 7pt; color: #8A8470; line-height: 1.5; }
+.pl-facts .pl-want { background: var(--cream); border-radius: 2mm; padding: 1.5mm 2.5mm; color: var(--ink); }
+.pl-inside { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3mm; margin: 0 0 4.5mm; }
+.pl-inside div { border-top: 0.5mm solid var(--gold2); padding-top: 2mm; font-size: 8.3pt; line-height: 1.4; }
+.pl-inside b { display: block; color: var(--ink); font-size: 8.8pt; margin-bottom: .5mm; }
+.pl-body .pl-sign { margin-top: 4mm; color: var(--ink); }
+.pl-body .pl-sig { font-family: var(--serif); font-style: italic; font-size: 17pt; color: var(--ink); margin: 2mm 0 0; line-height: 1; }
+.pl-body .pl-who { font-size: 9pt; }
+.pl-who b { color: var(--ink); }
+.pl-pto { position: absolute; right: 20mm; bottom: 20mm; font-size: 8.5pt; font-weight: 600; color: var(--gold); display: flex; align-items: center; gap: 2mm; }
+.pl-pto span { display: inline-grid; place-items: center; width: 6mm; height: 6mm; border-radius: 50%; background: var(--gold2); color: #fff; font-size: 9pt; }
+.pl-foot { position: absolute; left: 20mm; right: 20mm; bottom: 10mm; padding-top: 2.5mm; border-top: 0.25mm solid var(--line); font-size: 6.8pt; color: var(--faint); line-height: 1.5; }
+
+/* longer words, set smaller so the page still fits */
+.pl-fit1 .pl-body { font-size: 9.4pt; line-height: 1.45; }
+.pl-fit2 .pl-body { font-size: 8.9pt; line-height: 1.4; }
+.pl-fit2 .pl-body h2 { font-size: 18pt; margin-bottom: 2.5mm; }
+.pl-fit2 .pl-offer, .pl-fit3 .pl-offer { margin: 3mm 0 3mm; }
+.pl-fit3 .pl-body { font-size: 8.4pt; line-height: 1.38; }
+.pl-fit3 .pl-body h2 { font-size: 16pt; margin-bottom: 2mm; }
+.pl-fit3 .pl-inside { display: none; }
+
+/* the back: how we'll sell (or let) their home */
+.pl-hero { background: var(--ink); color: #fff; padding: 13mm 20mm 9mm; position: relative; overflow: hidden; }
+.pl-hero::before { content: ""; position: absolute; right: -30mm; top: -40mm; width: 120mm; height: 120mm; border-radius: 50%; background: radial-gradient(circle, rgba(196,151,47,.28), rgba(196,151,47,0) 70%); }
+.pl-hero .k { font-size: 7.5pt; letter-spacing: .24em; text-transform: uppercase; color: var(--gold2); font-weight: 700; position: relative; }
+.pl-hero h2 { font-family: var(--serif); font-weight: 400; font-size: 28pt; line-height: 1.05; margin: 3mm 0 0; letter-spacing: -.01em; position: relative; }
+.pl-hero p { font-size: 9.6pt; line-height: 1.55; color: #D6D0BD; margin: 3mm 0 0; max-width: 140mm; position: relative; }
+.pl-hero-mark { position: absolute; right: 20mm; top: 14mm; width: 22mm; height: 22mm; }
+.pl-steps { margin: 6mm 20mm 0; display: grid; grid-template-columns: 1fr 1fr; gap: 3.5mm 8mm; }
+.pl-step { display: grid; grid-template-columns: 12mm 1fr; gap: 3.5mm; align-items: start; }
+.pl-step .ic { width: 12mm; height: 12mm; border-radius: 50%; background: var(--cream); border: 0.35mm solid var(--gold2); display: grid; place-items: center; position: relative; }
+.pl-step .ic svg { width: 6mm; height: 6mm; fill: none; stroke: var(--gold); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.pl-step .n { position: absolute; top: -1.2mm; right: -1.2mm; width: 4.6mm; height: 4.6mm; border-radius: 50%; background: var(--ink); color: var(--gold2); font-size: 6.5pt; font-weight: 700; display: grid; place-items: center; }
+.pl-step h3 { font-size: 10pt; font-weight: 700; color: var(--ink); margin: .5mm 0 0; }
+.pl-step p { font-size: 8.2pt; line-height: 1.45; color: var(--body); margin: .8mm 0 0; }
+.pl-step small { display: inline-block; margin-top: 1.4mm; font-size: 6.8pt; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--gold); }
+.pl-seen { margin: 5mm 20mm 0; background: var(--cream); border-radius: 3.5mm; padding: 4mm 5mm; }
+.pl-seen h4, .pl-why h4 { font-size: 7.5pt; letter-spacing: .2em; text-transform: uppercase; color: var(--gold); font-weight: 700; margin: 0 0 3mm; }
+.pl-seen .chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2.5mm; }
+.pl-seen .chips div { background: #fff; border: 0.3mm solid var(--line); border-radius: 2.5mm; padding: 2.2mm 3mm; font-size: 8pt; line-height: 1.3; color: var(--body); }
+.pl-seen .chips b { display: block; font-size: 9.5pt; color: var(--ink); margin-bottom: .6mm; }
+.pl-row2 { margin: 5mm 20mm 0; display: grid; grid-template-columns: 1fr 1fr; gap: 7mm; }
+.pl-why ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 1.8mm; }
+.pl-why li { display: grid; grid-template-columns: 5mm 1fr; gap: 2mm; font-size: 8.6pt; line-height: 1.4; color: var(--body); }
+.pl-why li::before { content: "✓"; width: 5mm; height: 5mm; border-radius: 50%; background: var(--ink); color: var(--gold2); font-size: 7pt; font-weight: 700; display: grid; place-items: center; margin-top: .2mm; }
+.pl-why li b { color: var(--ink); }
+.pl-review { border: 0.35mm solid var(--line); border-radius: 3.5mm; padding: 4mm 5mm; }
+.pl-review .q { font-family: var(--serif); font-size: 34pt; line-height: .6; color: var(--gold2); height: 6mm; }
+.pl-review .stars { color: var(--gold2); font-size: 10pt; letter-spacing: .1em; }
+.pl-review blockquote { font-family: var(--serif); font-size: 9.6pt; line-height: 1.42; color: var(--ink); margin: 1.5mm 0 2.5mm; }
+.pl-review cite { font-style: normal; font-size: 8pt; color: var(--faint); }
+.pl-review cite b { color: var(--ink); }
+.pl-cta { position: absolute; left: 20mm; right: 20mm; bottom: 23mm; background: var(--gold2); border-radius: 4mm; padding: 5.5mm 6mm; display: grid; grid-template-columns: 1fr auto; gap: 6mm; align-items: center; color: var(--ink); }
+.pl-cta h3 { font-family: var(--serif); font-weight: 400; font-size: 17pt; line-height: 1.1; margin: 0; }
+.pl-cta p { font-size: 8.8pt; margin: 1.2mm 0 0; color: #3A2F12; }
+.pl-cta .call { text-align: right; font-size: 8.6pt; line-height: 1.5; }
+.pl-cta .call b { display: block; font-size: 14pt; font-weight: 700; }
+.pl-schemes { position: absolute; left: 20mm; right: 20mm; bottom: 9mm; display: flex; align-items: center; justify-content: space-between; gap: 5mm; padding-top: 3mm; border-top: 0.25mm solid var(--line); }
+.pl-schemes span { font-size: 6.8pt; color: var(--faint); max-width: 85mm; line-height: 1.4; }
+.pl-schemes div { display: flex; gap: 5mm; align-items: center; }
+.pl-schemes img { height: 7mm; width: auto; }
 
 @media print {
   .pl-page { background: #fff; padding: 0; }
@@ -58,8 +120,6 @@
   .pl-letter { margin: 0; box-shadow: none; page-break-after: always; break-after: page; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .pl-letter:last-of-type { page-break-after: auto; break-after: auto; }
 }
-.pl-body .pl-facts .pl-guide { background: #23211A; color: #FBF8EE; border-radius: 2mm; padding: 2mm 3mm; margin-bottom: 2.5mm; }
-.pl-facts .pl-guide b { color: #E9C46A; font-size: 1.15em; }
 /* Letters whose property report isn't ready (screen only: the bar never prints). */
 .pl-bar .pl-flags { flex-basis: 100%; background: #FBE3D8; color: #2B1A12; border-radius: 10px; padding: 10px 14px; font-size: 13.5px; line-height: 1.5; }
 .pl-flags b { color: #8A2F1C; }
