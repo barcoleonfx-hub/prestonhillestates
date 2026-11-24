@@ -11,7 +11,7 @@ const facts = (over: Partial<DirectorFacts> = {}): DirectorFacts => ({
   guides: { missing: 1, draft: 0, finalised: 2 },
   letters: { prepared: 2, toPrint: 2, posted: 1 },
   emails: { sent: 6, held: 1, blocked: 1 },
-  approvals: 1, whatsappsDue: 4, replies: 2,
+  approvals: 1, whatsappsDue: 4, callsDue: 3, replies: 2,
   checks: { total: 10, passed: 8, held: 1, blocked: 1 },
   week: { valuations: 14, booked: 6, replies: 9, sent: 31 },
   spend: { yesterday: 0.42, month: 7.1, budget: 40 },
@@ -40,7 +40,7 @@ describe('needs you today', () => {
     expect(t.every((x) => x.href.startsWith('https://www.prestonhillestates.com/admin/'))).toBe(true)
   })
   it('is empty on a quiet day', () => {
-    const quiet = facts({ leads: { valuations: 0, other: 0, list: [] }, valuations: { booked: 0, today: [] }, guides: { missing: 0, draft: 0, finalised: 0 }, letters: { prepared: 0, toPrint: 0, posted: 0 }, approvals: 0, whatsappsDue: 0 })
+    const quiet = facts({ leads: { valuations: 0, other: 0, list: [] }, valuations: { booked: 0, today: [] }, guides: { missing: 0, draft: 0, finalised: 0 }, letters: { prepared: 0, toPrint: 0, posted: 0 }, approvals: 0, whatsappsDue: 0, callsDue: 0 })
     expect(needsYou(quiet)).toEqual([])
     expect(directorEmail(quiet, plainView(quiet), null).subject).toBe('Daily report, Tuesday 24 November 2026: nothing waiting on you')
   })
@@ -52,7 +52,7 @@ describe('the email', () => {
     const v = plainView(f)
     expect(viewProblem(v, f)).toBeNull()
     const m = directorEmail(f, v, null)
-    expect(m.subject).toBe('Daily report, Tuesday 24 November 2026: 6 for you today')
+    expect(m.subject).toBe('Daily report, Tuesday 24 November 2026: 7 for you today')
     expect(m.text).toContain('Sense-check: 10 agent actions checked. 8 passed, 1 held for approval, 1 blocked.')
     expect(m.text).toContain('New valuation leads: 3 / 14')
     expect(m.html).toContain('Director’s view')

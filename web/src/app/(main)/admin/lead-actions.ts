@@ -12,8 +12,7 @@ import { contactLeadEvent, leadEvent, setLeadOwner, setLeadStatus, withdrawConse
 import { now, uid } from '@/lib/util'
 import { isStop, waBlocked } from '@/lib/whatsapp'
 import { erasePerson } from '@/lib/personal-data'
-import { advance, completeWhatsAppStep, followupSettings, saveFollowupSettings, startFollowups } from '@/lib/followups'
-import { STEPS } from '@/lib/followup-rules'
+import { advance, completeStaffStep, completeWhatsAppStep, followupSettings, saveFollowupSettings, startFollowups, stepOf } from '@/lib/followups'
 import { queueReconnects } from '@/lib/reconnect'
 import { reconnects } from '@/db/schema'
 import { followupLog } from '@/db/schema'
@@ -143,9 +142,14 @@ export async function followupAction(form: FormData) {
     await db.update(enquiries).set({ followupState: 'active', followupNextAt: due, followupNote: null }).where(eq(enquiries.id, id))
   } else if (what === 'stop' && (e.followupState === 'active' || e.followupState === 'paused')) await db.update(enquiries).set({ followupState: 'stopped', followupNextAt: null, followupNote: `Stopped by ${me.name}` }).where(eq(enquiries.id, id))
   else if (what === 'start') await startFollowups(id)
-  else if (what === 'skip' && e.followupState === 'active' && STEPS[e.followupStep]) {
-    await db.insert(followupLog).values({ id: uid(), enquiryId: id, step: STEPS[e.followupStep].key, channel: STEPS[e.followupStep].channel, status: 'skipped', detail: `Skipped by ${me.name}`, createdBy: me.id, createdAt: now() })
+  else if (what === 'skip' && e.followupState === 'active' && stepOf(e)) {
+    const step = stepOf(e)!
+    await db.insert(followupLog).values({ id: uid(), enquiryId: id, step: step.key, channel: step.channel, status: 'skipped', detail: `Skipped by ${me.name}`, createdBy: me.id, createdAt: now() })
     await advance(e)
+  } else if (what === 'called' && e.followupState === 'active') {
+    const answered = String(form.get('answered') ?? '') === 'yes'
+    await completeStaffStep(id, me.id, 'call', `${answered ? 'Spoke to them' : 'No answer'} (${me.name})`)
+    await leadEvent(id, 'outbound', { by: me.id, at: now(), detail: answered ? 'Phone call' : 'Phone call, no answer' }).catch(() => {})
   } else return
   revalidatePath(`/admin/enquiries/${id}`)
   revalidatePath('/admin/follow-ups')

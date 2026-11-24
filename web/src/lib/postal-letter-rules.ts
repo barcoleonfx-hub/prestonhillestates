@@ -51,6 +51,9 @@ export function chooseByDefault(r: { postable: boolean; booked: boolean; lastLet
 /** The starting words (staff can change them, and "Write with AI" can rewrite them). {sell} is "sell" or "let". */
 export const LETTER_BEFORE = 'Thank you for contacting Preston Hill Estates about {home}. Choosing who to trust with your home is a big decision, and we really appreciate you thinking of us.\n\nTo help you decide, I’ve put together a personal property report for your home. It’s free and yours to keep, with our guide price and the homes nearby that support it.'
 export const LETTER_AFTER = 'Every home is different, so the final figure comes from a short visit: about 30 minutes, completely free and with no obligation. We’d love to show you how we would {sell} your home and answer any questions you have.\n\nTo arrange a time that suits you, call me on 020 8904 9005 or send a WhatsApp message to 07745 203146. I’d be delighted to help.'
+/** The Valuation agent's follow-up letter, two weeks on (no reply, nothing booked). */
+export const FOLLOW_LETTER_BEFORE = 'A couple of weeks ago you asked us about {home}, and I wanted to write again in case it’s helpful. There’s no rush at all: choosing when to move, and who with, is a big decision.\n\nYour personal property report is still there for you, with our guide price and the homes nearby that support it.'
+export const FOLLOW_LETTER_AFTER = 'Whenever you’re ready, we’d be glad to come round: about 30 minutes, completely free and with no obligation, to show you how we would {sell} your home and answer any questions.\n\nCall me on 020 8904 9005 or send a WhatsApp message to 07745 203146. I’d be delighted to help.'
 /** Earlier starting words: a letter still using one unchanged gets the current ones. */
 export const OLD_LETTERS = [
   {

@@ -14,6 +14,7 @@ import { backfillCallEnquiries } from '@/lib/call-enquiry'
 import { refreshAreaPlaces } from '@/lib/area-places'
 import { runFollowups } from '@/lib/followups'
 import { runDirector } from '@/lib/director'
+import { runBookedEmails } from '@/lib/booked-emails'
 import { runReconnects } from '@/lib/reconnect'
 import { runLetters } from '@/lib/letters'
 import { markDormant } from '@/lib/leads'
@@ -47,6 +48,8 @@ export async function GET(req: Request) {
     // Leads nobody has heard from in 60 days go dormant (once a day, light).
     await markDormant().catch((e) => console.error('marking dormant leads failed', e))
     await runFollowups().catch((e) => console.error('follow-ups failed', e))
+    // Booked valuations: a confirmation to the client, and a reminder the day before (sense-checked).
+    await runBookedEmails().catch((e) => console.error('booking emails failed', e))
     // The Director's daily report to the office, once a day from 7:30am London.
     await runDirector().catch((e) => console.error('director report failed', e))
     await runReconnects().catch((e) => console.error('reconnect emails failed', e))

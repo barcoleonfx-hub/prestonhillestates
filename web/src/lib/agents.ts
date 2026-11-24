@@ -1,10 +1,10 @@
 import 'server-only'
-import { and, desc, eq, gte, inArray, isNull, like, ne } from 'drizzle-orm'
+import { and, desc, eq, gte, inArray, isNull, like, ne, or } from 'drizzle-orm'
 import { db, ready } from '@/db/client'
-import { agentActions, appointments, contacts, enquiries, letterBatches, notifications, postalLetters } from '@/db/schema'
+import { admins, agentActions, appointments, contacts, enquiries, letterBatches, notifications, postalLetters } from '@/db/schema'
 import { isValuation } from './enquiry-labels'
 import { letterLines, letterText } from './postal-letters'
-import { postable, shortHome } from './postal-letter-rules'
+import { FOLLOW_LETTER_AFTER, FOLLOW_LETTER_BEFORE, postable, shortHome } from './postal-letter-rules'
 import { reportStates, type ReportState } from './report-guide'
 import { now, uid } from './util'
 
@@ -129,6 +129,23 @@ const todayIso = () => londonNow().date
  * postal address, no valuation already booked, and no letter for them already waiting or posted in the last 14 days.
  */
 export async function queueSameDayLetter(enquiryId: string, by: { id: string; name: string }): Promise<{ ok: boolean; why?: string; batchId?: string }> {
+  return queueLetter(enquiryId, by, 'same-day')
+}
+
+/** The Valuation agent's day-14 letter: the same sense-check, its own wording, in today's follow-up letters. */
+export async function queueFollowupLetter(enquiryId: string): Promise<{ ok: boolean; why?: string; batchId?: string }> {
+  await ready()
+  // Signed by whoever signed their first letter, or whoever looks after the lead.
+  const first = await db.select({ sender: letterBatches.sender, by: letterBatches.createdBy }).from(postalLetters).innerJoin(letterBatches, eq(postalLetters.batchId, letterBatches.id))
+    .where(eq(postalLetters.enquiryId, enquiryId)).orderBy(postalLetters.createdAt).limit(1)
+  const e = await db.query.enquiries.findFirst({ where: eq(enquiries.id, enquiryId) })
+  const owner = e?.ownerId ? await db.query.admins.findFirst({ where: eq(admins.id, e.ownerId) }) : null
+  const any = first[0] ? null : owner ?? (await db.query.admins.findFirst())
+  const by = first[0] ? { id: first[0].by, name: first[0].sender } : { id: any?.id ?? 'system', name: any?.name ?? 'The Preston Hill team' }
+  return queueLetter(enquiryId, by, 'follow-up')
+}
+
+async function queueLetter(enquiryId: string, by: { id: string; name: string }, kind: 'same-day' | 'follow-up'): Promise<{ ok: boolean; why?: string; batchId?: string }> {
   await ready()
   const e = await db.query.enquiries.findFirst({ where: eq(enquiries.id, enquiryId) })
   if (!e || !isValuation(e)) return { ok: false, why: 'not a valuation enquiry' }
@@ -140,47 +157,49 @@ export async function queueSameDayLetter(enquiryId: string, by: { id: string; na
     db.select({ id: appointments.id }).from(appointments).where(and(eq(appointments.enquiryId, enquiryId), eq(appointments.kind, 'valuation'), ne(appointments.status, 'cancelled'), gte(appointments.startsAt, new Date().toISOString()))).limit(1),
     db.select({ batchId: postalLetters.batchId, postedAt: postalLetters.postedAt, createdAt: postalLetters.createdAt }).from(postalLetters).where(eq(postalLetters.enquiryId, enquiryId)),
   ])
+  const gap = kind === 'same-day' ? 14 : 10
   const waiting = recent.some((r) => !r.postedAt)
-  const postedLately = recent.some((r) => r.postedAt && Date.now() - Date.parse(r.postedAt) < 14 * 864e5)
+  const postedLately = recent.some((r) => r.postedAt && Date.now() - Date.parse(r.postedAt) < gap * 864e5)
   const checks: Check[] = [
     { name: 'Report finalised from the OnTheMarket guide', ok: report.state === 'final' },
     { name: 'Guide under 3 months old', ok: report.state !== 'none' && !report.stale, note: report.madeOn ?? undefined },
     { name: 'Not asked to stop', ok: !c?.doNotContact && e.outcome !== 'not_interested' && e.outcome !== 'do_not_call' },
     { name: 'Full postal address', ok: postable(lines), note: lines.join(', ') },
     { name: 'No valuation already booked', ok: !booked.length },
-    { name: 'No letter already waiting or posted in the last 14 days', ok: !waiting && !postedLately },
+    { name: `No letter already waiting or posted in the last ${gap} days`, ok: !waiting && !postedLately },
   ]
+  const what = kind === 'same-day' ? 'letter' : 'follow-up letter'
   const failed = checks.filter((x) => !x.ok)
   if (failed.length) {
     const why = failed.map((x) => lc(x.name)).join('; ')
-    await logAction({ agent: 'valuation', enquiryId, kind: 'letter', status: 'held', title: `No letter for ${home}`, detail: `Held: ${why}.`, checks, by: by.id })
-    await db.insert(notifications).values({ id: uid(), kind: 'letter', appointmentId: null, enquiryId, title: `No letter for ${home}`, body: `Held by the sense-check: ${failed.map((x) => lc(x.name)).join('; ')}.`, createdBy: null, createdAt: now() })
+    await logAction({ agent: 'valuation', enquiryId, kind: 'letter', status: kind === 'same-day' ? 'held' : 'blocked', title: `No ${what} for ${home}`, detail: `${kind === 'same-day' ? 'Held' : 'Not sent'}: ${why}.`, checks, by: kind === 'same-day' ? by.id : null })
+    if (kind === 'same-day') await db.insert(notifications).values({ id: uid(), kind: 'letter', appointmentId: null, enquiryId, title: `No letter for ${home}`, body: `Held by the sense-check: ${why}.`, createdBy: null, createdAt: now() })
     return { ok: false, why }
   }
-  // Today's batch: one a day, a new one once the day's batch is marked as posted.
+  // Today's batch of each kind: one a day, a new one once the day's batch is marked as posted.
   const day = todayIso()
-  const open = await db.select().from(letterBatches).where(and(like(letterBatches.id, `auto-${day}%`), isNull(letterBatches.postedAt))).orderBy(desc(letterBatches.createdAt)).limit(1)
-  let batchId = open[0]?.id
+  const prefix = kind === 'same-day' ? `auto-${day}` : `follow-${day}`
+  const mine = (await db.select().from(letterBatches).where(like(letterBatches.id, `${prefix}%`)).orderBy(desc(letterBatches.createdAt)))
+  let batchId = mine.find((b) => !b.postedAt)?.id
   if (!batchId) {
-    const n = (await db.select({ id: letterBatches.id }).from(letterBatches).where(like(letterBatches.id, `auto-${day}%`))).length
-    batchId = n ? `auto-${day}-${n + 1}` : `auto-${day}`
-    const text = await letterText()
+    batchId = mine.length ? `${prefix}-${mine.length + 1}` : prefix
+    const text = kind === 'same-day' ? await letterText() : { before: FOLLOW_LETTER_BEFORE, after: FOLLOW_LETTER_AFTER }
     await db.insert(letterBatches).values({ id: batchId, sender: by.name, beforeText: text.before, afterText: text.after, createdBy: by.id, createdAt: now() })
   }
   await db.insert(postalLetters).values({ id: uid(), batchId, enquiryId, contactId: e.contactId, name: e.name, address: lines.join('\n'), home, createdAt: now() })
-  await logAction({ agent: 'valuation', enquiryId, kind: 'letter', status: 'done', title: `Letter for ${home} added to today’s letters`, detail: `Guide price £${report.asking?.toLocaleString('en-GB')}.`, checks, by: by.id })
-  await db.insert(notifications).values({ id: uid(), kind: 'letter', appointmentId: null, enquiryId, title: `Letter for ${home} ready to print`, body: 'It’s in today’s letters with their guide price and QR code: print it and post it today.', createdBy: null, createdAt: now() })
+  await logAction({ agent: 'valuation', enquiryId, kind: 'letter', status: 'done', title: `${kind === 'same-day' ? 'Letter' : 'Follow-up letter'} for ${home} added to today’s letters`, detail: `Guide price £${report.asking?.toLocaleString('en-GB')}.`, checks, by: kind === 'same-day' ? by.id : null })
+  await db.insert(notifications).values({ id: uid(), kind: 'letter', appointmentId: null, enquiryId, title: `${kind === 'same-day' ? 'Letter' : 'Follow-up letter'} for ${home} ready to print`, body: 'It’s in today’s letters with their guide price and QR code: print it and post it today.', createdBy: null, createdAt: now() })
   return { ok: true, batchId }
 }
 
 /** Today's letter batches not yet posted (the agent's, and any staff printed today). */
-export async function todaysLetters(): Promise<{ id: string; count: number; createdAt: string }[]> {
+export async function todaysLetters(): Promise<{ id: string; count: number; createdAt: string; followUp: boolean }[]> {
   await ready()
   const day = todayIso()
-  const bs = await db.select().from(letterBatches).where(and(like(letterBatches.id, `auto-${day}%`), isNull(letterBatches.postedAt))).orderBy(desc(letterBatches.createdAt))
+  const bs = await db.select().from(letterBatches).where(and(or(like(letterBatches.id, `auto-${day}%`), like(letterBatches.id, `follow-${day}%`)), isNull(letterBatches.postedAt))).orderBy(desc(letterBatches.createdAt))
   if (!bs.length) return []
   const ls = await db.select({ batchId: postalLetters.batchId }).from(postalLetters).where(inArray(postalLetters.batchId, bs.map((b) => b.id)))
-  return bs.map((b) => ({ id: b.id, count: ls.filter((l) => l.batchId === b.id).length, createdAt: b.createdAt }))
+  return bs.map((b) => ({ id: b.id, count: ls.filter((l) => l.batchId === b.id).length, createdAt: b.createdAt, followUp: b.id.startsWith('follow-') }))
 }
 
 export type ActionRow = typeof agentActions.$inferSelect

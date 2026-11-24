@@ -76,6 +76,7 @@ export async function directorFacts(at = new Date()): Promise<DirectorFacts> {
     emails: { sent: emails.filter((a) => a.status === 'done').length, held: emails.filter((a) => a.status === 'held' || a.status === 'rejected' || a.status === 'sending').length, blocked: emails.filter((a) => a.status === 'blocked').length },
     approvals: held.filter((h) => !h.expired).length,
     whatsappsDue: board.waDue.length,
+    callsDue: board.callsDue.length,
     replies,
     checks: { total: checked.length, passed: checked.filter((a) => a.status === 'done' || a.status === 'prompted').length, held: checked.filter((a) => a.status === 'held' || a.status === 'rejected').length, blocked: checked.filter((a) => a.status === 'blocked').length },
     week: { valuations: wkVal, booked: wkBooked, replies: wkReplies, sent: wkSent },
