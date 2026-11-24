@@ -27,7 +27,7 @@ const b: Briefing = {
   sent: [{ ref: 'S1', at: '', title: 'Emailed David: “Your offer on Flat 3”', detail: '15:10 · offer of £312,000', href: 'https://x/m/1' }],
   activity: [], received: [{ ref: 'R1', at: '', title: 'Sarah: “Viewing”', detail: '17:05 · could we make it 3pm?', href: 'https://x/m/2' }],
   inbox: [{ ref: 'I1', at: '', title: 'Sarah: “Viewing”', detail: '17:05 · could we make it 3pm?', href: 'https://x/m/2' }],
-  outstanding: [{ ref: 'T1', at: '', title: 'Overdue: call back Mrs Begum', detail: 'was due Mon 23 Nov, 16:00', href: 'https://x/my-day', urgent: true }],
+  outstanding: [{ ref: 'T1', at: '', title: 'Overdue: call back Mrs Begum', detail: 'was due Mon 23 Nov, 16:00', href: 'https://x/my-day', urgent: true, kind: 'callback' }],
 }
 
 describe('the sense-check on Claude’s summary', () => {
@@ -47,7 +47,7 @@ describe('the sense-check on Claude’s summary', () => {
   it('the email is a short summary, not lists of emails', () => {
     const m = briefingEmail(b, { summary: 'A quiet day.', urgent: [{ text: 'Call back Mrs Begum', why: 'Overdue', refs: ['T1'] }], done: [], pending: [], inbox: '' }, null)
     expect(m.subject).toBe('Fred’s briefing, Tuesday 24 November: 1 urgent')
-    expect(m.text).toContain('MOST URGENT\n1. Call back Mrs Begum: Overdue https://x/my-day')
+    expect(m.text).toContain('MOST URGENT\n1. Call back Mrs Begum (Overdue) https://x/my-day')
     expect(m.text).not.toContain('could we make it 3pm')
     expect(m.html).not.toMatch(/undefined|NaN|null/)
   })
@@ -59,15 +59,15 @@ describe('the Director’s snapshot', () => {
   it('keeps one card per person, fills in anyone missed, and checks the high-value figures', () => {
     expect(checkSnapshot({ summary: 'A £1.25m valuation is in play.', urgent: [], team: [], highValue: [], mine: [] }, s).view.summary).toBe('A £1.25m valuation is in play.')
     expect(checkSnapshot({ summary: 'A £1.4m valuation is in play.', urgent: [], team: [], highValue: [], mine: [] }, s).view.summary).toBe('')
-    const { view, dropped } = checkSnapshot({ summary: 'Busy day.', urgent: [], team: [{ name: 'Fred', did: 'Put an offer of £312,000 forward.', outstanding: '1 overdue callback.', refs: ['T1'] }, { name: 'Somebody', did: 'x', outstanding: 'y', refs: [] }], highValue: [{ text: 'Hughes valuation at £1,250,000', refs: ['H1'] }, { text: 'A £2m sale', refs: ['H9'] }], mine: [] }, s)
+    const { view, dropped } = checkSnapshot({ summary: 'Busy day.', urgent: [], team: [{ name: 'Fred', did: 'Put an offer of £312,000 forward.', next: ['Call back Mrs Begum'], refs: ['T1'] }, { name: 'Somebody', did: 'x', next: ['y'], refs: [] }], highValue: [{ text: 'Hughes valuation at £1,250,000', refs: ['H1'] }, { text: 'A £2m sale', refs: ['H9'] }], mine: [] }, s)
     expect(view.team.map((t) => t.name)).toEqual(['Fred'])
     expect(view.highValue).toHaveLength(1)
     expect(dropped).toBe(1)
     const plain = plainSnapshot(s)
     expect(plain.team.map((t) => t.name)).toEqual(['Fred', 'Moniba'])
-    expect(plain.team[1].did).toBe('0 emails sent, 1 call, note or visit.')
+    expect(plain.team[1].did).toBe('Sent 0 emails and logged 1 call, note or visit yesterday.')
     const m = snapshotEmail(s, plain, null)
     expect(m.subject).toBe('Director’s snapshot, Tuesday 24 November: 1 urgent across the team')
-    for (const h of ['THE TEAM', 'Fred:', 'Moniba:', 'HIGH-VALUE ITEMS', 'Valuation: Hughes, guide £1,250,000']) expect(m.text).toContain(h)
+    for (const h of ['NEEDS ATTENTION NOW', 'THE TEAM', 'Fred [1 overdue callback]', 'Moniba [On top of it]', 'WHERE THE MONEY IS', 'Valuation: Hughes, guide £1,250,000']) expect(m.text).toContain(h)
   })
 })

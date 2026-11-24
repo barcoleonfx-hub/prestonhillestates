@@ -1195,4 +1195,17 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       `ALTER TABLE appointments ADD COLUMN client_reminded_at TEXT`,
     ],
   },
+  {
+    id: '056_mail_triage',
+    sql: [
+      // Whether an email conversation from someone we've never dealt with is real, a sales pitch or spam (lib/mail-triage),
+      // decided once, so briefings never count pitches and spam as work.
+      `CREATE TABLE mail_triage (
+        thread_id TEXT PRIMARY KEY,
+        verdict TEXT NOT NULL,
+        reason TEXT,
+        at TEXT NOT NULL
+      )`,
+    ],
+  },
 ]

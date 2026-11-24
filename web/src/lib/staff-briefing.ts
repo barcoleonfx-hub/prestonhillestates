@@ -1,17 +1,16 @@
 import 'server-only'
-import Anthropic from '@anthropic-ai/sdk'
-import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod'
 import { and, asc, eq, gte, inArray, isNull, lt, ne } from 'drizzle-orm'
 import { z } from 'zod'
 import { db, getClient, ready } from '@/db/client'
 import { admins, agentActions as logActionTable, appointments, calls, contacts, enquiries, enquiryNotes, followupLog, leadEvents, mailMessages, mailThreads, properties, reportGuides, tasks } from '@/db/schema'
-import { agentSettings, agentsMaySpend, recordUsage } from './ai-usage'
+import { agentSettings } from './ai-usage'
 import { logAction } from './agents'
-import { anthropicKey } from './anthropic-key'
+import { askClaude } from './staff-briefing-ai'
+import { junkThreads } from './mail-triage'
 import { mailPaused, noteMailError } from './mail-health'
 import { mailboxStatus, sendFromMailbox } from './mailbox'
 import { knownBase } from './property-email-data'
-import { DEFAULT_PEOPLE, briefingEmail, checkSnapshot, checkView, isFor, plainSnapshot, plainView, signedBy, snapshotEmail, unquoted, type Briefing, type BriefingView, type Item, type Person, type Snapshot, type SnapshotView } from './staff-briefing-rules'
+import { DEFAULT_PEOPLE, briefingEmail, checkSnapshot, checkView, isFor, plainSnapshot, plainView, signedBy, snapshotEmail, statsOf, unquoted, waitingLine, type Briefing, type BriefingView, type Item, type Person, type Snapshot, type SnapshotView } from './staff-briefing-rules'
 import { addDays, londonToIso, todayLondon } from './time'
 
 // The 10am staff briefing: one email per person (Fred to his own address, the rest to info@), from the office
@@ -33,7 +32,7 @@ export async function briefingPeople(): Promise<Person[]> {
 }
 
 /** Everything for one person's briefing, for the day before `today` (London). */
-export async function buildBriefing(person: Person, today = todayLondon(), prefix = ''): Promise<Briefing> {
+export async function buildBriefing(person: Person, today = todayLondon(), prefix = '', junk: Set<string> = new Set()): Promise<Briefing> {
   await ready()
   const day = addDays(today, -1)
   const from = londonToIso(day, '00:00')!, to = londonToIso(today, '00:00')!
@@ -75,8 +74,8 @@ export async function buildBriefing(person: Person, today = todayLondon(), prefi
 
   // What came in: theirs, and everything.
   // Routine: automated, or no reply expected (notifications, receipts, newsletters). New leads always matter.
-  const inItem = (m: typeof mailIn[number], p: string): Item => ({ ref: ref(p), at: m.sentAt, title: `${who(m)}: “${clip(m.subject, 80)}”`, detail: `${time(m.sentAt)} · ${clip(unquoted(m.body) || m.snippet, p === 'R' ? 220 : 140)}`, href: thread(m.threadId), routine: !m.needsReply && m.area !== 'leads' })
-  const received = mailIn.filter((m) => isFor(m, person.aliases)).map((m) => inItem(m, 'R'))
+  const inItem = (m: typeof mailIn[number], p: string): Item => ({ ref: ref(p), at: m.sentAt, title: `${who(m)}: “${clip(m.subject, 80)}”`, detail: `${time(m.sentAt)} · ${clip(unquoted(m.body) || m.snippet, p === 'R' ? 220 : 140)}`, href: thread(m.threadId), routine: junk.has(m.threadId) || (!m.needsReply && m.area !== 'leads') })
+  const received = mailIn.filter((m) => !junk.has(m.threadId) && isFor(m, person.aliases)).map((m) => inItem(m, 'R'))
   const inbox = mailIn.map((m) => inItem(m, 'I'))
 
   // Still outstanding for them, most urgent first.
@@ -89,16 +88,27 @@ export async function buildBriefing(person: Person, today = todayLondon(), prefi
   ])
   // Emails waiting for a reply that are theirs (to them or naming them).
   const lastIns = pending.length ? await db.select().from(mailMessages).where(and(inArray(mailMessages.threadId, pending.map((t) => t.id)), eq(mailMessages.direction, 'in'))) : []
-  const waitingFor = pending.filter((t) => lastIns.some((m) => m.threadId === t.id && isFor(m, person.aliases)))
+  const waitingFor = pending.filter((t) => !junk.has(t.id) && lastIns.some((m) => m.threadId === t.id && isFor(m, person.aliases)))
   const days = (iso: string | null) => (iso ? Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 864e5)) : 0)
   const outstanding: Item[] = [
-    ...taskRows.filter(({ t }) => t.dueAt < now).map(({ t, name }) => ({ ref: ref('T'), at: t.dueAt, title: `Overdue: ${t.title}${name ? ` (${name})` : ''}`, detail: `was due ${short(t.dueAt)}`, href: `${base}/admin/my-day`, urgent: true })),
-    ...todays.map((a) => ({ ref: ref('T'), at: a.startsAt, title: `${a.kind === 'valuation' ? 'Valuation' : a.kind === 'viewing' ? 'Viewing' : 'Appointment'} at ${time(a.startsAt)} with ${a.contactName ?? 'a client'}`, detail: clip(a.address, 60), href: `${base}/admin/diary/${a.id}` })),
-    ...leads.map((e) => ({ ref: ref('T'), at: e.createdAt, title: `Get back to ${e.name}: new lead, nobody has replied`, detail: `came in ${short(e.createdAt)}`, href: `${base}/admin/enquiries/${e.id}`, urgent: days(e.createdAt) >= 1 })),
-    ...waitingFor.map((t) => ({ ref: ref('T'), at: t.lastInAt ?? t.lastAt, title: `Reply to ${t.counterpartName || t.counterpart || 'them'}: “${clip(t.subject, 70)}”`, detail: t.lastInAt ? `waiting since ${short(t.lastInAt)}` : 'waiting for a reply', href: thread(t.id), urgent: days(t.lastInAt) >= 2 })),
-    ...taskRows.filter(({ t }) => t.dueAt >= now).map(({ t, name }) => ({ ref: ref('T'), at: t.dueAt, title: `${t.title}${name ? ` (${name})` : ''}`, detail: `due ${time(t.dueAt)} today`, href: `${base}/admin/my-day` })),
+    ...taskRows.filter(({ t }) => t.dueAt < now).map(({ t, name }) => ({ ref: ref('T'), at: t.dueAt, title: `Overdue: ${t.title}${name ? ` (${name})` : ''}`, detail: `was due ${short(t.dueAt)}`, href: `${base}/admin/my-day`, urgent: true, kind: 'callback' as const })),
+    ...todays.map((a) => ({ ref: ref('T'), at: a.startsAt, title: `${a.kind === 'valuation' ? 'Valuation' : a.kind === 'viewing' ? 'Viewing' : 'Appointment'} at ${time(a.startsAt)} with ${a.contactName ?? 'a client'}`, detail: clip(a.address, 60), href: `${base}/admin/diary/${a.id}`, kind: 'appointment' as const })),
+    ...leads.map((e) => ({ ref: ref('T'), at: e.createdAt, title: `Get back to ${e.name}: new lead, nobody has replied`, detail: `came in ${short(e.createdAt)}`, href: `${base}/admin/enquiries/${e.id}`, urgent: days(e.createdAt) >= 1, kind: 'lead' as const })),
+    ...waitingFor.map((t) => ({ ref: ref('T'), at: t.lastInAt ?? t.lastAt, title: `Reply to ${t.counterpartName || t.counterpart || 'them'}: “${clip(t.subject, 70)}”`, detail: t.lastInAt ? `waiting since ${short(t.lastInAt)}` : 'waiting for a reply', href: thread(t.id), urgent: days(t.lastInAt) >= 2, kind: 'reply' as const })),
+    ...taskRows.filter(({ t }) => t.dueAt >= now).map(({ t, name }) => ({ ref: ref('T'), at: t.dueAt, title: `${t.title}${name ? ` (${name})` : ''}`, detail: `due ${time(t.dueAt)} today`, href: `${base}/admin/my-day`, kind: 'callback' as const })),
   ]
   return { person, day: dayName(day), today: dayName(today), base, sent, activity, received, inbox, outstanding }
+}
+
+/** Conversations to leave out of everyone's briefing: pitches and spam (judged once each). */
+export async function briefingJunk(today = todayLondon()): Promise<Set<string>> {
+  await ready()
+  const day = addDays(today, -1)
+  const [pending, yIn] = await Promise.all([
+    db.select({ id: mailThreads.id }).from(mailThreads).where(and(eq(mailThreads.status, 'pending'), gte(mailThreads.lastAt, new Date(Date.now() - 14 * 864e5).toISOString()))).limit(200),
+    db.select({ id: mailMessages.threadId }).from(mailMessages).where(and(eq(mailMessages.direction, 'in'), gte(mailMessages.sentAt, londonToIso(day, '00:00')!), lt(mailMessages.sentAt, londonToIso(today, '00:00')!), eq(mailMessages.promo, false), eq(mailMessages.needsReply, true))).limit(200),
+  ])
+  return junkThreads([...pending.map((r) => r.id), ...yIn.map((r) => r.id)]).catch(() => new Set<string>())
 }
 
 const pointSchema = z.object({ text: z.string().describe('One short sentence'), why: z.string().describe('Why, in a few words (or empty)'), refs: z.array(z.string()).describe('The [ref] codes it comes from') })
@@ -133,25 +143,6 @@ const briefingInput = (b: Briefing) => [
   `Still outstanding for them:\n${itemLines(b.outstanding, 40)}`,
 ].join('\n\n')
 
-async function askClaude<T>(model: string, system: string, schema: z.ZodType<T>, content: string, purpose: string): Promise<{ out: T } | { why: string }> {
-  const k = anthropicKey()
-  if ('error' in k) return { why: 'the Claude API key isn’t set' }
-  if (!(await agentsMaySpend())) return { why: 'this month’s AI budget is used up' }
-  try {
-    const client = new Anthropic({ apiKey: k.key })
-    const res = await client.beta.messages.parse({
-      model, max_tokens: 10000, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default', system,
-      output_config: { effort: 'medium', format: betaZodOutputFormat(schema) }, messages: [{ role: 'user', content }],
-    })
-    await recordUsage(model, res.usage, purpose, true)
-    if (res.stop_reason === 'refusal' || !res.parsed_output) return { why: 'Claude couldn’t write them' }
-    return { out: res.parsed_output as T }
-  } catch (e) {
-    if (!(e instanceof Anthropic.APIError)) console.error(`${purpose} failed`, e)
-    return { why: 'Claude didn’t answer' }
-  }
-}
-
 const empty = (b: Briefing) => !b.sent.length && !b.activity.length && !b.received.length && !b.inbox.length && !b.outstanding.length
 
 async function writeView(b: Briefing): Promise<{ view: BriefingView; note: string | null }> {
@@ -160,13 +151,14 @@ async function writeView(b: Briefing): Promise<{ view: BriefingView; note: strin
   if ('why' in r) return { view: plainView(b), note: `Just the to-do list today: the summary couldn’t be written (${r.why}).` }
   const { view, dropped } = checkView(r.out, b)
   if (!view.urgent.length && b.outstanding.some((o) => o.urgent)) view.urgent = plainView(b).urgent
+  if (!view.summary) view.summary = plainView(b).summary
   return { view, note: dropped ? `The sense-check removed ${dropped} point${dropped === 1 ? '' : 's'} that didn’t match the emails and records.` : null }
 }
 
 // ---------- the Director's snapshot ----------
 
 /** Where the money is: live valuations with a guide price, buyers on our listings, offers, and big figures in yesterday's emails. */
-async function highValueItems(day: { from: string; to: string }, base: string): Promise<Item[]> {
+async function highValueItems(day: { from: string; to: string }, base: string, junk: Set<string>): Promise<Item[]> {
   const since = new Date(Date.now() - 60 * 864e5).toISOString()
   const [guides, onListings, mail] = await Promise.all([
     db.select({ e: enquiries, g: reportGuides }).from(enquiries).innerJoin(reportGuides, eq(reportGuides.bookletId, enquiries.id))
@@ -191,28 +183,41 @@ async function highValueItems(day: { from: string; to: string }, base: string): 
   }
   // Offers and big figures mentioned in yesterday's emails.
   for (const m of mail) {
+    // Real people only: not automated or bulk (portal reports), not pitches or spam, and from us only what staff wrote
+    // about an offer (never the agents' or marketing emails, which quote local prices).
+    if (junk.has(m.threadId)) continue
+    if (m.direction === 'in' && (!m.needsReply || m.area === 'promo' || m.promo)) continue
+    if (m.direction === 'out' && m.via === 'portal' && !m.sentBy) continue
     const t = `${m.subject ?? ''} ${unquoted(m.body)}`
+    const offer = /\boffer(s|ed)?\b|\bagreed\b|\binstruct/i.test(t)
+    if (m.direction === 'out' && !offer) continue
     const big = Math.max(0, ...[...t.matchAll(/£\s?(\d{1,3}(?:,\d{3})+|\d{5,})/g)].map((x) => Number(x[1].replace(/,/g, ''))))
-    if (big < 150_000 && !/\boffer\b/i.test(m.subject ?? '')) continue
+    if (big < 150_000 && !offer) continue
     out.push({ ref: ref(), at: m.sentAt, title: `${m.direction === 'in' ? `From ${who(m)}` : 'We sent'}: “${clip(m.subject, 70)}”${big ? ` (mentions £${big.toLocaleString('en-GB')})` : ''}`, detail: clip(unquoted(m.body), 140), href: `${base}/admin/mail/${m.threadId}`, value: big || undefined })
   }
   return out.sort((a, b) => (b.value ?? 0) - (a.value ?? 0)).slice(0, 15)
 }
 
-export async function buildSnapshot(director: Person, today = todayLondon()): Promise<Snapshot> {
+export async function buildSnapshot(director: Person, today = todayLondon(), junk?: Set<string>): Promise<Snapshot> {
   const people = (await briefingPeople()).filter((p) => !p.director)
-  const [me, ...team] = await Promise.all([buildBriefing(director, today, 'J-'), ...people.map((p, i) => buildBriefing(p, today, `P${i + 1}-`))])
+  const j = junk ?? await briefingJunk(today)
+  const [me, ...team] = await Promise.all([buildBriefing(director, today, 'J-', j), ...people.map((p, i) => buildBriefing(p, today, `P${i + 1}-`, j))])
   const day = addDays(today, -1)
-  const highValue = await highValueItems({ from: londonToIso(day, '00:00')!, to: londonToIso(today, '00:00')! }, me.base)
+  const highValue = await highValueItems({ from: londonToIso(day, '00:00')!, to: londonToIso(today, '00:00')! }, me.base, j)
   return { me, team, highValue, day: me.day, today: me.today, base: me.base }
 }
 
 const SnapView = z.object({
-  summary: z.string().describe('2 or 3 sentences for the owner: how the business looks today and what needs his attention.'),
-  urgent: z.array(pointSchema).describe('Up to 5 most urgent things across the whole team, naming who should act.'),
-  team: z.array(z.object({ name: z.string().describe('The person’s name exactly as given'), did: z.string().describe('One or two sentences: what they got done yesterday that matters'), outstanding: z.string().describe('One sentence: what is outstanding for them, the most important first'), refs: z.array(z.string()) })).describe('One entry per team member, in the order given'),
-  highValue: z.array(pointSchema).describe('Up to 5 high-value items and where each stands (who has it, what happens next), biggest first.'),
-  mine: z.array(pointSchema).describe('Up to 5 things for the owner himself to do today.'),
+  summary: z.string().describe('3 or 4 sentences for the owner: how things stand, what went well or badly yesterday, the biggest risk today and the biggest opportunity. Like a sharp operations director talking to the owner.'),
+  urgent: z.array(pointSchema).describe('Up to 5 things that need attention now across the team, most important first. Start each with who should act, and say what to do (not just the email subject). "why": the reason it matters.'),
+  team: z.array(z.object({
+    name: z.string().describe('The person’s name exactly as given'),
+    did: z.string().describe('One sentence in plain words: what they actually got done yesterday that matters. If nothing was recorded, say so plainly.'),
+    next: z.array(z.string()).describe('Their 2 most important next actions, each a short instruction (e.g. "Call Mrs Begum back about her rental valuation")'),
+    refs: z.array(z.string()).describe('The [ref] codes for those next actions, in the same order'),
+  })).describe('One entry per team member, in the order given'),
+  highValue: z.array(pointSchema).describe('Up to 5 high-value items, biggest first. "text": what it is and the figure; "why": where it stands and the next step (who, what).'),
+  mine: z.array(pointSchema).describe('Up to 4 things for the owner himself: decisions, people to call, things only he can do.'),
 })
 
 const SNAP_SYSTEM = `You write the 10am Director's snapshot for the owner of Preston Hill Estates, an independent estate agent in Harrow. In a minute he should see what each member of staff did yesterday, what's outstanding for each, the most urgent things across the team, and where the high-value work sits (big guide prices, offers, buyers on expensive homes), so nothing valuable slips.
@@ -222,7 +227,7 @@ ${RULES}`
 async function writeSnapshot(s: Snapshot): Promise<{ view: SnapshotView; note: string | null }> {
   const content = [
     `Director's snapshot for ${s.today}, covering ${s.day}.`,
-    ...s.team.map((b) => `=== ${b.person.name} ===\n${briefingInput(b).split('\n\n').slice(1).filter((x) => !x.startsWith('Other emails') && !x.startsWith('Routine')).join('\n\n')}`),
+    ...s.team.map((b) => `=== ${b.person.name} ===\nWaiting on them: ${waitingLine(statsOf(b))}.\n\n${briefingInput(b).split('\n\n').slice(1).filter((x) => !x.startsWith('Other emails') && !x.startsWith('Routine')).join('\n\n')}`),
     `=== Everything that came into the office yesterday that may matter ===\n${itemLines(s.me.inbox.filter((i) => !i.routine), 60)}`,
     `=== High-value items (biggest first) ===\n${itemLines(s.highValue, 15)}`,
     `=== The owner's own ===\n${briefingInput(s.me).split('\n\n').filter((x) => /^(What they sent|What they did|Emails yesterday to them|Still outstanding)/.test(x)).join('\n\n')}`,
@@ -232,36 +237,42 @@ async function writeSnapshot(s: Snapshot): Promise<{ view: SnapshotView; note: s
   const { view, dropped } = checkSnapshot(r.out, s)
   // Anyone Claude missed (or whose lines were dropped) gets the plain line.
   const plain = plainSnapshot(s)
-  view.team = s.team.map((b) => { const t = view.team.find((x) => x.name === b.person.name); const p = plain.team.find((x) => x.name === b.person.name)!; return t && t.did && t.outstanding ? t : p })
+  view.team = s.team.map((b) => { const t = view.team.find((x) => x.name === b.person.name); const p = plain.team.find((x) => x.name === b.person.name)!; return t && t.did ? { ...t, next: t.next.length ? t.next : p.next, refs: t.next.length ? t.refs : p.refs } : p })
+  if (!view.summary) view.summary = plain.summary
   if (!view.highValue.length && s.highValue.length) view.highValue = plain.highValue
   return { view, note: dropped ? `The sense-check removed ${dropped} point${dropped === 1 ? '' : 's'} that didn’t match the emails and records.` : null }
 }
 
 // ---------- sending ----------
 
-/** A briefing as it would go now, without Claude (so a preview costs nothing). */
-export async function previewBriefing(name: string) {
+const previews = new Map<string, { at: number; m: { subject: string; text: string; html: string } }>()
+
+/** A briefing exactly as it would go now, with Claude's summary (kept for 30 minutes, so looking again costs nothing). */
+export async function previewBriefing(name: string, fresh = false) {
   const p = (await briefingPeople()).find((x) => x.name.toLowerCase() === name.toLowerCase())
   if (!p) return null
-  const note = 'Preview: Claude writes the summary and picks what matters when it’s sent.'
-  if (p.director) { const s = await buildSnapshot(p); return { person: p, ...snapshotEmail(s, plainSnapshot(s), note) } }
-  const b = await buildBriefing(p)
-  return { person: p, ...briefingEmail(b, plainView(b), note) }
+  const key = `${p.name}|${todayLondon()}`
+  const hit = previews.get(key)
+  if (hit && !fresh && Date.now() - hit.at < 30 * 60e3) return { person: p, ...hit.m }
+  const m = await composeBriefing(p)
+  previews.set(key, { at: Date.now(), m })
+  return { person: p, ...m }
 }
 
-export async function sendBriefing(p: Person, by: string | null = null): Promise<{ ok: boolean; error?: string }> {
-  let m: { subject: string; text: string; html: string }, detail: string
+async function composeBriefing(p: Person, junk?: Set<string>): Promise<{ subject: string; text: string; html: string; detail: string }> {
+  const j = junk ?? await briefingJunk()
   if (p.director) {
-    const s = await buildSnapshot(p)
+    const s = await buildSnapshot(p, todayLondon(), j)
     const { view, note } = await writeSnapshot(s)
-    m = snapshotEmail(s, view, note)
-    detail = `Snapshot of ${s.team.map((b) => b.person.name).join(', ')}; ${s.highValue.length} high-value items.${note ? ` ${note}` : ''}`
-  } else {
-    const b = await buildBriefing(p)
-    const { view, note } = await writeView(b)
-    m = briefingEmail(b, view, note)
-    detail = `${view.urgent.length} urgent, ${b.outstanding.length} outstanding, ${b.inbox.length} emails in.${note ? ` ${note}` : ''}`
+    return { ...snapshotEmail(s, view, note), detail: `Snapshot of ${s.team.map((b) => b.person.name).join(', ')}; ${s.highValue.length} high-value items.${note ? ` ${note}` : ''}` }
   }
+  const b = await buildBriefing(p, todayLondon(), '', j)
+  const { view, note } = await writeView(b)
+  return { ...briefingEmail(b, view, note), detail: `${view.urgent.length} urgent, ${b.outstanding.length} outstanding, ${b.inbox.length} emails in.${note ? ` ${note}` : ''}` }
+}
+
+export async function sendBriefing(p: Person, by: string | null = null, junk?: Set<string>): Promise<{ ok: boolean; error?: string }> {
+  const { detail, ...m } = await composeBriefing(p, junk)
   const sent = await sendFromMailbox({ to: [p.to], subject: m.subject, text: m.text, html: m.html, by })
   if (!sent.ok) {
     noteMailError(sent.error)
@@ -282,11 +293,12 @@ export async function runBriefings(at = new Date()): Promise<{ sent: number }> {
   const box = await mailboxStatus().catch(() => null)
   if (!box?.hasPassword) return { sent: 0 }
   let sent = 0
+  const junk = await briefingJunk()
   for (const p of (await briefingPeople()).filter((x) => !x.off && x.to)) {
     const key = `briefing-${p.name.toLowerCase()}-${todayLondon()}`
     const claim = await getClient().execute({ sql: `INSERT OR IGNORE INTO jobs (name, last_run_at) VALUES (?, ?)`, args: [key, at.toISOString()] })
     if (claim.rowsAffected !== 1) continue
-    const r = await sendBriefing(p)
+    const r = await sendBriefing(p, null, junk)
     if (r.ok) sent++
     else if (mailPaused()) { await getClient().execute({ sql: `DELETE FROM jobs WHERE name = ?`, args: [key] }); break }
   }
