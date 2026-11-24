@@ -38,7 +38,7 @@ export default async function FollowupsPage() {
   const name = (r: BoardRow) => <Link href={`/admin/enquiries/${r.e.id}?back=/admin/follow-ups`}>{r.e.name}</Link>
   const sample = { first: 'Sam', me: me.name, address: '12 Example Road', postcode: 'HA3 0PS', base, unsubscribeUrl: `${base}/unsubscribe?…`, reportUrl: `${base}/report/…`, guide: { asking: 475000, low: 450000, high: 500000 } }
   const allKeys = [...STEPS, ...VALUATION_STEPS, ...AFTER_VISIT_STEPS]
-  const STATUS: Record<string, string> = { sent: 'Sent', skipped: 'Skipped', failed: 'Failed', done: 'Done', missed: 'Not done in time', held: 'Waiting for approval' }
+  const STATUS: Record<string, string> = { sent: 'Sent', skipped: 'Skipped', failed: 'Failed', done: 'Done', missed: 'Not done in time', held: 'Waiting for approval', waiting: 'Waiting: a colleague was in touch' }
   const preview = (t: Track, steps: StepDef[], rentSample = false) => steps.map((s) => {
     if (s.channel === 'whatsapp') return <div key={s.key} className="fu-mail wa"><div className="fu-mail-h"><b>Day {s.day} · WhatsApp (you send it)</b></div><pre>{followupWhatsApp(t, s.key, 'Sam', me.name)}</pre></div>
     if (s.channel === 'call') return <div key={s.key} className="fu-mail wa"><div className="fu-mail-h"><b>Day {s.day} · Call (you make it)</b></div><pre>{callScript(t, s.key)}</pre></div>

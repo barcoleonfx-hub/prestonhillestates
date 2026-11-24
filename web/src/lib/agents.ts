@@ -18,7 +18,7 @@ const lc = (s: string) => s.charAt(0).toLowerCase() + s.slice(1)
 export type Check = { name: string; ok: boolean; note?: string }
 export type AgentName = 'valuation' | 'followup' | 'outreach' | 'marketing' | 'director'
 
-export async function logAction(a: { agent: AgentName; enquiryId?: string | null; kind: string; status: 'done' | 'held' | 'blocked' | 'prompted'; title: string; detail?: string; checks?: Check[]; by?: string | null }): Promise<string> {
+export async function logAction(a: { agent: AgentName; enquiryId?: string | null; kind: string; status: 'done' | 'held' | 'blocked' | 'prompted' | 'skipped'; title: string; detail?: string; checks?: Check[]; by?: string | null }): Promise<string> {
   const id = uid()
   await db.insert(agentActions).values({ id, agent: a.agent, enquiryId: a.enquiryId ?? null, kind: a.kind, status: a.status, title: a.title, detail: a.detail ?? null, checks: a.checks ? JSON.stringify(a.checks) : null, createdAt: now(), doneAt: a.status === 'done' ? now() : null, doneBy: a.by ?? null })
   return id

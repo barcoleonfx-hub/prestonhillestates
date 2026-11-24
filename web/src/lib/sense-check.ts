@@ -9,6 +9,7 @@ import type { AgentName } from './agents'
 import { agentsMaySpend, recordUsage } from './ai-usage'
 import { anthropicKey } from './anthropic-key'
 import { emailFacts } from './email-writer'
+import { historyBrief } from './lead-history'
 import { isValuation } from './enquiry-labels'
 import { knownBase } from './property-email-data'
 import { reportFinal, reportGuide, reportStates } from './report-guide'
@@ -85,6 +86,7 @@ It must not go ("must_fix") if any of these is true:
 - It promises something we can't know (a sale price, a buyer, a timescale) or uses pressure ("act fast", "won't last", "prices are falling").
 - The tone is rude, cold, pushy or over-familiar, or it makes no sense for where this person is (e.g. chasing someone to book after they said no).
 - Unfilled placeholders, broken sentences, or machine-like phrasing.
+- It repeats something already sent to them (by a colleague or the agent): the same report, the same link, the same question, or a "following up" when someone was just in touch. Or it ignores something they told us (they said they'd call back, they're away, they've chosen another agent, they asked a question).
 
 Fixed, already-approved wording is fine as it is: judge whether it fits this person and these facts, not the style. Raise only real problems.`
 
@@ -93,12 +95,16 @@ async function aiRead(d: Draft, guide: string | null): Promise<{ ok: boolean; no
   const k = anthropicKey()
   if ('error' in k) return { ok: false, ran: false, note: 'the Claude API key isn’t set' }
   if (!(await agentsMaySpend())) return { ok: false, ran: false, note: 'this month’s AI budget is used up' }
-  const facts = await emailFacts({ propertyId: null, enquiryId: d.enquiryId, threadId: null, contactId: null }).catch(() => '')
+  const [facts, history] = await Promise.all([
+    emailFacts({ propertyId: null, enquiryId: d.enquiryId, threadId: null, contactId: null }).catch(() => ''),
+    historyBrief(d.enquiryId).catch(() => ''),
+  ])
   const ask = [
     `What it is: ${d.purpose}. ${d.template ? 'Fixed wording staff approved, filled in for this person.' : 'Written by an AI agent for this person.'}`,
     `Today: ${new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/London' })}`,
     `To: ${d.to}\nSubject: ${d.subject}\n\n${d.text.slice(0, 8000)}`,
     `The facts we hold:\n${facts || '(only the enquiry above)'}`,
+    history ? `Everything already sent to them and said by them, oldest first (from us by email, WhatsApp, calls and letters, by staff or the agent):\n${history}` : 'Nothing has been sent to them yet.',
     guide ? `Their finalised OnTheMarket guide: ${guide}` : 'There is no finalised OnTheMarket guide for them yet: the message must not give any valuation figure.',
   ].join('\n\n')
   const model = 'claude-sonnet-5-5'
