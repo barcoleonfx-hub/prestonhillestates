@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { approveHeld, rejectHeld } from '@/lib/agent-queue'
 import { saveAgentSettings } from '@/lib/ai-usage'
+import { sendReport } from '@/lib/director'
 import { requireAdmin } from '@/lib/auth'
 import { audit } from '@/lib/contacts'
 
@@ -31,5 +32,23 @@ export async function saveBudget(form: FormData): Promise<void> {
   if (!Number.isFinite(n) || n < 0 || n > 1000) return
   await saveAgentSettings({ budgetGbp: n })
   await audit(me.id, 'agent_budget_saved', 'setting', 'agents', `£${n}`)
+  revalidatePath('/admin/agents')
+}
+
+/** Sends the Director's report now (e.g. after fixing the mailbox, or to see today's). */
+export async function sendReportNow(): Promise<QueueResult> {
+  const me = await requireAdmin()
+  const r = await sendReport(me.id)
+  if (r.ok) { await audit(me.id, 'director_report_sent', 'setting', 'agents', r.to); revalidatePath('/admin/agents') }
+  return r
+}
+
+/** Where the daily report goes, and whether it's on. */
+export async function saveDirector(form: FormData): Promise<void> {
+  const me = await requireAdmin()
+  const to = String(form.get('to') ?? '').trim().toLowerCase()
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return
+  await saveAgentSettings({ directorTo: to, directorOff: form.get('on') !== 'on' })
+  await audit(me.id, 'director_settings_saved', 'setting', 'agents', `${to}${form.get('on') === 'on' ? '' : ' (off)'}`)
   revalidatePath('/admin/agents')
 }

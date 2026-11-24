@@ -2,9 +2,11 @@ import Link from 'next/link'
 import { requireAdmin } from '@/lib/auth'
 import { guidesToUpload, recentActions, todaysLetters, type Check } from '@/lib/agents'
 import { heldItems } from '@/lib/agent-queue'
-import { monthSpend } from '@/lib/ai-usage'
+import { agentSettings, monthSpend } from '@/lib/ai-usage'
+import { lastReport } from '@/lib/director'
+import SendReportButton from './SendReportButton'
 import HeldCard from './HeldCard'
-import { saveBudget } from './actions'
+import { saveBudget, saveDirector } from './actions'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Agents' }
@@ -17,7 +19,8 @@ const gbp = (n: number) => `£${n.toFixed(2)}`
 /** The agents' desk: what's waiting on staff (OnTheMarket guides, today's letters) and everything the agents did. */
 export default async function AgentsPage() {
   await requireAdmin()
-  const [guides, letters, actions, held, spend] = await Promise.all([guidesToUpload(), todaysLetters(), recentActions(40), heldItems(), monthSpend()])
+  const [guides, letters, actions, held, spend, cfg, last] = await Promise.all([guidesToUpload(), todaysLetters(), recentActions(40), heldItems(), monthSpend(), agentSettings(), lastReport()])
+  const to = cfg.directorTo || 'info@prestonhillestates.com'
   const missing = guides.filter((g) => g.report.state === 'none')
   return (
     <>
@@ -60,6 +63,17 @@ export default async function AgentsPage() {
             <span className="fu-acts"><Link className="btn btn-gold btn-sm" href={`/admin/letters-print/${b.id}`}>Print today’s letters</Link></span>
           </div>
         )) : <p className="fu-empty">No letters waiting today.</p>}
+      </section>
+
+      <section className="card fu-list ag-sec" id="director">
+        <div className="fu-head"><h2>The Director’s daily report</h2><p>One email every morning at 7:30 to {to}: what each agent did, what came of it, what the sense-check stopped and what needs you today. The figures are counted by the system; Claude writes the short view on top, and it’s dropped if it quotes a figure that isn’t in the report.</p></div>
+        <div className="ag-dir">
+          <span className="fu-main"><b>{cfg.directorOff ? 'Switched off' : last ? (last.status === 'done' ? `Last sent ${ago(last.createdAt)}` : `Last one failed ${ago(last.createdAt)}: ${last.detail ?? ''}`) : 'Not sent yet: the first goes at 7:30 tomorrow'}</b><small>Seller outreach and Marketing agents join the report when they’re switched on.</small></span>
+          <span className="ag-btns"><Link className="btn btn-ghost btn-sm" href="/admin/agents/report">Preview today’s</Link><SendReportButton to={to} /></span>
+        </div>
+        <div className="ag-dir">
+          <form action={saveDirector}><label htmlFor="ag-to">Send to</label><input id="ag-to" name="to" type="email" defaultValue={to} /><label><input type="checkbox" name="on" defaultChecked={!cfg.directorOff} /> Send every morning</label><button className="btn btn-ghost btn-sm">Save</button></form>
+        </div>
       </section>
 
       <section className="card fu-list ag-sec" id="budget">
