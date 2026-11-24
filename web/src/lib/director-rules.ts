@@ -23,9 +23,13 @@ export type DirectorFacts = {
 }
 export type DirectorView = { headline: string; view: string; next: string[] }
 
-/** Every number written in a piece of text (ignoring ones inside words and postcodes, like HA3). */
+/** Every number written in a piece of text (ignoring ones inside words and postcodes, like HA3); "£1.25m" and "£585k" count as the full figure. */
 export function numbersIn(text: string): number[] {
-  return [...text.matchAll(/(?<![A-Za-z\d])£?(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)(?![A-Za-z\d])/g)].map((m) => Number(m[1].replace(/,/g, '')))
+  return [...text.matchAll(/(?<![A-Za-z\d.])£?(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)(?:\s?(k|m|million|bn))?(?![A-Za-z\d])/gi)].map((m) => {
+    const n = Number(m[1].replace(/,/g, ''))
+    const u = (m[2] ?? '').toLowerCase()
+    return u === 'k' ? Math.round(n * 1e3) : u === 'm' || u === 'million' ? Math.round(n * 1e6) : u === 'bn' ? Math.round(n * 1e9) : n
+  })
 }
 
 /** The view may only use numbers the facts contain (or small counting words like "two"); null if it's fine. */

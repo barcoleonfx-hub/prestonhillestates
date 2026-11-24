@@ -98,7 +98,7 @@ export async function saveBriefings(form: FormData): Promise<void> {
     const name = String(form.get(`name_${i}`) ?? '').trim().slice(0, 40)
     const aliases = String(form.get(`aliases_${i}`) ?? '').split(',').map((a) => a.trim()).filter((a) => a.length >= 2).slice(0, 6)
     const to = String(form.get(`to_${i}`) ?? '').trim().toLowerCase()
-    return { name, aliases: aliases.length ? aliases : name ? [name] : [], to, off: form.get(`on_${i}`) !== 'on' }
+    return { name, aliases: aliases.length ? aliases : name ? [name] : [], to, off: form.get(`on_${i}`) !== 'on', director: form.get(`dir_${i}`) === 'on' }
   }).filter((p) => p.name && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(p.to))
   if (!people.length) return
   await saveAgentSettings({ briefings: people, briefingsOff: form.get('all') !== 'on' })

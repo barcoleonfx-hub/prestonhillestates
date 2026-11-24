@@ -1,17 +1,18 @@
-// The 10am staff briefing: for each person, what they sent and did yesterday, what came in for them, everything
-// that came into the office mailbox, and what's outstanding, most urgent first. Which emails are a person's: ones
+// The 10am staff briefing: a short summary for each person of what they did yesterday, what's most urgent and
+// what's still waiting, and what mattered in the inbox (routine and automated emails left out). The Director gets a
+// snapshot of the whole team and where the high-value work sits. Which emails are a person's: ones
 // addressed to them or mentioning them (by any of their names), and ones they sent (from the portal, or from Apple
 // Mail signed with their name). Claude writes the short summaries; every point must point at real items, and any
 // number it uses must be in them, or that point is dropped. Kept free of server code so it's easy to test.
 
 import { numbersIn } from './director-rules'
 
-export type Person = { name: string; aliases: string[]; to: string; off?: boolean }
+export type Person = { name: string; aliases: string[]; to: string; off?: boolean; /** Gets the Director's snapshot of the whole team instead of a personal briefing. */ director?: boolean }
 export const DEFAULT_PEOPLE: Person[] = [
   { name: 'Fred', aliases: ['Fred', 'Ferdous'], to: 'fred@prestonhillestates.com' },
   { name: 'Moniba', aliases: ['Moniba'], to: 'info@prestonhillestates.com' },
   { name: 'Rahman', aliases: ['Rahman'], to: 'info@prestonhillestates.com' },
-  { name: 'Jamil', aliases: ['Jamil'], to: 'info@prestonhillestates.com' },
+  { name: 'Jamil', aliases: ['Jamil'], to: 'jamil.preston@hotmail.com', director: true },
 ]
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -41,7 +42,7 @@ export function isFor(m: { toAddrs?: string | null; ccAddrs?: string | null; sub
   return re.test(m.subject ?? '') || re.test(unquoted(m.body))
 }
 
-export type Item = { ref: string; at: string; title: string; detail: string; href: string; urgent?: boolean }
+export type Item = { ref: string; at: string; title: string; detail: string; href: string; urgent?: boolean; /** Automated or no reply needed. */ routine?: boolean; /** £, for high-value items. */ value?: number }
 export type Briefing = {
   person: Person
   /** e.g. "Monday 23 November" (the day it covers). */
@@ -55,80 +56,140 @@ export type Briefing = {
   inbox: Item[]
   outstanding: Item[]
 }
-export type BriefingView = {
-  yesterday: string
-  discuss: { point: string; refs: string[] }[]
-  inbox: string
-  priorities: { action: string; why: string; refs: string[] }[]
+export type Point = { text: string; why?: string; refs: string[] }
+export type BriefingView = { summary: string; urgent: Point[]; done: Point[]; pending: Point[]; inbox: string }
+
+const itemsOf = (b: Briefing) => [...b.sent, ...b.activity, ...b.received, ...b.inbox, ...b.outstanding]
+
+/** Checks Claude's wording against the items: points must cite real items, and numbers must come from them. */
+export function checker(items: Item[], extra: (string | number)[] = []) {
+  const byRef = new Map(items.map((i) => [i.ref, i]))
+  const source = [...extra.map(String), ...items.flatMap((i) => [i.title, i.detail, i.value != null ? String(i.value) : ''])].join(' ')
+  const allowed = new Set([...numbersIn(source), ...extra.filter((x): x is number => typeof x === 'number')])
+  let dropped = 0
+  const numbersOk = (s: string) => numbersIn(s).every((n) => allowed.has(n))
+  const text = (s: string) => (numbersOk(s) ? s : (dropped++, ''))
+  const points = (xs: Point[], max: number) => xs.filter((p) => (p.refs.length && p.refs.every((r) => byRef.has(r)) && numbersOk(`${p.text} ${p.why ?? ''}`) ? true : (dropped++, false))).slice(0, max)
+  return { text, points, dropped: () => dropped, byRef }
 }
 
-const all = (b: Briefing) => [...b.sent, ...b.activity, ...b.received, ...b.inbox, ...b.outstanding]
-
-/**
- * The sense-check on Claude's summary: each point must cite real items, and every number in it must appear in what
- * it was given. Points that fail are dropped (and counted); summaries that fail are replaced by a plain line.
- */
 export function checkView(v: BriefingView, b: Briefing): { view: BriefingView; dropped: number } {
-  const items = new Map(all(b).map((i) => [i.ref, i]))
-  const source = [b.day, b.today, ...all(b).flatMap((i) => [i.title, i.detail, i.at])].join(' ')
-  const allowed = new Set([...numbersIn(source), b.outstanding.length, b.received.length, b.inbox.length, b.sent.length, b.activity.length])
-  const numbersOk = (s: string) => numbersIn(s).every((n) => allowed.has(n))
-  const refsOk = (refs: string[]) => refs.length > 0 && refs.every((r) => items.has(r))
-  let dropped = 0
-  const keep = <T,>(xs: T[], ok: (x: T) => boolean) => xs.filter((x) => (ok(x) ? true : (dropped++, false)))
-  const view: BriefingView = {
-    yesterday: numbersOk(v.yesterday) ? v.yesterday : (dropped++, ''),
-    inbox: numbersOk(v.inbox) ? v.inbox : (dropped++, ''),
-    discuss: keep(v.discuss, (d) => refsOk(d.refs) && numbersOk(d.point)).slice(0, 5),
-    priorities: keep(v.priorities, (p) => refsOk(p.refs) && numbersOk(`${p.action} ${p.why}`)).slice(0, 6),
-  }
-  return { view, dropped }
+  const items = itemsOf(b)
+  const c = checker(items, [b.day, b.today, b.outstanding.length, b.sent.length, b.activity.length, b.received.length, b.inbox.length, b.inbox.filter((i) => !i.routine).length])
+  const view = { summary: c.text(v.summary), urgent: c.points(v.urgent, 5), done: c.points(v.done, 6), pending: c.points(v.pending, 6), inbox: c.text(v.inbox) }
+  return { view, dropped: c.dropped() }
 }
 
 /** Without Claude: the outstanding items as they are, most urgent first. */
 export function plainView(b: Briefing): BriefingView {
-  return {
-    yesterday: '', inbox: '', discuss: [],
-    priorities: b.outstanding.slice(0, 6).map((o) => ({ action: o.title, why: o.detail, refs: [o.ref] })),
-  }
+  const o = b.outstanding.map((i) => ({ text: i.title, why: i.detail, refs: [i.ref] }))
+  return { summary: '', urgent: o.slice(0, 5), done: [], pending: o.slice(5, 11), inbox: '' }
+}
+
+// ---------- the emails ----------
+
+const H2 = 'font-size:12px;letter-spacing:.07em;text-transform:uppercase;color:#8a6d2b;margin:22px 0 8px'
+const head = (kicker: string, title: string) => `<div style="border-bottom:3px solid #b08d3c;padding:0 0 12px"><div style="font-size:12px;color:#888;letter-spacing:.08em;text-transform:uppercase">${esc(kicker)}</div><div style="font-size:20px;font-weight:bold;margin-top:4px">${esc(title)}</div></div>`
+const shell = (inner: string) => `<div style="font-family:Arial,Helvetica,sans-serif;color:#222;max-width:620px;margin:0 auto;line-height:1.55;font-size:14px">${inner}</div>`
+const foot = (s: string) => `<p style="font-size:12px;color:#888;margin:22px 0 0;border-top:1px solid #eee;padding-top:10px">${esc(s)}</p>`
+
+function pointsHtml(xs: Point[], links: Map<string, Item>, ordered = false, bold = false): string {
+  if (!xs.length) return ''
+  const tag = ordered ? 'ol' : 'ul'
+  return `<${tag} style="margin:0;padding-left:20px">${xs.map((p) => {
+    const href = links.get(p.refs[0])?.href
+    const t = href ? `<a href="${esc(href)}" style="color:#222${bold ? ';font-weight:bold' : ''}">${esc(p.text)}</a>` : esc(p.text)
+    return `<li style="margin:5px 0">${t}${p.why ? `<br><span style="color:#666">${esc(p.why)}</span>` : ''}</li>`
+  }).join('')}</${tag}>`
+}
+const pointsText = (xs: Point[], links: Map<string, Item>, ordered = false) => xs.map((p, i) => `${ordered ? `${i + 1}.` : '-'} ${p.text}${p.why ? `: ${p.why}` : ''}${links.get(p.refs[0]) ? ` ${links.get(p.refs[0])!.href}` : ''}`)
+
+const tally = (b: Briefing) => {
+  const routine = b.inbox.filter((i) => i.routine).length
+  return `From ${b.inbox.length} email${b.inbox.length === 1 ? '' : 's'} in${routine ? ` (${routine} routine or automated, left out)` : ''}, ${b.sent.length} sent by ${b.person.name} and ${b.activity.length} call${b.activity.length === 1 ? '' : 's'}, note${b.activity.length === 1 ? '' : 's'} and visit${b.activity.length === 1 ? '' : 's'}.`
 }
 
 export function briefingEmail(b: Briefing, v: BriefingView, note: string | null): { subject: string; text: string; html: string } {
-  const items = new Map(all(b).map((i) => [i.ref, i]))
-  const first = v.priorities.length
-  const subject = `${b.person.name}’s briefing, ${b.today}: ${first ? `${first} thing${first === 1 ? '' : 's'} to do first` : 'nothing outstanding'}`
-  const link = (refs: string[]) => items.get(refs[0])?.href ?? `${b.base}/admin`
-  const list = (xs: Item[], empty: string) => (xs.length ? xs.map((i) => `- ${i.title}${i.detail ? ` (${i.detail})` : ''}`) : [`- ${empty}`])
+  const links = new Map(itemsOf(b).map((i) => [i.ref, i]))
+  const subject = `${b.person.name}’s briefing, ${b.today}: ${v.urgent.length ? `${v.urgent.length} urgent` : 'nothing urgent'}`
   const text = [
-    subject, '',
-    'DO FIRST', ...(v.priorities.length ? v.priorities.map((p, n) => `${n + 1}. ${p.action}${p.why ? `: ${p.why}` : ''} ${link(p.refs)}`) : ['Nothing outstanding.']), '',
-    `YESTERDAY (${b.day})`, ...(v.yesterday ? [v.yesterday, ''] : []),
-    ...(v.discuss.length ? ['To discuss:', ...v.discuss.map((d) => `- ${d.point}`), ''] : []),
-    'You sent and did:', ...list([...b.sent, ...b.activity], 'Nothing recorded.'), '',
-    `Emails for you (${b.received.length}):`, ...list(b.received, 'None.'), '',
-    `EVERYTHING THAT CAME IN (${b.inbox.length})`, ...(v.inbox ? [v.inbox, ''] : []), ...list(b.inbox.slice(0, 30), 'Nothing came in.'), '',
-    `STILL OUTSTANDING (${b.outstanding.length})`, ...list(b.outstanding, 'Nothing.'), '',
-    ...(note ? [note, ''] : []),
-    'Made by the agents from the office mailbox and the portal. Calls that weren’t logged and WhatsApps from personal phones aren’t included.',
+    subject, '', ...(v.summary ? [v.summary, ''] : []),
+    'MOST URGENT', ...(v.urgent.length ? pointsText(v.urgent, links, true) : ['Nothing urgent.']), '',
+    ...(v.done.length ? [`DONE YESTERDAY (${b.day})`, ...pointsText(v.done, links), ''] : []),
+    ...(v.pending.length ? ['STILL WAITING', ...pointsText(v.pending, links), ''] : []),
+    ...(v.inbox ? ['IN THE INBOX', v.inbox, ''] : []),
+    ...(note ? [note, ''] : []), tally(b),
   ].join('\n')
+  const html = shell(head('Preston Hill Estates · Daily briefing', `${b.person.name} · ${b.today}`)
+    + (v.summary ? `<p style="font-size:15px;margin:16px 0 0">${esc(v.summary)}</p>` : '')
+    + `<h2 style="${H2}">Most urgent</h2>` + (v.urgent.length ? pointsHtml(v.urgent, links, true, true) : '<p style="margin:0">✓ Nothing urgent.</p>')
+    + (v.done.length ? `<h2 style="${H2}">Done yesterday</h2>${pointsHtml(v.done, links)}` : '')
+    + (v.pending.length ? `<h2 style="${H2}">Still waiting</h2>${pointsHtml(v.pending, links)}` : '')
+    + (v.inbox ? `<h2 style="${H2}">In the inbox</h2><p style="margin:0">${esc(v.inbox)}</p>` : '')
+    + (note ? `<p style="font-size:12px;color:#888;margin:14px 0 0">${esc(note)}</p>` : '')
+    + foot(tally(b)))
+  return { subject, text, html }
+}
 
-  const h2 = 'font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#8a6d2b;margin:24px 0 8px'
-  const li = (i: Item) => `<li style="margin:4px 0${i.urgent ? ';font-weight:bold' : ''}"><a href="${esc(i.href)}" style="color:#222">${esc(i.title)}</a>${i.detail ? ` <span style="color:#777">· ${esc(i.detail)}</span>` : ''}</li>`
-  const ul = (xs: Item[], empty: string) => (xs.length ? `<ul style="margin:0;padding-left:20px">${xs.map(li).join('')}</ul>` : `<p style="margin:0;color:#777">${esc(empty)}</p>`)
-  const html = `<div style="font-family:Arial,Helvetica,sans-serif;color:#222;max-width:640px;margin:0 auto;line-height:1.5;font-size:14px">`
-    + `<div style="border-bottom:3px solid #b08d3c;padding:0 0 12px"><div style="font-size:12px;color:#888;letter-spacing:.08em;text-transform:uppercase">Preston Hill Estates · Daily briefing</div><div style="font-size:20px;font-weight:bold;margin-top:4px">${esc(b.person.name)} · ${esc(b.today)}</div></div>`
-    + `<h2 style="${h2}">Do first</h2>`
-    + (v.priorities.length ? `<ol style="margin:0;padding-left:20px">${v.priorities.map((p) => `<li style="margin:6px 0"><a href="${esc(link(p.refs))}" style="color:#222;font-weight:bold">${esc(p.action)}</a>${p.why ? `<br><span style="color:#555">${esc(p.why)}</span>` : ''}</li>`).join('')}</ol>` : '<p style="margin:0">✓ Nothing outstanding.</p>')
-    + `<h2 style="${h2}">Yesterday · ${esc(b.day)}</h2>`
-    + (v.yesterday ? `<p style="margin:0 0 8px">${esc(v.yesterday)}</p>` : '')
-    + (v.discuss.length ? `<div style="background:#faf6ec;border-radius:8px;padding:10px 14px;margin:8px 0"><b style="font-size:12px;color:#8a6d2b;text-transform:uppercase;letter-spacing:.06em">To discuss</b><ul style="margin:6px 0 0;padding-left:20px">${v.discuss.map((d) => `<li><a href="${esc(link(d.refs))}" style="color:#222">${esc(d.point)}</a></li>`).join('')}</ul></div>` : '')
-    + `<p style="margin:10px 0 4px;font-weight:bold">You sent and did</p>${ul([...b.sent, ...b.activity], 'Nothing recorded.')}`
-    + `<p style="margin:10px 0 4px;font-weight:bold">Emails for you (${b.received.length})</p>${ul(b.received, 'None.')}`
-    + `<h2 style="${h2}">Everything that came in (${b.inbox.length})</h2>`
-    + (v.inbox ? `<p style="margin:0 0 8px">${esc(v.inbox)}</p>` : '')
-    + ul(b.inbox.slice(0, 30), 'Nothing came in.') + (b.inbox.length > 30 ? `<p style="color:#777;margin:4px 0 0">…and ${b.inbox.length - 30} more in the inbox.</p>` : '')
-    + `<h2 style="${h2}">Still outstanding (${b.outstanding.length})</h2>${ul(b.outstanding, 'Nothing.')}`
-    + (note ? `<p style="font-size:12px;color:#888;margin:16px 0 0">${esc(note)}</p>` : '')
-    + `<p style="font-size:12px;color:#888;margin:18px 0 0">Made by the agents from the office mailbox and the portal. Calls that weren’t logged and WhatsApps from personal phones aren’t included.</p></div>`
+// ---------- the Director's snapshot ----------
+
+export type Snapshot = { me: Briefing; team: Briefing[]; highValue: Item[]; day: string; today: string; base: string }
+export type SnapshotView = {
+  summary: string
+  urgent: Point[]
+  team: { name: string; did: string; outstanding: string; refs: string[] }[]
+  highValue: Point[]
+  mine: Point[]
+}
+const snapItems = (s: Snapshot) => [...itemsOf(s.me), ...s.team.flatMap(itemsOf), ...s.highValue]
+
+export function checkSnapshot(v: SnapshotView, s: Snapshot): { view: SnapshotView; dropped: number } {
+  const counts = s.team.flatMap((b) => [b.outstanding.length, b.sent.length, b.activity.length, b.received.length, b.outstanding.filter((o) => o.urgent).length])
+  const c = checker(snapItems(s), [s.day, s.today, ...counts, s.me.inbox.length, s.highValue.length])
+  const names = new Set(s.team.map((b) => b.person.name))
+  const team = v.team.filter((t) => names.has(t.name)).map((t) => ({ ...t, did: c.text(t.did), outstanding: c.text(t.outstanding), refs: t.refs.filter((r) => c.byRef.has(r)) }))
+  return { view: { summary: c.text(v.summary), urgent: c.points(v.urgent, 5), team, highValue: c.points(v.highValue, 6), mine: c.points(v.mine, 5) }, dropped: c.dropped() }
+}
+
+/** Without Claude: counts and the top item for each person, and the high-value list by value. */
+export function plainSnapshot(s: Snapshot): SnapshotView {
+  return {
+    summary: '',
+    urgent: s.team.flatMap((b) => b.outstanding.filter((o) => o.urgent).map((o) => ({ text: `${b.person.name}: ${o.title}`, why: o.detail, refs: [o.ref] }))).slice(0, 5),
+    team: s.team.map((b) => ({
+      name: b.person.name,
+      did: `${b.sent.length} email${b.sent.length === 1 ? '' : 's'} sent, ${b.activity.length} call${b.activity.length === 1 ? '' : 's'}, note${b.activity.length === 1 ? '' : 's'} or visit${b.activity.length === 1 ? '' : 's'}.`,
+      outstanding: b.outstanding.length ? `${b.outstanding.length} outstanding, first: ${b.outstanding[0].title}.` : 'Nothing outstanding.',
+      refs: b.outstanding[0] ? [b.outstanding[0].ref] : [],
+    })),
+    highValue: s.highValue.slice(0, 6).map((h) => ({ text: h.title, why: h.detail, refs: [h.ref] })),
+    mine: s.me.outstanding.slice(0, 5).map((o) => ({ text: o.title, why: o.detail, refs: [o.ref] })),
+  }
+}
+
+export function snapshotEmail(s: Snapshot, v: SnapshotView, note: string | null): { subject: string; text: string; html: string } {
+  const links = new Map(snapItems(s).map((i) => [i.ref, i]))
+  const subject = `Director’s snapshot, ${s.today}: ${v.urgent.length ? `${v.urgent.length} urgent across the team` : 'nothing urgent'}`
+  const text = [
+    subject, '', ...(v.summary ? [v.summary, ''] : []),
+    'MOST URGENT', ...(v.urgent.length ? pointsText(v.urgent, links, true) : ['Nothing urgent.']), '',
+    'THE TEAM', ...v.team.flatMap((t) => [`${t.name}: ${t.did}`, `  Outstanding: ${t.outstanding}`]), '',
+    ...(v.highValue.length ? ['HIGH-VALUE ITEMS', ...pointsText(v.highValue, links), ''] : []),
+    ...(v.mine.length ? ['YOUR OWN', ...pointsText(v.mine, links), ''] : []),
+    ...(note ? [note, ''] : []),
+    `Covers ${s.day}. Routine and automated emails left out.`,
+  ].join('\n')
+  const card = (t: SnapshotView['team'][number]) => {
+    const href = t.refs[0] ? links.get(t.refs[0])?.href : undefined
+    return `<div style="border:1px solid #eee;border-radius:8px;padding:10px 14px;margin:0 0 8px"><b style="font-size:15px">${esc(t.name)}</b><p style="margin:4px 0 0">${esc(t.did)}</p><p style="margin:4px 0 0;color:#555"><b style="color:#8a6d2b">Outstanding:</b> ${href ? `<a href="${esc(href)}" style="color:#555">${esc(t.outstanding)}</a>` : esc(t.outstanding)}</p></div>`
+  }
+  const html = shell(head('Preston Hill Estates · Director’s snapshot', s.today)
+    + (v.summary ? `<p style="font-size:15px;margin:16px 0 0">${esc(v.summary)}</p>` : '')
+    + `<h2 style="${H2}">Most urgent</h2>` + (v.urgent.length ? pointsHtml(v.urgent, links, true, true) : '<p style="margin:0">✓ Nothing urgent.</p>')
+    + `<h2 style="${H2}">The team</h2>${v.team.map(card).join('')}`
+    + (v.highValue.length ? `<h2 style="${H2}">High-value items</h2>${pointsHtml(v.highValue, links)}` : '')
+    + (v.mine.length ? `<h2 style="${H2}">Your own</h2>${pointsHtml(v.mine, links)}` : '')
+    + (note ? `<p style="font-size:12px;color:#888;margin:14px 0 0">${esc(note)}</p>` : '')
+    + foot(`Covers ${s.day}. Routine and automated emails left out.`))
   return { subject, text, html }
 }
