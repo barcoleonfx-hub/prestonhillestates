@@ -15,7 +15,9 @@ import { knownBase } from './property-email-data'
 import { leadEvent } from './leads'
 import { addressLines, chooseByDefault, fillLetter, firstName, LETTER_AFTER, LETTER_BEFORE, OLD_LETTER, postable, shortHome, streetOf } from './postal-letter-rules'
 import { AREAS } from './areas'
-import { lrTypeFor, salesOnStreet } from './sold-prices'
+import { lrTypeFor, salesOnStreet, typePlural, type AreaStats, type LrType } from './sold-prices'
+import { lrTypeOf, withoutOutliers } from './otm-guide'
+import { reportGuide } from './report-guide'
 import { now, uid } from './util'
 
 export type LetterCandidate = {
@@ -105,8 +107,10 @@ export type LetterFacts = {
   street: string | null; area: string | null
   sales: { where: string; when: string; price: number }[]
   salesWhere: 'street' | 'near' | null
-  typical: { price: number; count: number; where: string } | null
+  typical: { price: number; count: number; where: string; kind: string } | null
   wanting: { count: number; who: 'buyers' | 'tenants' } | null
+  /** The guide price from their finalised property report (the same figure the QR code's report shows). */
+  guide: { asking: number; low: number | null; high: number | null; rent: boolean } | null
 }
 export type PrintedLetter = { id: string; name: string; first: string; lines: string[]; home: string | null; before: string[]; after: string[]; report: string; reportShort: string; qr: string; facts: LetterFacts }
 
@@ -127,28 +131,47 @@ async function wantingIn(outward: string, area: string | null, who: 'buyer' | 't
 }
 
 /** What's printed beside the QR code for one home. Nothing is invented: anything we can't find is left out. */
-async function letterFacts(lines: string[], letting: boolean, homeType: string | null): Promise<LetterFacts> {
+async function letterFacts(lines: string[], letting: boolean, homeType: string | null, enquiryId: string): Promise<LetterFacts> {
   const pc = lines.find((l) => /^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i.test(l.trim())) ?? null
   const outward = outwardOf(pc)
   const street = streetOf(lines)
   const text = lines.join(' ').toLowerCase()
   const area = (outward ? AREAS.filter((a) => a.districts.includes(outward)) : []).sort((a, b) => Number(text.includes(b.name.toLowerCase())) - Number(text.includes(a.name.toLowerCase())))[0]?.name ?? null
-  const empty: LetterFacts = { street, area, sales: [], salesWhere: null, typical: null, wanting: null }
+  // Their property report: the OnTheMarket guide says what kind of home it is (official records), and once the
+  // report is finalised its guide price is the figure the letter quotes, so the letter and the report agree.
+  const rg = await reportGuide(enquiryId).catch(() => null)
+  const priceOk = !!(rg?.finalisedAt && rg.asking && (!rg.priceFor || rg.priceFor === (letting ? 'lettings' : 'sales')))
+  const guide = priceOk ? { asking: rg!.asking!, low: rg!.low, high: rg!.high, rent: letting } : null
+  // Compare like with like. Without a type from the guide or the enquiry, a flat's address says so ("Flat 2"); any
+  // other address is taken as a house, so a flat's sale is never set against a house (or the other way round).
+  const type: LrType = (rg && lrTypeOf(rg.guide.type)) || lrTypeFor(homeType) || (/\b(flat|apartment|maisonette|studio)\b/i.test(lines.join(' ')) ? 'F' : 'H')
+  const empty: LetterFacts = { street, area, sales: [], salesWhere: null, typical: null, wanting: null, guide }
   if (!pc || !outward) return empty
   const [sold, wanting] = await Promise.all([
-    letting ? Promise.resolve(null) : salesOnStreet(street, pc, lrTypeFor(homeType)).catch(() => null),
+    letting ? Promise.resolve(null) : salesOnStreet(street, pc, type, rg?.guide.beds ?? null).catch(() => null),
     wantingIn(outward, area, letting ? 'tenant' : 'buyer').catch(() => 0),
   ])
   const onStreet = sold?.onStreet ?? []
-  const pick = (onStreet.length ? onStreet : sold?.near?.recent ?? []).slice().sort((a, b) => (a.soldOn < b.soldOn ? 1 : -1)).slice(0, 3)
+  // Like the report: no new builds (they sell at a premium) and nothing far from the rest.
+  const pick = withoutOutliers((onStreet.length ? onStreet : sold?.near?.recent ?? []).filter((x) => !x.newBuild)).sort((a, b) => (a.soldOn < b.soldOn ? 1 : -1)).slice(0, 3)
   return {
     street, area,
     // On their own road the road name is in the heading, so each sale says what kind of home it was instead.
     sales: pick.map((x) => ({ where: onStreet.length ? x.typeLabel : titleCase(x.street ?? x.postcode), when: monthYear(x.soldOn), price: x.price })),
     salesWhere: pick.length ? (onStreet.length ? 'street' : 'near') : null,
-    typical: sold?.near?.stats.median12 && sold.near.stats.count12 >= 5 ? { price: sold.near.stats.median12, count: sold.near.stats.count12, where: sold.near.stats.label.replace(/^in\s+/, '') } : null,
+    // With their own guide price on the letter, an area-wide figure beside it would only confuse.
+    typical: guide ? null : typicalFor(sold?.near ?? null, type),
     wanting: wanting >= 3 ? { count: wanting, who: letting ? 'tenants' : 'buyers' } : null,
+    guide,
   }
+}
+
+/** The typical price of the same kind of home nearby over the last 12 months (never every kind of home mixed). */
+function typicalFor(near: { stats: AreaStats } | null, type: LrType): LetterFacts['typical'] {
+  // "Houses" of any kind have no one typical price: only a single kind (terraced, semi, detached, flats) gets one.
+  if (!near || type === 'H') return null
+  const row = near.stats.byType.find((b) => b.type === type)
+  return row?.median && row.count >= 5 ? { price: row.median, count: row.count, where: near.stats.label, kind: typePlural(type) } : null
 }
 
 /** A batch ready to print: each letter's words, and the QR code for its report. */
@@ -166,7 +189,7 @@ export async function batchView(id: string): Promise<{ id: string; sender: strin
     const report = `${base}/report/${await shareFor(r.enquiryId)}?utm_source=letter`
     const first = firstName(r.name)
     const lines = r.address.split('\n')
-    const facts = await letterFacts(lines, letting.get(r.enquiryId) ?? false, typeOf.get(r.enquiryId) ?? null)
+    const facts = await letterFacts(lines, letting.get(r.enquiryId) ?? false, typeOf.get(r.enquiryId) ?? null, r.enquiryId)
     const v = { first, home: r.home, street: facts.street, area: facts.area }
     return {
       id: r.id, name: r.name, first, lines: r.address.split('\n'), home: r.home, facts,
