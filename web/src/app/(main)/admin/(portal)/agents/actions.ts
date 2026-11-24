@@ -105,3 +105,18 @@ export async function saveBriefings(form: FormData): Promise<void> {
   await audit(me.id, 'briefings_saved', 'setting', 'agents', people.map((p) => `${p.name}→${p.to}`).join(', '))
   revalidatePath('/admin/agents')
 }
+
+/** Sends every briefing that's switched on, now (each still goes to its own address). */
+export async function sendAllBriefingsNow(): Promise<QueueResult & { sent?: string[] }> {
+  const me = await requireAdmin()
+  const { briefingPeople, sendBriefing } = await import('@/lib/staff-briefing')
+  const sent: string[] = []
+  for (const p of (await briefingPeople()).filter((x) => !x.off && x.to)) {
+    const r = await sendBriefing(p, me.id)
+    if (!r.ok) return { ok: false, error: `${sent.length ? `Sent ${sent.join(', ')}; then ` : ''}${p.name}’s couldn’t be sent: ${r.error}`, sent }
+    sent.push(p.name)
+  }
+  await audit(me.id, 'briefings_sent_all', 'setting', 'agents', sent.join(', '))
+  revalidatePath('/admin/agents')
+  return { ok: true, sent }
+}

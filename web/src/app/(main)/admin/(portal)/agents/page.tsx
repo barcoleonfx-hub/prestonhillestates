@@ -8,6 +8,7 @@ import SendReportButton from './SendReportButton'
 import HeldCard from './HeldCard'
 import { moveToPlan, saveBriefings, saveBudget, saveDirector, startRecentPlans } from './actions'
 import SendBriefingButton from './SendBriefingButton'
+import SendAllBriefings from './SendAllBriefings'
 import { briefingPeople, lastBriefings } from '@/lib/staff-briefing'
 import { agentStatus } from '@/lib/agent-status'
 import { followupBoard } from '@/lib/followups'
@@ -124,6 +125,7 @@ export default async function AgentsPage() {
             </div>
           )
         })}
+        <div className="ag-dir"><span className="fu-main"><small>Each goes to its own address. Sending now doesn’t stop tomorrow’s at 10am.</small></span><SendAllBriefings count={people.filter((p) => !p.off).length} /></div>
         <details className="ag-edit-people">
           <summary>Change who gets one</summary>
           <form action={saveBriefings} className="ag-people">
