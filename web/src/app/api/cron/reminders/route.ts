@@ -19,6 +19,7 @@ import { runReconnects } from '@/lib/reconnect'
 import { runLetters } from '@/lib/letters'
 import { markDormant } from '@/lib/leads'
 import { after } from 'next/server'
+import { getClient, ready } from '@/db/client'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,6 +34,8 @@ export async function GET(req: Request) {
   const given = Buffer.from((req.headers.get('authorization') || '').replace(/^Bearer\s+/i, ''))
   const want = Buffer.from(secret)
   if (given.length !== want.length || !timingSafeEqual(given, want)) return Response.json({ error: 'unauthorised' }, { status: 401 })
+  // A heartbeat, so the Agents page can show the background job is running.
+  await ready().then(() => getClient().execute({ sql: `INSERT INTO jobs (name, last_run_at) VALUES ('cron', ?) ON CONFLICT(name) DO UPDATE SET last_run_at = excluded.last_run_at`, args: [new Date().toISOString()] })).catch(() => {})
   const [sent, callbacks, retention, mailbox] = await Promise.all([
     runDueReminders(), runDueTasks(), runRetention(),
     checkMailbox().catch((e) => ({ ran: true, error: String(e) })),
