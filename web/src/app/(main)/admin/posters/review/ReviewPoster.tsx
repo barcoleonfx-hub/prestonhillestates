@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { LogoMark } from '@/components/Logo'
-import type { ScanStats } from '@/lib/qr-links'
 import { saveReviewLink } from './actions'
 
 const W = 794, H = 1123 // A4 portrait at 96 per inch; A3 is the same, scaled up by √2
@@ -12,8 +11,8 @@ const BORDER = 30.24 // 8 mm at 96 per inch
 type Quote = { text: string; name: string; date: string | null }
 
 /** The review poster, with A4 / A3 and the office-printer border, as a PDF or straight to the printer. */
-export function ReviewPoster({ qr, link, stats, rating, target, quotes }: {
-  qr: string; link: string; stats: ScanStats; rating: { rating: number; count: number } | null
+export function ReviewPoster({ qr, rating, target, quotes }: {
+  qr: string; rating: { rating: number; count: number } | null
   target: { url: string; set: boolean; from: 'poster' | 'settings' | 'search' }; quotes: Quote[]
 }) {
   const [paper, setPaper] = useState<'a4' | 'a3'>('a4')
@@ -75,7 +74,7 @@ export function ReviewPoster({ qr, link, stats, rating, target, quotes }: {
             <input className="input" name="url" type="url" defaultValue={target.set ? target.url : ''} placeholder="https://g.page/r/…/review" aria-label="Google review link" />
             <button className="btn btn-ghost btn-sm" type="submit">Save</button>
           </form>
-          <p className="wc-hint" style={{ marginTop: 6 }}>Find it in Google Business Profile: open it, choose “Ask for reviews”, and copy the link. Printed posters keep working when you change it: the code always goes through {link.replace(/^https?:\/\//, '')}.</p>
+          <p className="wc-hint" style={{ marginTop: 6 }}>The code is this link itself, so it opens Google straight away. Scan it on screen with your phone to check before printing. If you change the link, print the poster again.</p>
         </div>
         <div>
           <h2>Paper</h2>
@@ -91,10 +90,6 @@ export function ReviewPoster({ qr, link, stats, rating, target, quotes }: {
             <button type="button" className={margin === 'none' ? 'on' : undefined} onClick={() => setMargin('none')}>Print shop</button>
           </div>
           <p className="wc-hint" style={{ marginTop: 6 }}>{margin === 'office' ? 'Keeps everything 8 mm in from the edge, because office printers can’t print right to the edge.' : 'Edge to edge, for printers that can print to the edge.'}</p>
-        </div>
-        <div>
-          <h2>Scans</h2>
-          <p className="pf-stat"><b>{stats.scans}</b> {stats.scans === 1 ? 'scan' : 'scans'}{stats.scans ? <> by about <b>{stats.people}</b> {stats.people === 1 ? 'person' : 'people'}</> : null} in the last 30 days{stats.today ? <>, <b>{stats.today}</b> today</> : null}.</p>
         </div>
       </aside>
       <main className="wc-stage" ref={stage}>
