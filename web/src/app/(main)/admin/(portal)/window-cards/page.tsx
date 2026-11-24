@@ -34,6 +34,10 @@ export default async function WindowCardsPage() {
           <span className="fu-main"><b>Black Friday: £500 for introducing a landlord</b><small>Until 31 December 2026 · a QR code that opens WhatsApp to the office with the details we need{bf ? ` · scanned ${bf.scans} ${bf.scans === 1 ? 'time' : 'times'} in the last 30 days${bf.today ? `, ${bf.today} today` : ''}` : ''}</small></span>
           <span className="fu-acts"><a className="btn btn-gold btn-sm" href="/admin/posters/black-friday">Open the poster</a></span>
         </div>
+        <div className="fu-row">
+          <span className="fu-main"><b>Leave us a Google review</b><small>For the office · a QR code that opens our Google review form</small></span>
+          <span className="fu-acts"><a className="btn btn-gold btn-sm" href="/admin/posters/review">Open the poster</a></span>
+        </div>
       </section>
       {(['sale', 'let'] as const).map((ch) => group(ch).length ? (
         <section key={ch} className="card fu-list" style={{ marginBottom: 18 }}>

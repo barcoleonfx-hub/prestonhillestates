@@ -1,0 +1,40 @@
+/* The office review poster: A4 portrait in CSS pixels (794 × 1123), charcoal, cream and gold. */
+.rp-warn { color: #8A5A10 !important; }
+.rp-link { display: flex; gap: 6px; margin-top: 8px; }
+.rp-link .input { flex: 1; min-width: 0; font-size: 0.85rem; }
+
+.rp { --ink: #23211A; --gold: #A47B1D; --gold2: #C4972F; --cream: #FBF8EE; --body: #D8D2BF;
+  width: 794px; height: 1123px; background: var(--ink); color: #fff; position: relative; overflow: hidden; text-align: center;
+  font-family: 'PH Inter', 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased; padding: 56px 70px 44px; display: flex; flex-direction: column; align-items: center; }
+.rp-glow { position: absolute; left: 50%; top: 330px; width: 900px; height: 900px; margin-left: -450px; border-radius: 50%; background: radial-gradient(circle, rgba(196,151,47,.30), rgba(196,151,47,0) 62%); pointer-events: none; }
+.rp > * { position: relative; }
+.rp-top { display: flex; align-items: center; gap: 14px; }
+.rp-mark { width: 58px; height: 58px; color: var(--gold2); }
+.rp-top span { display: grid; text-align: left; line-height: 1.05; }
+.rp-top b { font-size: 21px; letter-spacing: .22em; font-weight: 800; }
+.rp-top i { font-style: normal; font-size: 11px; letter-spacing: .7em; color: var(--body); margin-top: 5px; }
+.rp-kicker { margin: 34px 0 0; font-size: 15px; letter-spacing: .24em; text-transform: uppercase; color: var(--gold2); font-weight: 700; }
+.rp h1 { font-family: var(--font-serif), Georgia, serif; font-weight: 400; font-size: 66px; line-height: 1.02; letter-spacing: -.015em; margin: 12px 0 0; }
+.rp h1 em { color: var(--gold2); font-style: italic; display: block; }
+.rp-lead { margin: 14px 0 0; max-width: 560px; font-size: 19px; line-height: 1.5; color: var(--body); }
+.rp-card { margin-top: 24px; background: #fff; color: var(--ink); border-radius: 28px; padding: 22px 34px 24px; display: grid; justify-items: center; box-shadow: 0 24px 60px rgba(0,0,0,.35); }
+.rp-stars { display: flex; gap: 6px; }
+.rp-stars svg { width: 30px; height: 30px; fill: var(--gold2); }
+.rp-card img { width: 236px; height: 236px; margin: 12px 0 10px; display: block; }
+.rp-card b { font-size: 22px; font-weight: 800; }
+.rp-card span { font-size: 14px; color: #6B6658; margin-top: 4px; }
+.rp-steps { margin-top: 24px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; width: 100%; }
+.rp-steps div { display: grid; justify-items: center; gap: 2px; }
+.rp-steps i { font-style: normal; width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--gold2); color: var(--gold2); display: grid; place-items: center; font-weight: 800; font-size: 16px; margin-bottom: 6px; }
+.rp-steps b { font-size: 17px; }
+.rp-steps span { font-size: 14px; color: var(--body); }
+.rp-quotes { margin-top: 22px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; width: 100%; text-align: left; }
+.rp-quotes figure { margin: 0; background: rgba(255,255,255,.06); border: 1px solid rgba(196,151,47,.35); border-radius: 16px; padding: 14px 16px; }
+.rp-quotes blockquote { margin: 0; font-family: var(--font-serif), Georgia, serif; font-size: 15px; line-height: 1.45; color: #fff; }
+.rp-quotes figcaption { margin-top: 8px; font-size: 12px; color: var(--gold2); font-weight: 600; }
+.rp-foot { margin-top: auto; padding-top: 16px; display: grid; gap: 6px; font-size: 13px; color: var(--body); }
+.rp-rated { font-size: 15px; color: #fff; display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0; }
+.rp-rated b { color: var(--gold2); }
+.rp-mini { display: inline-flex; gap: 2px; }
+.rp-mini svg { width: 15px; height: 15px; fill: var(--gold2); }
+.rp-foot p { margin: 0; }

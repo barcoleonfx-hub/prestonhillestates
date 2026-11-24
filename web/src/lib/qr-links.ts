@@ -7,15 +7,41 @@ import 'server-only'
 import { createHash } from 'node:crypto'
 import { and, desc, eq, gte } from 'drizzle-orm'
 import { db, ready } from '@/db/client'
-import { qrScans } from '@/db/schema'
+import { qrScans, settings } from '@/db/schema'
 import { OFFICE_WHATSAPP, waLink } from './whatsapp'
 import { now, uid } from './util'
 
 /** What a passer-by sends when they scan the Black Friday poster: our WhatsApp, with the details we need laid out. */
 export const LANDLORD_500_MESSAGE = 'Hi Preston Hill Estates, I’d like to introduce a landlord for your £500 Black Friday offer.\n\nLandlord’s name:\nTheir phone number:\nWhere their property is:\nThey’re happy for you to contact them: Yes\n\nMy name:'
 
-export const QR_LINKS: Record<string, { label: string; target: string }> = {
+export const QR_LINKS: Record<string, { label: string; target: string | (() => Promise<string>) }> = {
   'landlord-500': { label: 'Black Friday poster: £500 for introducing a landlord', target: waLink(OFFICE_WHATSAPP, LANDLORD_500_MESSAGE) },
+  // Read when scanned, so a printed poster keeps working when the link is set or changed later.
+  review: { label: 'Office poster: leave us a Google review', target: () => reviewLink().then((r) => r.url) },
+}
+
+/** Where a scan of a code goes. */
+export async function qrTarget(code: string): Promise<string | null> {
+  const l = QR_LINKS[code]
+  if (!l) return null
+  return typeof l.target === 'string' ? l.target : l.target()
+}
+
+const REVIEW_SEARCH = 'https://www.google.com/search?q=Preston+Hill+Estates+Harrow+reviews'
+/**
+ * Google's "write a review" link for the branch (Google Business Profile, "Ask for reviews", e.g.
+ * https://g.page/r/…/review), as staff set it on the review poster; else the reviews link from Settings; else a
+ * Google search for our reviews.
+ */
+export async function reviewLink(): Promise<{ url: string; set: boolean; from: 'poster' | 'settings' | 'search' }> {
+  await ready()
+  const [own, g] = await Promise.all([
+    db.query.settings.findFirst({ where: eq(settings.key, 'google_review_link') }),
+    db.query.settings.findFirst({ where: eq(settings.key, 'google_reviews') }),
+  ])
+  if (own?.value && /^https:\/\//.test(own.value)) return { url: own.value, set: true, from: 'poster' }
+  try { const v = JSON.parse(g?.value ?? '{}'); if (typeof v.url === 'string' && /^https:\/\//.test(v.url)) return { url: v.url, set: false, from: 'settings' } } catch { /* not set */ }
+  return { url: REVIEW_SEARCH, set: false, from: 'search' }
 }
 
 /** Link previews and crawlers aren't people scanning a poster. */
