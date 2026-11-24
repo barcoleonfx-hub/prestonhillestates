@@ -93,9 +93,9 @@ export function GuideBox({ id, guide, values, setValues, rent, prices }: {
     const r = await saveGuide(id, {
       fixes: { type: v.type, beds: whole(v.beds), baths: whole(v.baths), sqft: whole(v.sqft), tenure: v.tenure, councilBand: v.councilBand },
       asking: money(v.asking), low: money(v.low), high: money(v.high), rent, ...opts,
-    }).catch(() => ({ ok: false, error: 'Couldn’t save. Try again.' }))
+    }).catch(() => ({ ok: false, error: 'Couldn’t save. Try again.' } as { ok: boolean; error?: string; letter?: string }))
     if (!r.ok) { setErr(r.error ?? 'Couldn’t save.'); return }
-    setNote(opts.finalise ? 'Finalised. The report link now goes in the property report email and WhatsApp messages.' : opts.reopen ? 'Not finalised: it won’t be sent until you finalise it again.' : 'Saved.')
+    setNote(opts.finalise ? `Finalised. The report link now goes in the property report email and WhatsApp messages. ${'letter' in r && r.letter ? r.letter : ''}` : opts.reopen ? 'Not finalised: it won’t be sent until you finalise it again.' : 'Saved.')
     router.refresh()
   })
   const remove = () => { if (!confirm('Remove the OnTheMarket guide from this report? The two pages from it go, and the report can’t be sent until a guide is uploaded again.')) return; go(async () => { await removeGuide(id); router.refresh() }) }

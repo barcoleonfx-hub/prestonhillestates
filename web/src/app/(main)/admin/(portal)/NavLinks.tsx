@@ -46,6 +46,7 @@ export function NavLinks({ newSales, newLettings, today, outcomes, callbacks, fo
       </Link>
       <Link href="/admin/properties" className={on('/admin/properties')}><Icon name="homes" />Properties</Link>
       <Link href="/admin/window-cards" className={on('/admin/window-cards')}><Icon name="homes" />Window sheets</Link>
+      <Link href="/admin/agents" className={on('/admin/agents')}><Icon name="pulse" />Agents</Link>
       <Link href="/admin/valuation-letters" className={on('/admin/valuation-letters')}><Icon name="mail" />Valuation letters</Link>
       <Link href="/admin/tenants" className={on('/admin/tenants')}><Icon name="people" />Tenants</Link>
       <Link href="/admin/reviews" className={on('/admin/reviews')}><Icon name="star" />Reviews</Link>

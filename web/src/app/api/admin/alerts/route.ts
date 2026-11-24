@@ -3,6 +3,7 @@ import { after } from 'next/server'
 import { runDueTasks } from '@/lib/contacts'
 import { runRetention } from '@/lib/retention'
 import { checkMailbox } from '@/lib/mailbox'
+import { promptGuides } from '@/lib/agents'
 import { markAlertsRead, needingOutcome, runDueReminders, toPending, unreadAlerts } from '@/lib/appointments'
 
 export const dynamic = 'force-dynamic'
@@ -16,6 +17,8 @@ export async function GET() {
   after(() => runRetention().catch((e) => console.error('retention failed', e)))
   // New enquiries from the mailbox; at most every couple of minutes, whoever triggers it.
   after(() => checkMailbox().catch((e) => console.error('mailbox check failed', e)))
+  // The Valuation agent: "upload the OnTheMarket guide" for new valuation leads, and reminders; at most once a minute.
+  after(() => promptGuides().catch((e) => console.error('guide prompts failed', e)))
   const [alerts, pending] = await Promise.all([unreadAlerts(me.id), needingOutcome(me.id)])
   return Response.json({ alerts, pending: pending.map(toPending), serverTime: new Date().toISOString() }, { headers: { 'Cache-Control': 'no-store' } })
 }
