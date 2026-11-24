@@ -15,6 +15,7 @@ import { refreshAreaPlaces } from '@/lib/area-places'
 import { runFollowups } from '@/lib/followups'
 import { runDirector } from '@/lib/director'
 import { runBookedEmails } from '@/lib/booked-emails'
+import { runThankYous } from '@/lib/instant-thanks'
 import { runReconnects } from '@/lib/reconnect'
 import { runLetters } from '@/lib/letters'
 import { markDormant } from '@/lib/leads'
@@ -50,6 +51,8 @@ export async function GET(req: Request) {
     await runLetters().catch((e) => console.error('property emails failed', e))
     // Leads nobody has heard from in 60 days go dormant (once a day, light).
     await markDormant().catch((e) => console.error('marking dormant leads failed', e))
+    // New valuation requests: a thank-you within minutes, while the OnTheMarket guide is done (sense-checked).
+    await runThankYous().catch((e) => console.error('thank-you emails failed', e))
     await runFollowups().catch((e) => console.error('follow-ups failed', e))
     // Booked valuations: a confirmation to the client, and a reminder the day before (sense-checked).
     await runBookedEmails().catch((e) => console.error('booking emails failed', e))

@@ -416,3 +416,14 @@
 .g-tight .g-axis { height: 14mm; }
 .g-tight .g-axis .g-line { top: 7mm; } .g-tight .g-band { top: 5mm; } .g-tight .g-dot { top: 5.4mm; } .g-tight .g-you { height: 9mm; } .g-tight .g-you span { bottom: 9.5mm; }
 .g-tight .g-plot { margin-top: 5mm; }
+.otp { margin: 14px 0; padding: 14px; border: 1px dashed #d8c58f; border-radius: 10px; background: #fffdf6; }
+.otp h3 { font-size: 0.95rem; margin: 0 0 2px; }
+.otp dl { display: grid; gap: 4px; margin: 10px 0; }
+.otp-row { display: grid; grid-template-columns: 82px minmax(0, 1fr) auto; gap: 8px; align-items: baseline; font-size: 0.84rem; }
+.otp-row dt { color: #8a8270; }
+.otp-row dd { margin: 0; overflow-wrap: anywhere; }
+.otp-copy { font: inherit; font-size: 0.72rem; border: 1px solid #e0d6bb; background: #fff; border-radius: 999px; padding: 1px 8px; cursor: pointer; color: #6b5a2c; }
+.otp-sub { font-size: 0.78rem; color: #8a8270; margin: 8px 0 4px; }
+.otp-comps { list-style: none; padding: 0; margin: 0 0 10px; display: grid; gap: 4px; font-size: 0.82rem; }
+.otp-comps small { display: block; color: #8a8270; }
+@media print { .otp { display: none; } }

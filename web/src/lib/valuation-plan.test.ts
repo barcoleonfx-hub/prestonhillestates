@@ -76,3 +76,16 @@ describe('every new email passes the sense-check rules', () => {
     }
   })
 })
+
+describe('the instant thank-you', () => {
+  it('thanks them, gives no figure and passes the sense-check rules', async () => {
+    const { thankYouEmail } = await import('./followup-rules')
+    for (const letting of [false, true]) {
+      const m = thankYouEmail({ first: 'Sam', address: '12 Gordon Avenue', letting, me: 'Jamil Ahmed', unsubscribeUrl: null })
+      expect(m.subject).toBe(`Thank you for your ${letting ? 'rental ' : ''}valuation request: 12 Gordon Avenue`)
+      expect(m.text).not.toMatch(/£/)
+      const c = contentChecks({ subject: m.subject, text: m.text, channel: 'email' }, { ...facts, prices: [], reportFinal: false })
+      expect(c.filter((x) => !x.ok).map((x) => x.name)).toEqual([])
+    }
+  })
+})

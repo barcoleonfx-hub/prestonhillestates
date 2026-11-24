@@ -42,7 +42,12 @@ export async function leadHistory(enquiryId: string): Promise<{ touches: Touch[]
   }
   for (const ev of events.filter((x) => /^WhatsApp sent/i.test(x.detail ?? ''))) touches.push({ at: ev.createdAt, channel: 'whatsapp', by: 'staff', who: name(ev.createdBy), text: ev.detail ?? '' })
   for (const k of callRows) touches.push({ at: k.createdAt, channel: 'call', by: 'staff', who: name(k.createdBy), text: k.notes ?? '' })
-  for (const s of steps) touches.push({ at: s.createdAt, channel: s.channel as Touch['channel'], by: 'staff', who: name(s.createdBy), text: s.detail ?? '' })
+  // A ticked-off call or WhatsApp step, unless the call or WhatsApp itself is already here (the same one).
+  // (The agent ticking a step off because it was already done isn't another touch: that's "system".)
+  for (const s of steps.filter((x) => x.createdBy && x.createdBy !== 'system')) {
+    const same = touches.some((t) => t.channel === s.channel && Math.abs(Date.parse(t.at) - Date.parse(s.createdAt)) < 15 * 60e3)
+    if (!same) touches.push({ at: s.createdAt, channel: s.channel as Touch['channel'], by: 'staff', who: name(s.createdBy), text: s.detail ?? '' })
+  }
   for (const l of letters) touches.push({ at: l.at ?? l.created, channel: 'letter', by: /^(auto|follow)-/.test(l.batch) ? 'agent' : 'staff', text: 'Letter with their property report' })
   const inbound = msgs.filter((x) => x.direction === 'in').map((m) => ({ at: m.sentAt, text: `${m.subject ?? ''}\n${m.body ?? ''}` }))
   return { touches: touches.sort((a, b) => (a.at < b.at ? -1 : 1)), inbound: inbound.sort((a, b) => (a.at < b.at ? -1 : 1)) }

@@ -1,7 +1,8 @@
 import Link from 'next/link'
 import { requireAdmin } from '@/lib/auth'
-import { AFTER_VISIT_STEPS, STEPS, VALUATION_STEPS, callScript, followupEmail, followupWhatsApp, planLabel, stepsFor, type StepDef, type Track } from '@/lib/followup-rules'
+import { AFTER_VISIT_STEPS, STEPS, VALUATION_STEPS, callScript, thankYouEmail, followupEmail, followupWhatsApp, planLabel, stepsFor, type StepDef, type Track } from '@/lib/followup-rules'
 import { followupBoard, followupSettings, stepOf, trackOf, type BoardRow } from '@/lib/followups'
+import { callerBriefs } from '@/lib/caller-brief'
 import { statusLabel } from '@/lib/lead-rules'
 import { knownBase } from '@/lib/property-email-data'
 import { fmtWhen } from '@/lib/time'
@@ -46,7 +47,8 @@ export default async function FollowupsPage() {
     const m = followupEmail(t, s.key, rentSample ? { ...sample, guide: { asking: 1850, low: 1750, high: 1950 } } : sample)
     return m ? <div key={s.key} className="fu-mail"><div className="fu-mail-h"><b>Day {s.day} · Email</b> · {m.subject}{s.report ? ' · only once the OnTheMarket guide is finalised' : ''}</div><pre>{m.text}</pre></div> : null
   })
-  const callRows = await Promise.all(board.callsDue.map(async (r) => ({ r, step: stepOf(r.e)!, wa: await waFor({ enquiry: r.e, contact: r.c, me: me.name }) })))
+  const briefs = await callerBriefs([...board.callsDue, ...board.waiting].map((r) => r.e.id))
+  const callRows = await Promise.all(board.callsDue.map(async (r) => ({ r, step: stepOf(r.e)!, brief: briefs.get(r.e.id), wa: await waFor({ enquiry: r.e, contact: r.c, me: me.name }) })))
 
   return (
     <>
@@ -83,7 +85,8 @@ export default async function FollowupsPage() {
         <div className="fu-head"><h2>Waiting for a first reply <span>{waitRows.length}</span></h2><p>New leads nobody has contacted yet, oldest first. The quicker the reply, the likelier they are to book.</p></div>
         {waitRows.length ? waitRows.map(({ r, wa }) => (
           <div key={r.e.id} className="fu-row">
-            <span className="fu-main"><b>{name(r)}</b><small>{TRACK[trackOf(r)]} · waiting {age(r.e.createdAt)}</small></span>
+            <span className="fu-main"><b>{name(r)}{briefs.get(r.e.id)?.flags.map((f) => <em key={f} className="fu-flag">{f}</em>)}</b><small>{TRACK[trackOf(r)]} · waiting {age(r.e.createdAt)}</small>
+              {briefs.get(r.e.id)?.lines.length ? <details className="fu-brief"><summary>Before you call</summary><ul>{briefs.get(r.e.id)!.lines.map((l, i) => <li key={i}>{l}</li>)}</ul></details> : null}</span>
             <span className="fu-acts">
               {r.e.phone && !r.c?.doNotContact ? <a className="btn btn-dark btn-sm" href={`tel:${r.e.phone.replace(/\s/g, '')}`}>Call</a> : null}
               {wa.e164 && !wa.blocked ? <WhatsAppButton wa={wa} className="btn btn-wa btn-sm" /> : null}
@@ -95,9 +98,10 @@ export default async function FollowupsPage() {
 
       <section className="card fu-list" id="calls">
         <div className="fu-head"><h2>Calls to make <span>{callRows.length}</span></h2><p>From the Valuation agent’s plan. Call, then say how it went (a call you log on the lead counts too). If nobody calls within 3 days it’s skipped.</p></div>
-        {callRows.length ? callRows.map(({ r, step, wa }) => (
+        {callRows.length ? callRows.map(({ r, step, wa, brief }) => (
           <div key={r.e.id} className="fu-row">
-            <span className="fu-main"><b>{name(r)}</b><small>{TRACK[trackOf(r)]} · {planLabel(r.e.followupPlan)} · {step.label.replace(/^Call: /, '')} · due {fmtWhen(r.e.followupNextAt!)}</small><small>{callScript(trackOf(r), step.key)}</small></span>
+            <span className="fu-main"><b>{name(r)}{brief?.flags.length ? brief.flags.map((f) => <em key={f} className="fu-flag">{f}</em>) : null}</b><small>{TRACK[trackOf(r)]} · {planLabel(r.e.followupPlan)} · {step.label.replace(/^Call: /, '')} · due {fmtWhen(r.e.followupNextAt!)}</small><small>{callScript(trackOf(r), step.key)}</small>
+              {brief?.lines.length ? <details className="fu-brief"><summary>Before you call</summary><ul>{brief.lines.map((l, i) => <li key={i}>{l}</li>)}</ul></details> : null}</span>
             <span className="fu-acts">
               {wa.e164 || r.e.phone ? <a className="btn btn-dark btn-sm" href={`tel:${(wa.e164 ?? r.e.phone ?? '').replace(/\s/g, '')}`}>Call</a> : null}
               <form action={followupAction}><input type="hidden" name="id" value={r.e.id} /><input type="hidden" name="what" value="called" /><input type="hidden" name="answered" value="yes" /><button className="btn btn-gold btn-sm" type="submit">Spoke to them</button></form>
@@ -143,6 +147,7 @@ export default async function FollowupsPage() {
         <p className="card-sub">Each one is signed by whoever looks after the lead (or “The team”), comes from the office mailbox, and lands in the enquiry’s conversation, so replies come back to you. Shown here for an example lead, Sam at 12 Example Road, HA3 0PS.</p>
         <details>
           <summary className="det-sum">Valuation plan (sales): new valuation requests</summary>
+          {(() => { const m = thankYouEmail({ first: 'Sam', address: '12 Example Road', letting: false, me: me.name, unsubscribeUrl: sample.unsubscribeUrl }); return <div className="fu-mail"><div className="fu-mail-h"><b>Within minutes · Email</b> · {m.subject} · not sent if someone’s already been in touch</div><pre>{m.text}</pre></div> })()}
           {preview('sales-valuation', VALUATION_STEPS)}
         </details>
         <details>
