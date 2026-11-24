@@ -1165,4 +1165,24 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       `CREATE INDEX agent_actions_enquiry_idx ON agent_actions (enquiry_id, kind)`,
     ],
   },
+  {
+    id: '054_agent_approvals',
+    sql: [
+      // What a held action would send (an email's to, subject and wording), so staff can approve, edit or reject it.
+      `ALTER TABLE agent_actions ADD COLUMN payload TEXT`,
+      `CREATE INDEX agent_actions_status_idx ON agent_actions (status, created_at)`,
+      // Every Claude API call and what it cost, for the agents' monthly budget (lib/ai-usage).
+      `CREATE TABLE ai_usage (
+        id TEXT PRIMARY KEY,
+        at TEXT NOT NULL,
+        model TEXT NOT NULL,
+        purpose TEXT NOT NULL,
+        agent INTEGER NOT NULL DEFAULT 0,
+        input_tokens INTEGER NOT NULL DEFAULT 0,
+        output_tokens INTEGER NOT NULL DEFAULT 0,
+        cost_usd REAL NOT NULL DEFAULT 0
+      )`,
+      `CREATE INDEX ai_usage_at_idx ON ai_usage (at)`,
+    ],
+  },
 ]

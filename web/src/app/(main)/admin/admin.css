@@ -1287,3 +1287,22 @@ kbd { font: 600 0.68rem/1 var(--sans, inherit); padding: 3px 6px; border-radius:
 .ag-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: center; }
 .ag-note { margin: 10px 18px 14px; font-size: 12.5px; color: var(--ink-soft, #6B6656); }
 @media (max-width: 760px) { .ag-row { grid-template-columns: 1fr; } }
+.ag-held { padding: 14px 20px; border-bottom: 1px solid var(--line-soft); display: grid; gap: 10px; }
+.ag-held:last-child { border-bottom: 0; }
+.ag-held.done { grid-template-columns: minmax(0, 1fr) auto; color: var(--faint); font-size: 0.86rem; }
+.ag-held-top { display: flex; gap: 12px; justify-content: space-between; align-items: center; flex-wrap: wrap; }
+.ag-why { margin: 0; padding: 10px 14px 10px 30px; background: #fdf3e1; border-radius: 8px; font-size: 0.84rem; color: #5c4210; display: grid; gap: 3px; }
+.ag-preview summary { cursor: pointer; font-size: 0.86rem; color: var(--ink-soft); }
+.ag-preview pre, .ag-subj { white-space: pre-wrap; font: inherit; font-size: 0.86rem; background: var(--line-soft); border-radius: 8px; padding: 10px 12px; margin-top: 8px; }
+.ag-subj { font-weight: 600; }
+.ag-edit { display: grid; gap: 8px; }
+.ag-edit label { display: grid; gap: 4px; font-size: 0.8rem; color: var(--faint); }
+.ag-edit input, .ag-edit textarea { font: inherit; font-size: 0.9rem; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; width: 100%; box-sizing: border-box; }
+.ag-btns { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.ag-err { color: #8a2f1c; font-size: 0.86rem; margin: 0; }
+.ag-note-in { font-size: 0.82rem; color: var(--faint); }
+.ag-spend { display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 12px 20px; }
+.ag-spend form { display: flex; gap: 8px; align-items: center; font-size: 0.84rem; color: var(--faint); }
+.ag-spend input { width: 80px; font: inherit; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; }
+.ag-bar { height: 6px; border-radius: 999px; background: var(--line-soft); width: 220px; overflow: hidden; }
+.ag-bar i { display: block; height: 100%; background: var(--gold, #b08d3c); }

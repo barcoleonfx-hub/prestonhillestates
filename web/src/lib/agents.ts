@@ -8,12 +8,15 @@ import { postable, shortHome } from './postal-letter-rules'
 import { reportStates, type ReportState } from './report-guide'
 import { now, uid } from './util'
 
+/** A check's name inside a sentence: “Not asked to stop” → “not asked to stop”, keeping OnTheMarket and Claude. */
+const lc = (s: string) => s.charAt(0).toLowerCase() + s.slice(1)
+
 // The agents' shared ground rules and log. The Valuation agent's first duty: the moment a valuation comes in, get the
 // OnTheMarket guide uploaded (nothing is sent without it), and once the report is finalised, have the valuation letter
 // in today's batch, ready to print and post the same day. Everything it does is sense-checked and logged.
 
 export type Check = { name: string; ok: boolean; note?: string }
-export type AgentName = 'valuation' | 'outreach' | 'marketing' | 'director'
+export type AgentName = 'valuation' | 'followup' | 'outreach' | 'marketing' | 'director'
 
 export async function logAction(a: { agent: AgentName; enquiryId?: string | null; kind: string; status: 'done' | 'held' | 'blocked' | 'prompted'; title: string; detail?: string; checks?: Check[]; by?: string | null }): Promise<string> {
   const id = uid()
@@ -124,9 +127,9 @@ export async function queueSameDayLetter(enquiryId: string, by: { id: string; na
   ]
   const failed = checks.filter((x) => !x.ok)
   if (failed.length) {
-    const why = failed.map((x) => x.name.toLowerCase()).join('; ')
+    const why = failed.map((x) => lc(x.name)).join('; ')
     await logAction({ agent: 'valuation', enquiryId, kind: 'letter', status: 'held', title: `No letter for ${home}`, detail: `Held: ${why}.`, checks, by: by.id })
-    await db.insert(notifications).values({ id: uid(), kind: 'letter', appointmentId: null, enquiryId, title: `No letter for ${home}`, body: `Held by the sense-check: ${failed.map((x) => x.name.toLowerCase()).join('; ')}.`, createdBy: null, createdAt: now() })
+    await db.insert(notifications).values({ id: uid(), kind: 'letter', appointmentId: null, enquiryId, title: `No letter for ${home}`, body: `Held by the sense-check: ${failed.map((x) => lc(x.name)).join('; ')}.`, createdBy: null, createdAt: now() })
     return { ok: false, why }
   }
   // Today's batch: one a day, a new one once the day's batch is marked as posted.

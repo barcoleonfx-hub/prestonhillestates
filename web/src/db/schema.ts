@@ -264,6 +264,20 @@ export const agentActions = sqliteTable('agent_actions', {
   createdAt: text('created_at').notNull(),
   doneAt: text('done_at'),
   doneBy: text('done_by'),
+  /** For a held action: what it would send (JSON), so staff can approve, edit or reject it. */
+  payload: text('payload'),
+})
+
+export const aiUsage = sqliteTable('ai_usage', {
+  id: text('id').primaryKey(),
+  at: text('at').notNull(),
+  model: text('model').notNull(),
+  purpose: text('purpose').notNull(),
+  /** 1 when an agent made the call (counts against the agents' monthly budget); 0 for staff tools. */
+  agent: integer('agent').notNull().default(0),
+  inputTokens: integer('input_tokens').notNull().default(0),
+  outputTokens: integer('output_tokens').notNull().default(0),
+  costUsd: real('cost_usd').notNull().default(0),
 })
 
 export const enquiryNotes = sqliteTable(
