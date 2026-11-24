@@ -32,22 +32,24 @@ const b: Briefing = {
 
 describe('the sense-check on Claude’s summary', () => {
   it('keeps points that cite real items with real figures', () => {
-    const { view, dropped } = checkView({ summary: 'You put David’s offer of £312,000 to the seller.', inbox: 'Sarah asked to move her viewing.', done: [{ text: 'Offer of £312,000 put to the seller', refs: ['S1'] }], pending: [], urgent: [{ text: 'Call back Mrs Begum', why: 'Overdue since 16:00 yesterday', refs: ['T1'] }] }, b)
+    const { view, dropped } = checkView({ summary: 'You put David’s offer of £312,000 to the seller.', inbox: 'Sarah asked to move her viewing.', yesterday: 'You put the £312,000 offer to the seller.', waiting: 'Sarah is waiting on a new viewing time.', urgent: [{ text: 'Call back Mrs Begum', why: 'Overdue since 16:00 yesterday', refs: ['T1'] }] }, b)
     expect(dropped).toBe(0)
     expect(view.urgent).toHaveLength(1)
     expect(view.summary).toMatch(/312,000/)
   })
   it('drops points that cite nothing real or invent a figure', () => {
-    const { view, dropped } = checkView({ summary: 'You agreed a sale at £350,000.', inbox: '', done: [{ text: 'Chased the solicitor', refs: ['X9'] }], pending: [], urgent: [{ text: 'Call Mrs Begum', why: 'She’s waited 9 days', refs: ['T1'] }, { text: 'Reply to Sarah', why: 'Viewing', refs: [] }] }, b)
+    const { view, dropped } = checkView({ summary: 'You agreed a sale at £350,000.', inbox: '', yesterday: 'You chased 7 solicitors.', waiting: '', urgent: [{ text: 'Call Mrs Begum', why: 'She’s waited 9 days', refs: ['T1'] }, { text: 'Reply to Sarah', why: 'Viewing', refs: [] }] }, b)
     expect(dropped).toBe(4)
     expect(view.summary).toBe('')
-    expect(view.done).toEqual([])
+    expect(view.yesterday).toBe('')
     expect(view.urgent).toEqual([])
   })
   it('the email is a short summary, not lists of emails', () => {
-    const m = briefingEmail(b, { summary: 'A quiet day.', urgent: [{ text: 'Call back Mrs Begum', why: 'Overdue', refs: ['T1'] }], done: [], pending: [], inbox: '' }, null)
-    expect(m.subject).toBe('Fred’s briefing, Tuesday 24 November: 1 urgent')
-    expect(m.text).toContain('MOST URGENT\n1. Call back Mrs Begum (Overdue) https://x/my-day')
+    const m = briefingEmail(b, { summary: 'A quiet day.', urgent: [{ text: 'Call back Mrs Begum', why: 'Overdue', refs: ['T1'] }], yesterday: 'You put an offer to a seller.', waiting: '', inbox: '' }, null)
+    expect(m.subject).toBe('Fred’s briefing, Tuesday 24 November: 1 to do first')
+    expect(m.text).toContain('NEEDS ATTENTION NOW\n1. Call back Mrs Begum (Overdue) https://x/my-day')
+    expect(m.text).toContain('YESTERDAY\nYou put an offer to a seller.')
+    expect(m.text).toContain('STILL WAITING\n1 callback (1 overdue).')
     expect(m.text).not.toContain('could we make it 3pm')
     expect(m.html).not.toMatch(/undefined|NaN|null/)
   })
