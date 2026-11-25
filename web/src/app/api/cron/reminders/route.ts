@@ -18,6 +18,7 @@ import { runBookedEmails } from '@/lib/booked-emails'
 import { runThankYous } from '@/lib/instant-thanks'
 import { runBriefings } from '@/lib/staff-briefing'
 import { runNightShift } from '@/lib/night-shift'
+import { repairFalseOpens } from '@/lib/booklet-share'
 import { runReconnects } from '@/lib/reconnect'
 import { runLetters } from '@/lib/letters'
 import { markDormant } from '@/lib/leads'
@@ -73,6 +74,8 @@ export async function GET(req: Request) {
     // Zoopla valuations read before their address was picked up: read again from the original email (light).
     await repairZooplaValuations().catch((e) => console.error('repairing Zoopla valuations failed', e))
     await repairPortalSmallPrint().catch((e) => console.error('repairing portal small print failed', e))
+    // Once: report "opens" recorded before the report was ever sent (link previews, the office) are cleared.
+    await repairFalseOpens().catch((e) => console.error('clearing false report opens failed', e))
     // Once: OnTheMarket enquiries whose listing was cut off under a long comment.
     await repairOtmCutOff().catch((e) => console.error('repairing OnTheMarket listings failed', e))
     // Once: portal enquiries linked to the sale listing when they asked about the one to let (or the other way).
