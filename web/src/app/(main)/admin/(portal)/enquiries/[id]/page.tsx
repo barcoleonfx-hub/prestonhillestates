@@ -24,6 +24,7 @@ import { followupAction } from '../../../lead-actions'
 import { WhatsAppButton } from '../../WhatsAppButton'
 import { homeFrom, portalLinks } from '@/lib/valuation-check'
 import { landRegistryEstimate, rentCheck } from '@/lib/valuation-check-data'
+import { shareStats } from '@/lib/booklet-share'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Enquiry' }
@@ -44,7 +45,7 @@ export default async function EnquiryPage({ params, searchParams }: { params: Pr
   const w = await enquiryWorkspace(id, me)
   if (!w) notFound()
   const { e, p, contact, sorted, valuation, kind, ctx, lines, listings, suggested } = w
-  const [trail, thread, timeline, staff] = await Promise.all([trailFor([e]).then((t) => t[e.id] ?? []), conversation(e.id), leadTimeline(e.id), activeStaff()])
+  const [trail, thread, timeline, staff, opened] = await Promise.all([trailFor([e]).then((t) => t[e.id] ?? []), conversation(e.id), leadTimeline(e.id), activeStaff(), shareStats(e.id).catch(() => null)])
   // The valuation check: our estimate, the portal searches, comparables and the figure.
   const rent = kind === 'lettings-valuation'
   const home = homeFrom(e.message)
@@ -84,6 +85,7 @@ export default async function EnquiryPage({ params, searchParams }: { params: Pr
             {sorted.side ? <span className={`pill side-${sorted.side}`}>{SIDE_LABEL[sorted.side]}</span> : <span className="pill warn">Sales or lettings?</span>}
             {e.outcome ? <span className="pill">{outcomeText(e.outcome)}</span> : null}
             {e.lastReplyAt && !e.handled ? <span className="pill gold">Replied</span> : null}
+            {opened?.views ? <span className="pill live" title={`First opened ${opened.firstViewAt ? new Date(opened.firstViewAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/London' }) : ''}`}>Opened their report{opened.views > 1 ? ` ×${opened.views}` : ''}</span> : null}
             {dnc ? <span className="pill warn">Do not contact</span> : null}
           </div>
         </div>
@@ -91,7 +93,7 @@ export default async function EnquiryPage({ params, searchParams }: { params: Pr
           {!dnc && e.phone ? <LogCallButton label="Call them" className="btn btn-dark" prefill={{ name: e.name, phone: e.phone ?? undefined, email: e.email ?? undefined, enquiryId: e.id, direction: 'out', propertyId: e.propertyId ?? undefined, callerType, ...(e.contactId ? { contactId: e.contactId } : {}) }} /> : null}
           {!dnc && wa.e164 ? <WhatsAppButton wa={wa} className="btn btn-wa" autoOpen={sp.wa === '1'} /> : null}
           {!dnc ? <Link className="btn btn-gold" href={`/admin/diary/new?enquiry=${e.id}${valuation ? '&kind=valuation' : ''}`}>{valuation ? 'Book valuation' : 'Book viewing'}</Link> : null}
-          {valuation ? <Link className="btn btn-ghost" href={`/admin/booklet/${e.id}`}>{w.reportReady ? '✓ Property report' : 'Property report'}</Link> : null}
+          {valuation ? <Link className="btn btn-ghost" href={`/admin/booklet/${e.id}`}>{w.reportReady ? 'Report ready' : 'Report: guide needed'}</Link> : null}
         </div>
       </div>
 
