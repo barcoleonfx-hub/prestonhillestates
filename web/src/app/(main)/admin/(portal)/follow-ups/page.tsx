@@ -104,7 +104,8 @@ export default async function FollowupsPage() {
               {brief?.lines.length ? <details className="fu-brief"><summary>Before you call</summary><ul>{brief.lines.map((l, i) => <li key={i}>{l}</li>)}</ul></details> : null}</span>
             <span className="fu-acts">
               {wa.e164 || r.e.phone ? <a className="btn btn-dark btn-sm" href={`tel:${(wa.e164 ?? r.e.phone ?? '').replace(/\s/g, '')}`}>Call</a> : null}
-              <form action={followupAction}><input type="hidden" name="id" value={r.e.id} /><input type="hidden" name="what" value="called" /><input type="hidden" name="answered" value="yes" /><button className="btn btn-gold btn-sm" type="submit">Spoke to them</button></form>
+              <Link className="btn btn-gold btn-sm" href={`/admin/enquiries/${r.e.id}?script=1#script`}>Open their script</Link>
+              <form action={followupAction}><input type="hidden" name="id" value={r.e.id} /><input type="hidden" name="what" value="called" /><input type="hidden" name="answered" value="yes" /><button className="btn btn-ghost btn-sm" type="submit">Spoke to them</button></form>
               <form action={followupAction}><input type="hidden" name="id" value={r.e.id} /><input type="hidden" name="what" value="called" /><input type="hidden" name="answered" value="no" /><button className="btn btn-ghost btn-sm" type="submit">No answer</button></form>
               {act(r.e.id, 'skip', 'Skip')}
             </span>

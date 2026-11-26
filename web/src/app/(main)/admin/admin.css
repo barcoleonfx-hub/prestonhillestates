@@ -1331,3 +1331,47 @@ kbd { font: 600 0.68rem/1 var(--sans, inherit); padding: 3px 6px; border-radius:
 .dr-filter { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; }
 .pk-appt { padding: 14px 20px; border-bottom: 1px solid var(--line-soft); display: grid; gap: 8px; justify-items: start; }
 .pk-appt ul { margin: 0; padding-left: 18px; font-size: 0.86rem; display: grid; gap: 3px; }
+
+/* ---------- call script (enquiry page) ---------- */
+.cs { margin-bottom: 18px; display: flex; flex-direction: column; gap: 14px; }
+.cs h2 small { font-weight: 500; color: var(--faint); font-size: 0.8em; }
+.cs-closed { flex-direction: row; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; border-left: 4px solid var(--gold); }
+.cs-closed .card-sub { margin: 4px 0 0; }
+.cs-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: flex-start; }
+.cs-goal { margin: 4px 0 0; font-size: 0.9rem; color: var(--ink-soft); }
+.cs-status { display: flex; gap: 10px; align-items: center; font-size: 0.78rem; color: var(--faint); flex-wrap: wrap; }
+.cs-heads { margin: 0; padding: 10px 14px 10px 30px; background: var(--gold-wash); border: 1px solid var(--gold-tint); border-radius: 12px; font-size: 0.88rem; display: flex; flex-direction: column; gap: 4px; }
+.cs-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.cs-steps > li { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line-soft); }
+.cs-steps > li:last-child { border-bottom: 0; }
+.cs-steps > li.done .cs-say, .cs-steps > li.done h3 { color: var(--faint); }
+.cs-tick { flex: none; width: 30px; height: 30px; border-radius: 50%; border: 1.5px solid var(--line); background: var(--surface); font: inherit; font-size: 0.82rem; font-weight: 700; color: var(--ink-soft); cursor: pointer; display: grid; place-items: center; }
+.cs-tick:hover { border-color: var(--gold); }
+.cs-tick[aria-pressed='true'] { background: var(--ok); border-color: var(--ok); color: #fff; }
+.cs-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.cs-body h3 { margin: 4px 0 0; font-size: 0.95rem; }
+.cs-say { margin: 0; padding: 10px 14px; background: var(--bg); border-left: 3px solid var(--gold); border-radius: 0 10px 10px 0; font-size: 0.95rem; line-height: 1.5; }
+.cs-tip { margin: 0; font-size: 0.8rem; color: var(--faint); }
+.cs-ask, .cs-notes, .cs-when { display: flex; flex-direction: column; gap: 4px; }
+.cs-ask .textarea, .cs-notes .textarea { min-height: 38px; resize: vertical; font-size: 0.9rem; }
+.cs-q { font-size: 0.86rem; font-weight: 600; color: var(--ink); }
+.cs-hint { font-size: 0.78rem; color: var(--faint); }
+.cs-known { font-size: 0.8rem; color: var(--ok); background: var(--ok-tint); padding: 4px 10px; border-radius: 8px; align-self: flex-start; }
+.cs-more { display: flex; flex-direction: column; gap: 8px; }
+.cs-more details { border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; }
+.cs-more details[open] > *:not(summary) { margin-top: 8px; }
+.cs-obj { margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.cs-obj dt { font-weight: 600; font-size: 0.88rem; }
+.cs-obj dd { margin: 2px 0 0; font-size: 0.88rem; color: var(--ink-soft); }
+.cs-finish { border-top: 1px solid var(--line); padding-top: 14px; display: flex; flex-direction: column; gap: 10px; }
+.cs-finish h3 { margin: 0; font-size: 0.95rem; }
+.cs-dt { display: flex; gap: 8px; flex-wrap: wrap; }
+.cs-dt .input { width: auto; }
+.cs-check { display: flex; gap: 8px; align-items: center; font-size: 0.88rem; }
+.cs-go { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.cs-err { color: var(--danger); font-size: 0.86rem; }
+.cs-ok { color: var(--ok); font-size: 0.86rem; }
+.cs-earlier ol { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 10px; }
+.cs-earlier p { margin: 2px 0; font-size: 0.86rem; }
+.cs-earlier .cs-hint { display: block; }
+@media (max-width: 640px) { .cs-closed .btn { width: 100%; } .cs-say { font-size: 0.9rem; } }

@@ -25,6 +25,8 @@ import { WhatsAppButton } from '../../WhatsAppButton'
 import { homeFrom, portalLinks } from '@/lib/valuation-check'
 import { landRegistryEstimate, rentCheck } from '@/lib/valuation-check-data'
 import { shareStats } from '@/lib/booklet-share'
+import { callScriptFor } from '@/lib/call-script'
+import { CallScript } from './CallScript'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Enquiry' }
@@ -38,14 +40,14 @@ function speed(from: string, to: string) {
 const KIND_TITLE = { 'sales-valuation': 'Sales valuation', 'lettings-valuation': 'Rental valuation', buyer: 'Buyer enquiry', tenant: 'Tenant enquiry' } as const
 
 /** One enquiry, as a place to act on it: what they asked, the next steps, and ready-made emails to send. */
-export default async function EnquiryPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ back?: string; tpl?: string; wa?: string }> }) {
+export default async function EnquiryPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ back?: string; tpl?: string; wa?: string; script?: string }> }) {
   const me = await requireAdmin()
   const { id } = await params
   const sp = await searchParams
   const w = await enquiryWorkspace(id, me)
   if (!w) notFound()
   const { e, p, contact, sorted, valuation, kind, ctx, lines, listings, suggested } = w
-  const [trail, thread, timeline, staff, opened] = await Promise.all([trailFor([e]).then((t) => t[e.id] ?? []), conversation(e.id), leadTimeline(e.id), activeStaff(), shareStats(e.id).catch(() => null)])
+  const [trail, thread, timeline, staff, opened, cs] = await Promise.all([trailFor([e]).then((t) => t[e.id] ?? []), conversation(e.id), leadTimeline(e.id), activeStaff(), shareStats(e.id).catch(() => null), callScriptFor(e.id, me).catch((x) => { console.error('call script', x); return null })])
   // The valuation check: our estimate, the portal searches, comparables and the figure.
   const rent = kind === 'lettings-valuation'
   const home = homeFrom(e.message)
@@ -91,6 +93,7 @@ export default async function EnquiryPage({ params, searchParams }: { params: Pr
         </div>
         <div className="ew-head-actions">
           {!dnc && e.phone ? <LogCallButton label="Call them" className="btn btn-dark" prefill={{ name: e.name, phone: e.phone ?? undefined, email: e.email ?? undefined, enquiryId: e.id, direction: 'out', propertyId: e.propertyId ?? undefined, callerType, ...(e.contactId ? { contactId: e.contactId } : {}) }} /> : null}
+          {!dnc && cs ? <a className="btn btn-ghost" href="?script=1#script">Call script</a> : null}
           {!dnc && wa.e164 ? <WhatsAppButton wa={wa} className="btn btn-wa" autoOpen={sp.wa === '1'} /> : null}
           {!dnc ? <Link className="btn btn-gold" href={`/admin/diary/new?enquiry=${e.id}${valuation ? '&kind=valuation' : ''}`}>{valuation ? 'Book valuation' : 'Book viewing'}</Link> : null}
           {valuation ? <Link className="btn btn-ghost" href={`/admin/booklet/${e.id}`}>{w.reportReady ? 'Report ready' : 'Report: guide needed'}</Link> : null}
@@ -108,6 +111,8 @@ export default async function EnquiryPage({ params, searchParams }: { params: Pr
           <Link className="btn btn-gold btn-sm" href={`/admin/booklet/${e.id}`}>Update the report</Link>
         </p>
       ) : null}
+
+      {!dnc && cs ? <CallScript key={cs.open?.startedAt ?? 'new'} enquiryId={e.id} script={cs.script} slots={cs.facts.slots} open={cs.open} earlier={cs.earlier} startOpen={sp.script === '1'} wa={{ e164: wa.e164, blocked: wa.blocked ?? null }} first={cs.facts.first} kind={cs.facts.kind} /> : null}
 
       {valuation ? (
         <section className="card card-pad ew-check" id="check">

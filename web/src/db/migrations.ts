@@ -1247,4 +1247,25 @@ export const MIGRATIONS: { id: string; sql: string[] }[] = [
       `CREATE UNIQUE INDEX promises_msg_idx ON promises (message_id, promise)`,
     ],
   },
+  {
+    id: '058_call_scripts',
+    sql: [
+      // A call made with the personalised call script: the answers typed as they went, notes, and how it ended.
+      `CREATE TABLE call_sessions (
+        id TEXT PRIMARY KEY,
+        enquiry_id TEXT NOT NULL REFERENCES enquiries(id) ON DELETE CASCADE,
+        admin_id TEXT NOT NULL,
+        answers TEXT NOT NULL DEFAULT '{}',
+        ticks TEXT NOT NULL DEFAULT '[]',
+        notes TEXT NOT NULL DEFAULT '',
+        outcome TEXT,
+        detail TEXT,
+        call_id TEXT,
+        started_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        finished_at TEXT
+      )`,
+      `CREATE INDEX call_sessions_enquiry_idx ON call_sessions (enquiry_id, started_at)`,
+    ],
+  },
 ]

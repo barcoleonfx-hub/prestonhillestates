@@ -847,3 +847,22 @@ export const promises = sqliteTable('promises', {
   createdAt: text('created_at').notNull(),
   keptAt: text('kept_at'),
 })
+
+/** A call made with the personalised call script (lib/call-script): answers, notes and how it ended. */
+export const callSessions = sqliteTable('call_sessions', {
+  id: text('id').primaryKey(),
+  enquiryId: text('enquiry_id').notNull().references(() => enquiries.id, { onDelete: 'cascade' }),
+  adminId: text('admin_id').notNull(),
+  /** Question key → what they said (JSON). */
+  answers: text('answers').notNull().default('{}'),
+  /** Steps ticked off (JSON array of step keys). */
+  ticks: text('ticks').notNull().default('[]'),
+  notes: text('notes').notNull().default(''),
+  /** Null while the call is going on; then booked | callback | later | spoke | no-answer | lost | dnc. */
+  outcome: text('outcome'),
+  detail: text('detail'),
+  callId: text('call_id'),
+  startedAt: text('started_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+  finishedAt: text('finished_at'),
+}, (t) => [index('call_sessions_enquiry_idx').on(t.enquiryId, t.startedAt)])
